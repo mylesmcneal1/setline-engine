@@ -5,6 +5,7 @@
 #pragma once
 #include "Platform.h"
 #include <array>
+#include <memory>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -88,7 +89,9 @@ private:
     MidiSink* sink = nullptr;
     std::atomic<bool> running { false }, flushReq { false };
     std::thread th;
-    std::array<Item, Q> q {};
+    // On the heap (allocated once, never on the audio thread): ~100 KB inline would make every Engine huge
+    // and overflow the 1 MB Windows stack when several are locals (the self-test).
+    std::unique_ptr<Item[]> q { new Item[Q] {} };
     std::atomic<uint64_t> w { 0 }, r { 0 };
 };
 
