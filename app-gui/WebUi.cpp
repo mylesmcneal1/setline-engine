@@ -1,0 +1,93 @@
+#include "WebUi.h"
+#include <SetLineUi.h>
+#include <unordered_map>
+
+namespace setline::gui {
+
+namespace {
+
+// ui/dist, zipped at build time (cmake/BuildUi.cmake) and embedded with juce_add_binary_data.
+juce::ZipFile* uiArchive()
+{
+    static juce::MemoryInputStream stream(SetLineUi::setlineui_zip, (size_t) SetLineUi::setlineui_zipSize, false);
+    static juce::ZipFile zip(stream);
+    return zip.getNumEntries() > 0 ? &zip : nullptr;
+}
+
+juce::String mimeFor(const juce::String& file)
+{
+    static const std::unordered_map<juce::String, const char*> types {
+        { "html", "text/html" }, { "htm", "text/html" }, { "js", "text/javascript" }, { "mjs", "text/javascript" },
+        { "css", "text/css" }, { "json", "application/json" }, { "map", "application/json" }, { "svg", "image/svg+xml" },
+        { "png", "image/png" }, { "jpg", "image/jpeg" }, { "jpeg", "image/jpeg" }, { "ico", "image/vnd.microsoft.icon" },
+        { "woff", "font/woff" }, { "woff2", "font/woff2" }, { "ttf", "font/ttf" }, { "wav", "audio/wav" }, { "txt", "text/plain" },
+    };
+    const auto ext = file.fromLastOccurrenceOf(".", false, false).toLowerCase();
+    if (auto it = types.find(ext); it != types.end()) return it->second;
+    return "application/octet-stream";
+}
+
+} // namespace
+
+WebUi::WebUi(bool devMode, const std::function<Options(Options)>& configure) : dev(devMode)
+{
+    const auto dataDir = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                             .getChildFile("set.Line").getChildFile("WebView2");
+    dataDir.createDirectory();
+
+    Options o = Options {}
+        .withBackend(Options::Backend::webview2)
+        .withWinWebView2Options(Options::WinWebView2 {}
+                                    .withUserDataFolder(dataDir)
+                                    .withStatusBarDisabled()
+                                    .withBackgroundColour(juce::Colour(0xff0b0c0e)))
+        .withNativeIntegrationEnabled()
+        .withKeepPageLoadedWhenBrowserIsHidden()
+        .withResourceProvider([](const juce::String& path) { return serve(path); });
+    if (configure) o = configure(o);
+
+    web = std::make_unique<Browser>(o, *this);
+    addAndMakeVisible(*web);
+}
+
+void WebUi::loadStartPage()
+{
+    web->goToURL(dev ? juce::String(devServer) + startPage
+                     : juce::WebBrowserComponent::getResourceProviderRoot() + startPage);
+}
+
+std::optional<juce::WebBrowserComponent::Resource> WebUi::serve(const juce::String& rawPath)
+{
+    // "/" -> start page; strip the query ("3-satellite.html?mac") and fragment.
+    auto path = rawPath.upToFirstOccurrenceOf("?", false, false).upToFirstOccurrenceOf("#", false, false);
+    path = juce::URL::removeEscapeChars(path).trimCharactersAtStart("/");
+    if (path.isEmpty()) path = startPage;
+
+    auto* zip = uiArchive();
+    if (zip == nullptr) return std::nullopt;
+    const auto* entry = zip->getEntry(path);
+    if (entry == nullptr) entry = zip->getEntry("./" + path);
+    if (entry == nullptr) return std::nullopt;
+
+    std::unique_ptr<juce::InputStream> in(zip->createStreamForEntry(*entry));
+    if (! in) return std::nullopt;
+    juce::MemoryBlock block;
+    in->readIntoMemoryBlock(block);
+    std::vector<std::byte> bytes(block.getSize());
+    if (block.getSize() > 0) std::memcpy(bytes.data(), block.getData(), block.getSize());
+    return juce::WebBrowserComponent::Resource { std::move(bytes), mimeFor(path) };
+}
+
+bool WebUi::Browser::pageAboutToLoad(const juce::String& url)
+{
+    // Our own pages (embedded, or the dev server in --dev) load in the window; anything else
+    // (a link to a website) opens in the system browser so native integration never reaches it.
+    const auto root = juce::WebBrowserComponent::getResourceProviderRoot();
+    if (url.startsWith(root) || url == root.trimCharactersAtEnd("/")) return true;
+    if (owner.dev && url.startsWith(devServer)) return true;
+    if (url.startsWith("about:") || url.startsWith("data:")) return true;
+    if (url.startsWith("http://") || url.startsWith("https://")) juce::URL(url).launchInDefaultBrowser();
+    return false;
+}
+
+} // namespace setline::gui

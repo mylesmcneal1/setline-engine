@@ -1,0 +1,20 @@
+{
+  "name": "setline-ui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5173 --strictPort",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vite": "^8.3.8",
+    "@types/node": "^24.0.0"
+  },
+  "dependencies": {
+    "@fontsource/inter": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0"
+  }
+}
