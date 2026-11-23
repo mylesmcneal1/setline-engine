@@ -1,0 +1,74 @@
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos
+            os: macos-14
+            cmake_args: -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+          - name: windows
+            os: windows-latest
+            cmake_args: ""
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release ${{ matrix.cmake_args }}
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Core test (no JUCE)
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Find binary (macOS)
+        if: matrix.name == 'macos'
+        run: |
+          BIN=$(find build -type f -name setline-spike -perm -u+x | head -n 1)
+          echo "BIN=$BIN" >> "$GITHUB_ENV"
+          lipo -info "$BIN"
+          otool -l "$BIN" | grep -A3 -E "LC_BUILD_VERSION|LC_VERSION_MIN_MACOSX" | head -n 8
+
+      - name: Find binary (Windows)
+        if: matrix.name == 'windows'
+        shell: bash
+        run: echo "BIN=$(find build -type f -name setline-spike.exe | head -n 1)" >> "$GITHUB_ENV"
+
+      - name: App self-test and render smoke test
+        shell: bash
+        run: |
+          "$BIN" --selftest
+          "$BIN" --make-test ci-song --stems 2 --seconds 20
+          "$BIN" --render ci-song --out ci-render.wav
+
+      - name: Package (macOS)
+        if: matrix.name == 'macos'
+        run: |
+          mkdir -p dist
+          cp "$BIN" dist/setline-spike
+          cp README.md dist/
+          # tar keeps the executable bit (a plain artifact zip would lose it)
+          tar -czf setline-spike-macos.tar.gz -C dist .
+
+      - name: Package (Windows)
+        if: matrix.name == 'windows'
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp "$BIN" dist/
+          cp README.md dist/
+          7z a setline-spike-windows.zip ./dist/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: setline-spike-${{ matrix.name }}
+          path: setline-spike-${{ matrix.name }}.*

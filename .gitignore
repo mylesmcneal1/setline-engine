@@ -1,0 +1,8 @@
+build/
+.vs/
+out/
+*.wav
+ci-song/
+.DS_Store
+test-song/
+build-asio/
