@@ -33,6 +33,7 @@ struct MidiEventDef {
     uint8_t bytes[3] { 0, 0, 0 };
     int len = 0;
     std::string label;
+    double earlySeconds = 0; // send this much before its bar/beat (e.g. so a preset is loaded by the downbeat)
 };
 
 // One click the user entered (a note in a click clip). Bar is 1-based, beat 1-based and may be fractional.

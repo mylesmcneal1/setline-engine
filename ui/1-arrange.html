@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <title>set.Line — Edit (mockup)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="./src/fonts.css"><script type="module" src="./src/bridge.ts"></script>
+<link rel="stylesheet" href="./src/fonts.css"><script type="module" src="./src/bridge.ts"></script><script type="module" src="./src/pages/arrange.ts"></script>
 <style>
   :root{
     --bg:#0b0c0e; --s1:#111317; --s2:#171a1f; --s3:#1e2228; --hair:#22262d;
@@ -1037,7 +1037,7 @@ function deleteSong(id){ const s=songs.find(x=>x.id===id), inLists=setlists.filt
   confirmBox(`Delete “${esc(s.name)}”?`,`Removes the song with all its versions, sections, MIDI and audio edits from this session${inLists.length?`, and from ${inLists.map(l=>'“'+esc(l.name)+'”').join(', ')}`:''}. The stem files on disk aren’t touched.`,'Delete song',()=>{
     syncSet(); const idx=songs.indexOf(s), where=setlists.map(l=>[l,l.order.indexOf(id)]).filter(x=>x[1]>=0);
     songs.splice(idx,1); setlists.forEach(l=>{ const k=l.order.indexOf(id); if(k>=0) l.order.splice(k,1); }); open.delete(id);
-    if(playId===id){ playing=false; playId=null; pos=0; $('playBtn').classList.remove('on'); }
+    if(playId===id){ if(NATIVE&&window.SLE) SLE.stop(); playing=false; playId=null; pos=0; $('playBtn').classList.remove('on'); }
     if(selId===id){ const nxt=[...songs].sort(byName)[0]; selId=nxt?nxt.id:null; } selSec=null; selClip=null; if(ed.song===id) closeMidi(); refresh();
     toast(`Deleted “${s.name}”`,()=>{ songs.splice(idx,0,s); where.forEach(([l,k])=>l.order.splice(k,0,id)); setOrder=curSetObj().order; selId=id; open.add(id); refresh(); }); }); }
 function confirmBox(title,body,okLabel,ok){ const bg=document.createElement('div'); bg.className='cfbg'; bg.innerHTML=`<div class="cfbox"><b>${title}</b><p>${body}</p><div class="cfa"><button class="btn line" data-a="no">Cancel</button><button class="btn dangerfill" data-a="ok">${okLabel}</button></div></div>`;
@@ -1959,6 +1959,12 @@ $('mAdd').onclick=()=>{ const name=$('mName').value.trim(); if(!name){ $('mName'
 
 // ======================= PLAYBACK =======================
 let playing=false, pos=0, last=0, playId=null;
+// Desktop app: the engine plays (src/pages/arrange.ts as window.SLE); the JS timer and WebAudio click are the browser fallback.
+const NATIVE=!!(window.__JUCE__&&window.__JUCE__.backend);
+window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, get selId(){ return selId; }, get pos(){ return pos; }, get playing(){ return playing; },
+  ser, isOff:(s,t)=>isOff(s,t), loopRange, toast, ROLE, PORTS, clickCfg, gainOf,
+  setPos(t){ pos=t; }, setPlayId(id){ playId=id; document.querySelectorAll('.folder').forEach(f=>f.classList.toggle('playing',f.dataset.id===playId)); }, setPlaying(b){ playing=b; $('playBtn').classList.toggle('on',b); last=performance.now(); requestAnimationFrame(tick); },
+  redraw(){ lcd(); } };
 const isOff=(s,t)=>!!(s.mute||{})[t]||(Object.values(s.solo||{}).some(Boolean)&&!(s.solo||{})[t]);
 function loopRange(s){ if(!loopOn||s.id!==(playId||selId)) return null; if(selSec&&selSec.song===s.id){ const p=s.secPos.find(x=>x.id===selSec.id); if(p) return [s.bars[p.start-1].t,s.bars[p.start-1+p.bars].t]; } return [0,s.audio]; }
 function barAtPos(s){ return s.bars.find((bb,i)=>pos>=bb.t&&pos<s.bars[i+1]?.t)||s.bars[0]; }
@@ -1971,9 +1977,9 @@ function lcd(){ const s=songs.find(x=>x.id===(playId||selId)); if(!s){ $('lcdSon
   $('lcdSong').textContent=s.name; $('lcdSec').textContent=sec?sec.name:'–'; $('lcdBar').textContent=`${b.bar} . ${k+1} . ${six}`; $('lcdBpm').textContent=(Math.round(bpmAt(s,b.bar+k/b.sig[0])*10)/10).toFixed(1); $('lcdSig').textContent=b.sig.join('/'); $('lcdTime').textContent=fmtMs(p0);
   placePH(); }
 function locate(s,t){ if(!s) return; if(playId!==s.id){ playId=s.id; document.querySelectorAll('.folder').forEach(f=>f.classList.toggle('playing',f.dataset.id===playId)); }
-  if(selId!==s.id){ select(s.id,false); } pos=Math.max(0,Math.min(s.audio-.01,t)); lcd(); }
+  if(selId!==s.id){ select(s.id,false); } pos=Math.max(0,Math.min(s.audio-.01,t)); lcd(); if(NATIVE&&playing&&window.SLE) SLE.playFrom(s,pos); }
 const ROLE_E={drums:1,bass:.8,keys:.6,guitars:.75,bgvs:.5,synth:.45,fx:.4,strings:.55}; const mv={};
-function levelOf(s,t){ if(!playing||s.id!==playId||isMidiTrack(s,t)||isOff(s,t)) return 0; const role=ROLE[t], gl=linOf(gainOf(s,t)); const b=barAtPos(s);
+function levelOf(s,t){ if(!playing||s.id!==playId||isMidiTrack(s,t)||isOff(s,t)) return 0; if(NATIVE) return window.SLE?SLE.trackLevel(s,t):0; const role=ROLE[t], gl=linOf(gainOf(s,t)); const b=barAtPos(s);
   if(role==='click'){ let best=null; ckOf(s).forEach(r=>r.notes.forEach(n=>{ const bb=s.bars[r.bar+n.b-1]; if(!bb) return; const tt=bb.t+bb.dur*n.st/ckSteps(bb.sig); if(pos>=tt&&pos-tt<.07) best=n; })); return best?gl*(best.acc?.9:.6):0; }
   const sec=secOfBar(s,b.bar)||{type:'outro'};
   if(role==='cues'){ const c=cuesOf(s).find(c=>c.bar===b.bar); return c?gl*.45*(.6+.4*Math.random()):0; }
@@ -1986,17 +1992,18 @@ function meters(){ let mx=0; document.querySelectorAll('[data-m]').forEach(el=>{
     const tgt=levelOf(s,t)*(el.dataset.ch==='R'?.94:1); const v=Math.max(tgt,(mv[key]||0)*.86); mv[key]=v<.002?0:v; mx=Math.max(mx,v);
     el.style.height=(100-mPct(v))+'%'; });
   $('omL').style.width=(100-mPct(mx))+'%'; $('omR').style.width=(100-mPct(mx*.95))+'%'; }
-function tick(t){ if(playing){ const w=Math.max(0,Math.min(.1,(t-last)/1000)); clickBetween(pos,pos+w); cuesBetween(pos,pos+w); } if(!playing){ meters(); if(Object.values(mv).some(v=>v>0)) requestAnimationFrame(tick); return; } const dt=Math.max(0,Math.min(.1,(t-last)/1000)); last=t; pos+=dt; const s=songs.find(x=>x.id===playId);
-  const cy=loopRange(s); if(cy&&pos>=cy[1]) pos=cy[0]+(pos-cy[1]);
-  if(pos>=s.audio){ pos=s.audio-.01; playing=false; $('playBtn').classList.remove('on'); }
+function tick(t){ if(playing&&!NATIVE){ const w=Math.max(0,Math.min(.1,(t-last)/1000)); clickBetween(pos,pos+w); cuesBetween(pos,pos+w); } if(!playing){ meters(); if(Object.values(mv).some(v=>v>0)) requestAnimationFrame(tick); return; } const dt=Math.max(0,Math.min(.1,(t-last)/1000)); last=t; const s=songs.find(x=>x.id===playId); if(!NATIVE){ pos+=dt;
+  const cy=loopRange(s); if(cy&&pos>=cy[1]) pos=cy[0]+(pos-cy[1]); }
+  if(!NATIVE&&pos>=s.audio){ pos=s.audio-.01; playing=false; $('playBtn').classList.remove('on'); }
   lcd(); meters(); requestAnimationFrame(tick); }
-function toggle(){ audio(); if(!selId&&!playing) return; playing=!playing; if(!playing) try{ speechSynthesis.cancel(); }catch(e){} $('playBtn').classList.toggle('on',playing); if(playing){ if(playId!==selId){ playId=selId; pos=0; } const s=songs.find(x=>x.id===playId); if(pos>=s.audio-.05) pos=0; const cy=loopRange(s); if(cy&&(pos<cy[0]||pos>=cy[1])) pos=cy[0]; document.querySelectorAll('.folder').forEach(f=>f.classList.toggle('playing',f.dataset.id===playId)); } last=performance.now(); requestAnimationFrame(tick); }
+function toggle(){ if(!NATIVE) audio(); if(!selId&&!playing) return; playing=!playing; if(!playing) try{ speechSynthesis.cancel(); }catch(e){} $('playBtn').classList.toggle('on',playing); if(playing){ if(playId!==selId){ playId=selId; pos=0; } const s=songs.find(x=>x.id===playId); if(pos>=s.audio-.05) pos=0; const cy=loopRange(s); if(cy&&(pos<cy[0]||pos>=cy[1])) pos=cy[0]; document.querySelectorAll('.folder').forEach(f=>f.classList.toggle('playing',f.dataset.id===playId)); } last=performance.now(); requestAnimationFrame(tick);
+  if(NATIVE&&window.SLE){ if(playing) SLE.playFrom(songs.find(x=>x.id===playId),pos); else SLE.stop(); } }
 $('playBtn').onclick=toggle;
-$('stopBtn').onclick=()=>{ if(!playing) pos=0; playing=false; $('playBtn').classList.remove('on'); lcd(); requestAnimationFrame(tick); };
+$('stopBtn').onclick=()=>{ if(!playing) pos=0; if(NATIVE&&window.SLE) SLE.stop(); playing=false; $('playBtn').classList.remove('on'); lcd(); requestAnimationFrame(tick); };
 $('rtz').onclick=()=>{ const s=songs.find(x=>x.id===(playId||selId)); if(s){ const cy=loopRange(s); locate(s,cy?cy[0]:0); } };
 const order=()=>setOrder.length?setOrder.map(id=>songs.find(x=>x.id===id)).filter(Boolean):[...songs].sort(byName);
 function stepSong(d){ const L=order(); if(!L.length) return; const cur=L.findIndex(x=>x.id===(playId||selId)); const n=L[Math.max(0,Math.min(L.length-1,cur<0?0:cur+d))]; const was=playing; playing=false;
-  playId=n.id; pos=0; open.add(n.id); if(focusId) focusId=n.id; select(n.id,false); renderFolders(); document.querySelector(`.folder[data-id="${n.id}"]`)?.scrollIntoView({block:'nearest'}); if(was){ playing=true; $('playBtn').classList.add('on'); last=performance.now(); requestAnimationFrame(tick); } lcd(); }
+  playId=n.id; pos=0; open.add(n.id); if(focusId) focusId=n.id; select(n.id,false); renderFolders(); document.querySelector(`.folder[data-id="${n.id}"]`)?.scrollIntoView({block:'nearest'}); if(was){ playing=true; $('playBtn').classList.add('on'); last=performance.now(); requestAnimationFrame(tick); if(NATIVE&&window.SLE) SLE.playFrom(n,0); } lcd(); }
 $('prevSong').onclick=()=>stepSong(-1); $('nextSong').onclick=()=>stepSong(1);
 function setLoop(on){ loopOn=on; $('loopBtn').classList.toggle('on',on); renderFolders(); }
 $('loopBtn').onclick=()=>setLoop(!loopOn);

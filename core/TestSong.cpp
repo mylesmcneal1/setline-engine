@@ -443,6 +443,17 @@ bool runSelfTest(bool verbose)
         check(r12.e.lengthSamples() == (int64_t) (12 * 2.0 * sr), "no stems: a song length of 12 bars plays all 12 bars");
     }
 
+    // MIDI "send early": an event can go out a set time before its bar/beat (never before the song starts).
+    {
+        SongDef song; song.name = "early"; song.tempo = { { 1, 120, 4, 4 } }; song.lengthBars = 4;
+        addMidi(song, 0, 3, 1, 0xC0, 1, 0, 2, "PC bar 3, 100 ms early"); song.midi.back().earlySeconds = 0.1;
+        addMidi(song, 0, 1, 1, 0xC0, 2, 0, 2, "PC bar 1, early but clamped"); song.midi.back().earlySeconds = 0.05;
+        OfflineRun r; r.load(song, sr, 1); r.start(0); r.runToEnd();
+        const auto& log = r.e.midiLog;
+        check(log.size() == 2 && log[0].sample == 0 && log[1].sample == r.e.tempoMap().sampleAt(3, 1) - (int64_t) (0.1 * sr),
+              "MIDI send early: 100 ms before bar 3 exactly; an early event at bar 1 goes at the song start");
+    }
+
     // Stop fades out over 10 ms instead of cutting; a start inside the song fades in before its first sample.
     {
         const int fade = (int) std::lround(0.010 * sr), fin = (int) std::lround(0.005 * sr);

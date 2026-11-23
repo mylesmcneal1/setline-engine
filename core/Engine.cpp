@@ -102,7 +102,8 @@ std::string Engine::load(const SongDef& song, const Config& c, std::vector<std::
     // --- MIDI ---
     for (auto& m : song.midi) {
         if (m.port < 0) { warnings.push_back("MIDI event \"" + m.label + "\" at bar " + std::to_string(m.bar) + " has no output port; skipped."); continue; }
-        MidiAt e; e.sample = tmap.sampleAt(m.bar, m.beat); e.port = m.port; e.len = m.len;
+        MidiAt e; e.port = m.port; e.len = m.len;
+        e.sample = std::max<int64_t>(0, tmap.sampleAt(m.bar, m.beat) - (int64_t) std::llround(m.earlySeconds * cfg.sampleRate));
         std::copy(m.bytes, m.bytes + 3, e.d);
         midiEvents.push_back(e);
     }

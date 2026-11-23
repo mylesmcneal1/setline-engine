@@ -106,6 +106,7 @@ if(SETLINE_WITH_JUCE)
       app-gui/Main.cpp
       app-gui/AudioHost.cpp
       app-gui/Bridge.cpp
+      app-gui/SongMapper.cpp
       app-gui/WebUi.cpp)
     target_compile_definitions(setline PRIVATE
       JUCE_WEB_BROWSER=1

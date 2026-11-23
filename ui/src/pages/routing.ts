@@ -74,6 +74,16 @@ async function main() {
   render(await SL.call<Setup>("getAudioSetup"));
   $("rescanBtn").onclick = async () => render(await SL.call<Setup>("getAudioSetup", { rescan: true }));
   SL.on("audioSetupChanged", (s: Setup) => { if (!busy) render(s); });
+  // Output level row: the engine's peak per output (same scale as the Edit page meters).
+  const pct = (l: number) => (l <= 0 ? 0 : Math.max(0, Math.min(100, ((20 * Math.log10(l) + 48) / 54) * 100)));
+  const held: number[] = [];
+  SL.on("meters", (m: { peaks: number[] }) => {
+    document.querySelectorAll<HTMLElement>("#mx [data-m]").forEach((b) => {
+      const i = +b.dataset.m! - 1, v = Math.max(m.peaks?.[i] || 0, (held[i] || 0) * 0.86);
+      held[i] = v < 0.002 ? 0 : v;
+      b.style.height = pct(held[i]) + "%";
+    });
+  });
   SL.on("engineStats", (x: { cpu?: number }) => {
     const b = $("engStat").querySelectorAll("div > b")[1];
     if (b && typeof x.cpu === "number") b.textContent = `${Math.round(x.cpu)}%`;

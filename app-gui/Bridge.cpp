@@ -15,9 +15,10 @@ juce::var errorVar(const juce::String& msg)
 Bridge::Bridge(AudioHost& host) : audio(host)
 {
     audio.onSetupChanged = [this] { emit("audioSetupChanged", audio.getSetup()); };
+    audio.emit = [this](const juce::Identifier& id, const juce::var& v) { emit(id, v); };
 }
 
-Bridge::~Bridge() { audio.onSetupChanged = nullptr; }
+Bridge::~Bridge() { audio.onSetupChanged = nullptr; audio.emit = nullptr; }
 
 Bridge::Options Bridge::add(Options o, const char* name, Fn fn)
 {
@@ -55,6 +56,13 @@ Bridge::Options Bridge::addTo(Options o)
         return audio.setSetup(a);
     });
     o = add(o, "getMidiOutputs", [this](const juce::var&) { return audio.midiOutputs(); });
+    o = add(o, "loadSong", [this](const juce::var& a) {
+        if (! a.isObject() || ! a["song"].isObject()) return errorVar("loadSong: expected {song, routing, roles, click}");
+        return audio.loadSong(a);
+    });
+    o = add(o, "transport", [this](const juce::var& a) { return audio.transport(a); });
+    o = add(o, "getTransport", [this](const juce::var&) { return audio.transportState(); });
+    o = add(o, "getEngineStats", [this](const juce::var&) { return audio.engineStats(); });
     return o;
 }
 
