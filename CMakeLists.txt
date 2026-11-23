@@ -104,6 +104,8 @@ if(SETLINE_WITH_JUCE)
       NEEDS_WEBVIEW2 TRUE)
     target_sources(setline PRIVATE
       app-gui/Main.cpp
+      app-gui/AudioHost.cpp
+      app-gui/Bridge.cpp
       app-gui/WebUi.cpp)
     target_compile_definitions(setline PRIVATE
       JUCE_WEB_BROWSER=1

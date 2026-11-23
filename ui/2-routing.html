@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <title>set.Line — Outputs &amp; MIDI (mockup)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="./src/fonts.css"><script type="module" src="./src/bridge.ts"></script>
+<link rel="stylesheet" href="./src/fonts.css"><script type="module" src="./src/bridge.ts"></script><script type="module" src="./src/pages/routing.ts"></script>
 <style>
   :root{
     --bg:#0c0d10; --panel:#14161b; --panel2:#1a1d23; --line:#262a32; --line2:#323743;
@@ -176,15 +176,17 @@
 
 <div class="main">
   <aside class="side">
-    <h3>Audio device <button>Rescan</button></h3>
+    <h3>Audio device <button id="rescanBtn">Rescan</button></h3>
+    <div id="devList">
     <div class="dev on"><div class="n">USB Audio Interface <span class="tag">ACTIVE</span></div><div class="s">18 out used, 0 in<br>Output names come from its driver</div></div>
     <div class="dev"><div class="n">Any audio interface <span class="tag off">AUTO</span></div><div class="s">Channel names &amp; count read from the driver on connect<br>(Core Audio on Mac, ASIO or WASAPI on Windows)</div></div>
     <div class="dev"><div class="n">Built-in output <span class="tag warn">FALLBACK</span></div><div class="s">2 out · plays your first two outputs if the interface drops</div></div>
+    </div>
 
     <h3>Engine</h3>
-    <div class="field"><label>Sample rate</label><div class="seg"><button>44.1</button><button class="on">48</button><button>96</button></div></div>
-    <div class="field"><label>Buffer</label><div class="seg"><button>64</button><button class="on">128</button><button>256</button><button>512</button></div></div>
-    <div class="stat">
+    <div class="field"><label>Sample rate</label><div class="seg" id="rateSeg"><button>44.1</button><button class="on">48</button><button>96</button></div></div>
+    <div class="field"><label>Buffer</label><div class="seg" id="bufSeg"><button>64</button><button class="on">128</button><button>256</button><button>512</button></div></div>
+    <div class="stat" id="engStat">
       <div><b>2.7 ms</b><span>Output latency</span></div>
       <div><b>6%</b><span>DSP load</span></div>
       <div><b>18 / 18</b><span>Outputs open</span></div>
@@ -268,31 +270,36 @@
 </div>
 
 <script>
-const groups = [
+let groups = [
   {g:'Line', ch:['Line 1','Line 2','Line 3','Line 4','Line 5','Line 6','Line 7','Line 8']},
   {g:'ADAT', ch:['ADAT 1','ADAT 2','ADAT 3','ADAT 4','ADAT 5','ADAT 6','ADAT 7','ADAT 8']},
   {g:'S/PDIF', ch:['S/PDIF L','S/PDIF R']},
 ];
-const flat = groups.flatMap(g=>g.ch.map(n=>({n})));
-const pairL = new Set([1,3,5,7,9,11,13,15,17]);   // 1-based columns that start a stereo pair
+let flat = groups.flatMap(g=>g.ch.map(n=>({n})));
+let pairL = new Set([1,3,5,7,9,11,13,15,17]);   // 1-based columns that start a stereo pair
 
+// role: which Edit-page tracks a row feeds (set.Line reads the saved routing when it loads a song)
 const rows = [
   {sep:'Tracks'},
-  {n:'Click',   c:'#e8eaef', st:false, to:[1], info:'mono', lv:0},
-  {n:'Spoken cues', c:'#cfd3dc', st:false, to:[2], info:'mono', lv:-3},
-  {n:'Drums',   c:'#ff6b6b', st:true,  to:[3,4],   info:'stereo', lv:0},
-  {n:'Bass',    c:'#ff9f43', st:false, to:[5],     info:'mono', lv:0},
-  {n:'Keys',    c:'#54a0ff', st:true,  to:[7,8],   info:'stereo', lv:-2},
-  {n:'Guitars', c:'#a55eea', st:true,  to:[9,10],  info:'stereo', lv:-1},
-  {n:'BGVs',    c:'#1dd1a1', st:true,  to:[11,12], info:'stereo', lv:-4},
-  {n:'Synth / Pads', c:'#c56cf0', st:true, to:[13,14], info:'stereo', lv:-3},
-  {n:'FX / Risers',  c:'#ff9ff3', st:false, to:[15], info:'stereo → mono', lv:-6},
+  {n:'Click',   role:'click', c:'#e8eaef', st:false, to:[1], info:'mono', lv:0},
+  {n:'Spoken cues', role:'cues', c:'#cfd3dc', st:false, to:[2], info:'mono', lv:-3},
+  {n:'Drums',   role:'drums', c:'#ff6b6b', st:true,  to:[3,4],   info:'stereo', lv:0},
+  {n:'Bass',    role:'bass', c:'#ff9f43', st:false, to:[5],     info:'mono', lv:0},
+  {n:'Keys',    role:'keys', c:'#54a0ff', st:true,  to:[7,8],   info:'stereo', lv:-2},
+  {n:'Guitars', role:'guitars', c:'#a55eea', st:true,  to:[9,10],  info:'stereo', lv:-1},
+  {n:'BGVs',    role:'bgvs', c:'#1dd1a1', st:true,  to:[11,12], info:'stereo', lv:-4},
+  {n:'Synth / Pads', role:'synth', c:'#c56cf0', st:true, to:[13,14], info:'stereo', lv:-3},
+  {n:'FX / Risers',  role:'fx', c:'#ff9ff3', st:false, to:[15], info:'stereo → mono', lv:-6},
   {sep:'Buses (optional)'},
   {n:'+ New bus', c:'var(--dim)', st:true, to:[], info:'sum tracks → any outputs', lv:'new'},
 ];
+// Saved routing (outputs numbered from 1), shared with the Edit page.
+try{ const saved=JSON.parse(localStorage.getItem('setline.routing')||'null'); if(saved) rows.forEach(r=>{ if(r.role&&Array.isArray(saved[r.role])) r.to=saved[r.role]; }); }catch(e){}
+function saveRouting(){ try{ const o={}; rows.forEach(r=>{ if(r.role) o[r.role]=r.to; }); localStorage.setItem('setline.routing',JSON.stringify(o)); }catch(e){} }
 
 const mx=document.getElementById('mx');
 const pl = i => pairL.has(i)?'pairL':'';
+function buildMatrix(){
 let h=`<thead><tr class="grp"><th class="corner" rowspan="2">Source ↓ &nbsp; Output →</th><th class="fohcol" rowspan="2">Level</th>${groups.map(g=>`<th colspan="${g.ch.length}" >${g.g}</th>`).join('')}</tr>
 <tr class="chn">${flat.map((o,k)=>`<th class="${pl(k+1)}"><div>${o.n}</div></th>`).join('')}</tr></thead><tbody>`;
 rows.forEach((r,ri)=>{
@@ -315,9 +322,16 @@ mx.querySelectorAll('td[data-o]').forEach(td=>td.onclick=()=>{
     if(r.st){ const L=pairL.has(o)?o:o-1; [L,L+1].forEach(k=>{const c=tr.querySelector(`td[data-o="${k}"]`); if(c){c.classList.add('on'); r.to.push(k);} }); }
     else { td.classList.add('on'); r.to=[o]; }
   }
+  saveRouting();
 });
+}
+buildMatrix();
+// The desktop app calls this with the device's real outputs (consecutive names with the same stem form a group).
+window.SLRouting={ setOutputs(names){ const g=[]; names.forEach(n=>{ const stem=String(n).replace(/\s*(\d+|L|R)$/i,'').trim()||n; const last=g[g.length-1]; if(last&&last.g===stem) last.ch.push(n); else g.push({g:stem,ch:[n]}); });
+  groups=g.length?g:[{g:'Outputs',ch:[]}]; flat=groups.flatMap(x=>x.ch.map(n=>({n}))); pairL=new Set(flat.map((_,k)=>k+1).filter(i=>i%2===1)); buildMatrix(); }, rows };
 
-setInterval(()=>{
+// Mockup meters in a normal browser; the desktop app shows the engine's output meters.
+if(!window.__JUCE__) setInterval(()=>{
   const live=new Set(rows.filter(r=>!r.sep).flatMap(r=>r.to));
   mx.querySelectorAll('[data-m]').forEach(b=>{ const i=+b.dataset.m; b.style.height = live.has(i) ? (25+Math.random()*60)+'%' : '0'; });
 },100);

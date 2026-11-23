@@ -16,7 +16,7 @@ public:
     // configure: adds native functions / event listeners (the Bridge) to the browser options.
     WebUi(bool devMode, const std::function<Options(Options)>& configure);
 
-    void loadStartPage();
+    void loadStartPage(const juce::String& page = {});
     juce::WebBrowserComponent& browser() { return *web; }
     bool isDevMode() const { return dev; }
 

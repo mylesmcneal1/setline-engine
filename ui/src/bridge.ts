@@ -44,6 +44,7 @@ function on(event: string, fn: Listener): () => void {
   return () => window.__JUCE__.backend.removeEventListener(token);
 }
 
-window.SL = { native, ready, call, on };
+export const SL: SetLineBridge = { native, ready, call, on };
+window.SL = SL;
 document.documentElement.classList.toggle("sl-native", native);
 window.dispatchEvent(new Event("sl-bridge"));

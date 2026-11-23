@@ -50,10 +50,11 @@ WebUi::WebUi(bool devMode, const std::function<Options(Options)>& configure) : d
     addAndMakeVisible(*web);
 }
 
-void WebUi::loadStartPage()
+void WebUi::loadStartPage(const juce::String& pageIn)
 {
-    web->goToURL(dev ? juce::String(devServer) + startPage
-                     : juce::WebBrowserComponent::getResourceProviderRoot() + startPage);
+    const juce::String page = pageIn.isNotEmpty() ? pageIn : juce::String(startPage);
+    web->goToURL(dev ? juce::String(devServer) + page
+                     : juce::WebBrowserComponent::getResourceProviderRoot() + page);
 }
 
 std::optional<juce::WebBrowserComponent::Resource> WebUi::serve(const juce::String& rawPath)
