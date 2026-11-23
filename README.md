@@ -75,6 +75,16 @@ usually only be opened by one program at a time).
 The GitHub build also produces **setline-spike-windows** (WASAPI only, since the ASIO SDK can't be
 downloaded automatically). Build locally with the SDK for ASIO.
 
+### The set.Line app
+
+The same run builds the desktop app (see `docs/building-the-app.md`):
+
+- **set.Line-macos**: `set.Line.app` (Intel + Apple Silicon, macOS 10.15+). Unzip it, move it to
+  Applications, then, because it's an unsigned test build, in Terminal:
+  `xattr -dr com.apple.quarantine /Applications/set.Line.app` and open it.
+- **set.Line-windows**: `set.Line.exe` (WASAPI only; build locally with the ASIO SDK for ASIO).
+  Needs the WebView2 runtime, which Windows 10/11 already have.
+
 ## The tests, in order
 
 Any audio interface works: set.Line only cares how many outputs the driver reports and what sample
