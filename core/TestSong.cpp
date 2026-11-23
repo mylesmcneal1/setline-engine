@@ -1,4 +1,5 @@
 #include "TestSong.h"
+#include "LiveGain.h"
 #include "Engine.h"
 #include "TempoMap.h"
 #include "Wav.h"
@@ -162,6 +163,62 @@ Rendered renderOffline(const SongDef& song, double sr, int block, int ring, int 
 }
 
 struct FakeSink : MidiSink { std::atomic<int> n { 0 }; void sendNow(int, const uint8_t*, int) override { ++n; } };
+
+// Offline engine driver for the step-1 checks: load, start anywhere, call process() block by block.
+struct OfflineRun {
+    Engine e;
+    int outs = 4, block = 128;
+    std::vector<std::vector<float>> out;  // everything rendered, per output
+    int64_t firstSample = 0;              // song sample of out[*][0]
+    std::vector<std::vector<float>> buf;
+    std::vector<float*> ptrs;
+
+    bool load(const SongDef& s, double sr, int numOuts = 4, int blk = 128)
+    {
+        outs = numOuts; block = blk;
+        Engine::Config cfg; cfg.sampleRate = sr; cfg.numOutputs = outs; cfg.offline = true; cfg.ringFrames = 1 << 15; cfg.chunkFrames = 4096;
+        std::vector<std::string> w;
+        buf.assign((size_t) outs, std::vector<float>((size_t) block)); ptrs.clear();
+        for (auto& b : buf) ptrs.push_back(b.data());
+        return e.load(s, cfg, w).empty();
+    }
+    bool start(int64_t from) { out.assign((size_t) outs, {}); const bool ok = e.start(from); firstSample = e.position(); return ok; }
+    void step()
+    {
+        e.process(ptrs.data(), outs, block);
+        for (int c = 0; c < outs; ++c) out[(size_t) c].insert(out[(size_t) c].end(), buf[(size_t) c].begin(), buf[(size_t) c].end());
+    }
+    void runToEnd(int64_t maxBlocks = 1 << 22) { while (e.isPlaying() && maxBlocks-- > 0) step(); }
+    float at(int c, int64_t songSample) const
+    {
+        const int64_t i = songSample - firstSample;
+        return (i >= 0 && i < (int64_t) out[(size_t) c].size()) ? out[(size_t) c][(size_t) i] : 0.0f;
+    }
+};
+
+// A mono stem holding a constant value: makes gain ramps and fades easy to measure.
+StemDef constantStem(float v, int64_t len, double sr, int out)
+{
+    auto src = std::make_shared<InMemorySource>(); src->sr = sr; src->data.assign(1, std::vector<float>((size_t) len, v));
+    StemDef d; d.name = "Const"; d.source = src; d.outs = { out }; return d;
+}
+
+// Song samples where a click starts on an output: a sample above thr after at least `quiet` silent samples.
+std::vector<int64_t> onsets(const OfflineRun& r, int c, float thr = 0.02f, int quiet = 1000)
+{
+    std::vector<int64_t> v; int64_t lastLoud = -1000000;
+    const auto& x = r.out[(size_t) c];
+    for (size_t i = 0; i < x.size(); ++i)
+        if (std::fabs(x[i]) > thr) { if ((int64_t) i - lastLoud > quiet) v.push_back(r.firstSample + (int64_t) i); lastLoud = (int64_t) i; }
+    return v;
+}
+
+float maxStep(const std::vector<float>& x, size_t from, size_t to)
+{
+    float m = 0; to = std::min(to, x.size());
+    for (size_t i = from + 1; i < to; ++i) m = std::max(m, std::fabs(x[i] - x[i - 1]));
+    return m;
+}
 } // namespace
 
 bool runSelfTest(bool verbose)
@@ -247,6 +304,162 @@ bool runSelfTest(bool verbose)
         if (e.midi.lateMaxUs.load() > 2000) std::printf("  [warn] MIDI was over 2 ms late at least once. If this repeats on a real --soak run, MIDI timing fails.\n");
         std::snprintf(line, sizeof line, "real-time: worst callback %.3f ms of a 2.667 ms budget", e.stats.cbMaxUs.load() / 1000.0);
         check(true, line);
+    }
+
+    // ---------------------------------------------------------------- step 1 engine additions
+    std::printf("Step 1 engine additions\n");
+
+    // 1) Start from any position: bar 9 lands marker, click and MIDI on the same samples as playing from bar 1.
+    {
+        SongDef song = makeTestSong(3, 45, sr);
+        OfflineRun full, from9;
+        full.load(song, sr); full.start(0); full.runToEnd();
+        from9.load(song, sr);
+        const int64_t s9 = from9.e.tempoMap().sampleAt(9, 1);
+        const bool started = from9.start(s9);
+        from9.runToEnd();
+        const auto& tm = from9.e.tempoMap();
+        const int64_t len = from9.e.lengthSamples();
+        int bars = 0, markerOk = 0;
+        for (int b = 9; b <= tm.numBars(); ++b) {
+            const int64_t s = tm.sampleAt(b, 1);
+            if (s + 2000 >= len) break;
+            ++bars;
+            const int64_t i = firstAbove(from9.out[2], s - from9.firstSample - 400, s - from9.firstSample + 400, 0.05f);
+            if (i >= 0 && i + from9.firstSample == s) ++markerOk;
+        }
+        int clicksExpected = 0, clicksOk = 0;
+        for (auto& c : from9.e.clickList()) {
+            if (c.sample < s9 || c.sample + 2000 >= len) continue;
+            ++clicksExpected;
+            const int64_t i = firstAbove(from9.out[3], c.sample - from9.firstSample - 60, c.sample - from9.firstSample + 60, 0.05f);
+            if (i >= 0 && i + from9.firstSample == c.sample) ++clicksOk;
+        }
+        std::vector<int64_t> expectMidi;
+        for (auto& m : full.e.midiLog) if (m.sample >= s9) expectMidi.push_back(m.sample);
+        bool midiSame = expectMidi.size() == from9.e.midiLog.size();
+        for (size_t i = 0; midiSame && i < expectMidi.size(); ++i) midiSame = from9.e.midiLog[i].sample == expectMidi[i];
+        // From bar 9 on, every output is bit-identical to the full render.
+        float diff = 0;
+        for (int c = 0; c < 4; ++c)
+            for (int64_t s = s9; s < s9 + (int64_t) (10 * sr); ++s) diff = std::max(diff, std::fabs(from9.at(c, s) - full.at(c, s)));
+        const auto clickOn = onsets(from9, 3);
+        const bool nothingBefore = clickOn.empty() || clickOn.front() >= s9;
+        check(started && from9.firstSample == s9 - (int64_t) std::lround(0.005 * sr), "start at bar 9: audio prerolls 5 ms, playback begins at bar 9");
+        check(bars > 8 && markerOk == bars, "start at bar 9: marker lands on the exact downbeat sample (" + std::to_string(markerOk) + "/" + std::to_string(bars) + " bars)");
+        check(clicksExpected > 30 && clicksOk == clicksExpected && nothingBefore, "start at bar 9: click on the exact beat samples (" + std::to_string(clicksOk) + "/" + std::to_string(clicksExpected) + "), nothing earlier");
+        check(midiSame && ! expectMidi.empty(), "start at bar 9: MIDI on the same samples as from bar 1 (" + std::to_string(from9.e.midiLog.size()) + " events), none before");
+        check(diff == 0.0f, "start at bar 9: every output identical to playing from bar 1 (10 s compared)");
+
+        // Mid-beat start (bar 12, beat 2.37): the next click still lands exactly, nothing earlier.
+        OfflineRun mid; mid.load(song, sr);
+        const int64_t sm = mid.e.tempoMap().sampleAt(12, 2.37);
+        mid.start(sm); for (int k = 0; k < 400; ++k) mid.step();
+        int64_t nextClick = -1; for (auto& c : mid.e.clickList()) if (c.sample >= sm) { nextClick = c.sample; break; }
+        const auto on = onsets(mid, 3);
+        check(! on.empty() && on.front() == nextClick, "start mid-beat (bar 12 beat 2.37): first click on its exact sample, none earlier");
+    }
+
+    // 2) Explicit click hits: exactly the entered hits play, nothing generated.
+    {
+        SongDef song; song.name = "clicks"; song.tempo = testTempo(); song.clickOuts = { 0 }; song.clickGainDb = 0;
+        song.clickHits = std::vector<ClickHitDef> { { 2, 1, true }, { 2, 2.5, false }, { 9, 4, false }, { 12, 1, false, -12 }, { 12, 1, false } };
+        OfflineRun r; r.load(song, sr, 2); r.start(0); r.runToEnd();
+        const auto& tm = r.e.tempoMap();
+        const std::vector<int64_t> expect { tm.sampleAt(2, 1), tm.sampleAt(2, 2.5), tm.sampleAt(9, 4), tm.sampleAt(12, 1) };
+        const auto got = onsets(r, 0);
+        check(got == expect, "click hits: exactly the entered hits play (" + std::to_string(got.size()) + " found, " + std::to_string(expect.size()) + " expected, duplicates merged), nothing generated");
+        float pkAcc = 0, pkQuiet = 0;
+        for (int64_t s = expect[0]; s < expect[0] + 1000; ++s) pkAcc = std::max(pkAcc, std::fabs(r.at(0, s)));
+        SongDef q = song; q.clickHits = std::vector<ClickHitDef> { { 2, 1, false, -12 } };
+        OfflineRun rq; rq.load(q, sr, 2); rq.start(0); rq.runToEnd();
+        for (int64_t s = expect[0]; s < expect[0] + 1000; ++s) pkQuiet = std::max(pkQuiet, std::fabs(rq.at(0, s)));
+        check(pkAcc > 0 && std::fabs(pkQuiet / pkAcc - 0.6f * LiveGain::dbToGain(-12)) < 0.01f, "click hits: accent and per-hit level (-12 dB) applied");
+        SongDef none = song; none.clickHits = std::vector<ClickHitDef> {};
+        OfflineRun rn; rn.load(none, sr, 2); const bool st = rn.start(0); rn.runToEnd();
+        check(st && onsets(rn, 0).empty(), "click hits: an empty list means no click at all (not the every-beat click)");
+    }
+
+    // 3) Live track level: ramped over 10 ms, no steps; works for stems and the click.
+    {
+        const int ramp = (int) std::lround(0.010 * sr);
+        SongDef song; song.name = "level"; song.tempo = { { 1, 120, 4, 4 } };
+        song.stems.push_back(constantStem(0.5f, (int64_t) (4 * sr), sr, 0));
+        OfflineRun r; r.load(song, sr, 2); r.start(0);
+        for (int k = 0; k < 10; ++k) r.step();
+        const size_t muteAt = r.out[0].size();
+        r.e.setTrackLevel(0, 0, true);
+        for (int k = 0; k < 10; ++k) r.step();
+        const size_t dbAt = r.out[0].size();
+        r.e.setTrackLevel(0, -6, false);
+        for (int k = 0; k < 10; ++k) r.step();
+        const auto& x = r.out[0];
+        const float stepMax = 0.5f / (float) ramp * 1.01f + 1e-6f;
+        const bool before = x[muteAt - 1] == 0.5f;
+        const bool rampDown = maxStep(x, muteAt - 1, dbAt) <= stepMax && x[muteAt + (size_t) ramp] == 0.0f && x[muteAt + (size_t) ramp / 2] > 0.2f;
+        const float target = 0.5f * LiveGain::dbToGain(-6);
+        const bool rampUp = maxStep(x, dbAt - 1, x.size()) <= stepMax && std::fabs(x[dbAt + (size_t) ramp] - target) < 1e-5f && std::fabs(x.back() - target) < 1e-5f;
+        check(before && rampDown, "track level: mute ramps a stem to silence over 10 ms (no step larger than the ramp)");
+        check(rampUp, "track level: -6 dB ramps smoothly and settles exactly at -6 dB");
+
+        SongDef ck; ck.name = "click level"; ck.tempo = { { 1, 120, 4, 4 } }; ck.clickOuts = { 0 }; ck.clickGainDb = 0;
+        ck.clickHits = std::vector<ClickHitDef> { { 1, 1, true }, { 2, 1, true }, { 3, 1, true } };
+        OfflineRun rc; rc.load(ck, sr, 1); rc.e.setTrackLevel(Engine::ClickTrack, -6, false); rc.start(0);
+        while (rc.e.position() < rc.e.tempoMap().sampleAt(2, 1) + 2000) rc.step();
+        rc.e.setTrackLevel(Engine::ClickTrack, 0, true);
+        rc.runToEnd();
+        float p1 = 0, p3 = 0;
+        const int64_t b1 = rc.e.tempoMap().sampleAt(1, 1), b3 = rc.e.tempoMap().sampleAt(3, 1);
+        for (int64_t s = b1; s < b1 + 1000; ++s) p1 = std::max(p1, std::fabs(rc.at(0, s)));
+        for (int64_t s = b3; s < b3 + 1000; ++s) p3 = std::max(p3, std::fabs(rc.at(0, s)));
+        check(std::fabs(p1 - LiveGain::dbToGain(-6)) < 0.01f && p3 == 0.0f, "track level: click level set before play applies at once (-6 dB); mute silences it");
+    }
+
+    // 4) Output meters: peak per output since the last read.
+    {
+        SongDef song = makeTestSong(1, 10, sr);
+        OfflineRun r; r.load(song, sr); r.start(0);
+        for (int k = 0; k < 4; ++k) r.step(); // the first click and marker are in these blocks
+        const float click = r.e.takeOutputPeak(3), marker = r.e.takeOutputPeak(2), music = r.e.takeOutputPeak(0);
+        const float again = r.e.takeOutputPeak(3);
+        float expectClick = 0; for (int i = 0; i < 512; ++i) expectClick = std::max(expectClick, std::fabs(r.out[3][(size_t) i]));
+        check(expectClick > 0.1f && std::fabs(click - expectClick) < 1e-6f && marker > 0.79f && music > 0.0f && again == 0.0f,
+              "meters: each output reports its exact peak, and resets after reading");
+    }
+
+    // 5) Songs without stems play click and MIDI for as long as their tempo map and content say.
+    {
+        SongDef song; song.name = "no stems"; song.tempo = { { 1, 120, 4, 4 } }; song.clickOuts = { 0 };
+        song.clickHits = std::vector<ClickHitDef> {}; for (int b = 1; b <= 8; ++b) song.clickHits->push_back({ b, 1, true });
+        addMidi(song, 0, 8, 3, 0xC0, 5, 0, 2, "PC at bar 8");
+        OfflineRun r; r.load(song, sr, 1);
+        const bool st = r.start(0); r.runToEnd();
+        const int64_t eightBars = (int64_t) (8 * 2.0 * sr);
+        check(st && r.e.lengthSamples() == eightBars && (int64_t) r.out[0].size() >= eightBars && (int64_t) r.out[0].size() < eightBars + 128
+                  && onsets(r, 0).size() == 8 && r.e.midiLog.size() == 1,
+              "no stems: plays its 8 bars of click + MIDI and stops at the end of bar 8");
+        song.lengthBars = 12;
+        OfflineRun r12; r12.load(song, sr, 1); r12.start(0); r12.runToEnd();
+        check(r12.e.lengthSamples() == (int64_t) (12 * 2.0 * sr), "no stems: a song length of 12 bars plays all 12 bars");
+    }
+
+    // Stop fades out over 10 ms instead of cutting; a start inside the song fades in before its first sample.
+    {
+        const int fade = (int) std::lround(0.010 * sr), fin = (int) std::lround(0.005 * sr);
+        SongDef song; song.name = "fade"; song.tempo = { { 1, 120, 4, 4 } };
+        song.stems.push_back(constantStem(0.5f, (int64_t) (4 * sr), sr, 0));
+        OfflineRun r; r.load(song, sr, 1); r.start(0);
+        for (int k = 0; k < 10; ++k) r.step();
+        const size_t at = r.out[0].size();
+        r.e.requestStop(); r.runToEnd(100);
+        const auto& x = r.out[0];
+        check(! r.e.isPlaying() && x[at] < 0.5f && x[at] > 0.49f && x[at + (size_t) fade - 1] == 0.0f && maxStep(x, at - 1, x.size()) <= 0.5f / (float) fade * 1.01f,
+              "stop: fades out over 10 ms (no click), then stops");
+        OfflineRun s; s.load(song, sr, 1);
+        const int64_t from = (int64_t) sr; s.start(from); for (int k = 0; k < 10; ++k) s.step();
+        check(s.at(0, from - fin) < 0.01f && s.at(0, from) == 0.5f && maxStep(s.out[0], 0, (size_t) fin + 10) <= 0.5f / (float) fin * 1.01f,
+              "start inside the song: 5 ms fade-in ends exactly on the start sample");
+        check(! s.e.start(s.e.lengthSamples()), "start past the end of the song is refused");
     }
 
     std::printf(ok ? "ALL CHECKS PASSED\n" : "SOME CHECKS FAILED\n");

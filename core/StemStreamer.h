@@ -2,6 +2,7 @@
 // device outputs (audio thread). The audio thread never touches the file.
 #pragma once
 #include "AudioRing.h"
+#include "LiveGain.h"
 #include "Song.h"
 #include <algorithm>
 #include <atomic>
@@ -62,10 +63,11 @@ public:
     int readable() const { return ring.readable(); }
 
     // ---- audio thread ----
-    // Adds n frames into the outputs. Returns true on an underrun inside the file.
+    // Adds n frames into the outputs at the stem's own gain times the live level (ramp).
+    // Returns true on an underrun inside the file.
     // After an underrun the frames that were missed are skipped when they arrive ("debt"),
     // so the stem stays locked to the timeline instead of drifting late.
-    bool mixInto(float* const* out, int numOut, int n)
+    bool mixInto(float* const* out, int numOut, int n, const GainRamp& live = {})
     {
         int avail = ring.readable();
         if (debt > 0) { const int d = std::min(debt, avail); ring.consume(d); debt -= d; avail -= d; }
@@ -73,13 +75,13 @@ public:
         const int nch = ring.channels();
         ring.peek(got, [&](int c, const float* p, int count, int dstOff) {
             if (nch == 1) {
-                for (int o : outs) if (o >= 0 && o < numOut && out[o]) addWithGain(out[o] + dstOff, p, count, gain);
+                for (int o : outs) if (o >= 0 && o < numOut && out[o]) addWithGain(out[o] + dstOff, p, count, gain, live, dstOff);
             } else if (outs.size() >= 2) {
                 const int o = outs[(size_t) c];
-                if (o >= 0 && o < numOut && out[o]) addWithGain(out[o] + dstOff, p, count, gain);
+                if (o >= 0 && o < numOut && out[o]) addWithGain(out[o] + dstOff, p, count, gain, live, dstOff);
             } else if (outs.size() == 1) {
                 const int o = outs[0];
-                if (o >= 0 && o < numOut && out[o]) addWithGain(out[o] + dstOff, p, count, gain * 0.5f);
+                if (o >= 0 && o < numOut && out[o]) addWithGain(out[o] + dstOff, p, count, gain * 0.5f, live, dstOff);
             }
         });
         ring.consume(got);
@@ -90,7 +92,11 @@ public:
     }
 
 private:
-    static void addWithGain(float* d, const float* s, int n, float g) { for (int i = 0; i < n; ++i) d[i] += s[i] * g; }
+    static void addWithGain(float* d, const float* s, int n, float g, const GainRamp& r, int off)
+    {
+        if (r.len <= off) { const float gg = g * r.end; for (int i = 0; i < n; ++i) d[i] += s[i] * gg; return; }
+        for (int i = 0; i < n; ++i) d[i] += s[i] * g * r.at(off + i);
+    }
 
     std::shared_ptr<SampleSource> src;
     std::vector<int> outs;

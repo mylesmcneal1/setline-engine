@@ -3,6 +3,7 @@
 #include "TempoMap.h"
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -34,13 +35,26 @@ struct MidiEventDef {
     std::string label;
 };
 
+// One click the user entered (a note in a click clip). Bar is 1-based, beat 1-based and may be fractional.
+struct ClickHitDef {
+    int bar = 1;
+    double beat = 1;
+    bool accent = false;
+    float gainDb = 0;      // per-hit level on top of the click track level (e.g. quieter subdivisions)
+};
+
 struct SongDef {
     std::string name;
     std::vector<TempoChange> tempo;
     std::vector<StemDef> stems;
     std::vector<int> clickOuts; // 0-based; empty = no click
     float clickGainDb = -6;
+    // When set, the engine plays exactly these click hits and generates nothing else (even if empty).
+    // When not set, it clicks every beat (the test song and the spike).
+    std::optional<std::vector<ClickHitDef>> clickHits;
     std::vector<MidiEventDef> midi;
+    // The song lasts at least this many bars (0 = as long as its stems / tempo map / content say).
+    int lengthBars = 0;
 };
 
 } // namespace setline

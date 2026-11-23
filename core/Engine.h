@@ -1,7 +1,9 @@
 // set.Line engine spike — the playback core.
 // process() is the audio callback body: real-time safe (no locks, no allocation, no file I/O).
 #pragma once
+#include "LiveGain.h"
 #include "MidiScheduler.h"
+#include <array>
 #include "Song.h"
 #include "StemStreamer.h"
 #include "TempoMap.h"
@@ -44,9 +46,26 @@ public:
     void setMidiSink(MidiSink* s);
 
     // Transport (non-audio threads).
-    bool start(int timeoutMs = 5000); // locate to 0, preroll every stem, then play
+    // Starts playing from any sample: seeks every stem, skips click and MIDI events before that point,
+    // and plays them sample-exact from there. A start inside the song fades the stems in over the
+    // 5 ms *before* fromSample, so the audio is at full level exactly on fromSample.
+    // Returns false if the disk couldn't preroll in time or fromSample is past the end.
+    bool start(int64_t fromSample = 0, int timeoutMs = 5000);
+    // Fades every output out over 10 ms, then stops (immediately in offline mode).
     void stop();
+    // Non-blocking stop: the audio thread fades out and stops by itself (also usable offline).
+    void requestStop() { if (playing.load()) stopReq.store(true, std::memory_order_release); }
     bool isPlaying() const { return playing.load(std::memory_order_acquire); }
+
+    // Live levels (any thread, glitch-free: ramped over 10 ms in the callback).
+    // track: 0..numStems()-1 for stems, or ClickTrack / CueTrack.
+    static constexpr int ClickTrack = -1, CueTrack = -2;
+    void setTrackLevel(int track, float db, bool mute);
+    int numStems() const { return (int) stems.size(); }
+
+    // Output meters: the peak of each device output since the last call (audio thread writes, UI reads).
+    static constexpr int MaxMeters = 64;
+    float takeOutputPeak(int output) { return output >= 0 && output < MaxMeters ? meters[(size_t) output].exchange(0.0f, std::memory_order_relaxed) : 0.0f; }
     bool takeFinished() { return finished.exchange(false); }
 
     // Audio callback body.
@@ -61,7 +80,7 @@ public:
     Stats stats;
     MidiScheduler midi;
     std::vector<LoggedMidi> midiLog; // offline mode only (pre-reserved)
-    struct ClickHit { int64_t sample; bool accent; };
+    struct ClickHit { int64_t sample; bool accent; float gain = 1; };
     struct MidiAt { int64_t sample; int port; uint8_t d[3]; int len; };
     const std::vector<ClickHit>& clickList() const { return clicks; }
     const std::vector<MidiAt>& midiList() const { return midiEvents; }
@@ -69,6 +88,7 @@ public:
 private:
     void diskLoop();
     void waitForCallbackToFinish();
+    void fadeOutAndStop(); // control lock held
 
     Config cfg;
     TempoMap tmap;
@@ -77,6 +97,10 @@ private:
     std::vector<MidiAt> midiEvents;
     std::vector<int> clickOuts;
     float clickGain = 0.5f;
+    std::unique_ptr<LiveGain[]> stemGains; // one per stem (allocated in load)
+    LiveGain clickLive, cueLive;
+    std::array<std::atomic<float>, MaxMeters> meters {};
+    int rampSamples = 480, fadeOutSamples = 480;
     int64_t songLen = 0;
     int maxOut = 1;
 
@@ -84,8 +108,9 @@ private:
     std::atomic<int64_t> pos { 0 };
     size_t nextClick = 0, nextMidi = 0;
     struct Voice { int remaining = 0; double phase = 0, inc = 0, env = 0, decay = 0; float amp = 0; } voice;
+    int fadeInLeft = 0, fadeInLen = 0, fadeOutLeft = 0;
 
-    std::atomic<bool> playing { false }, finished { false }, deviceRunning { false };
+    std::atomic<bool> playing { false }, finished { false }, deviceRunning { false }, stopReq { false };
     std::atomic<int64_t> serial { 0 };
     std::atomic<int> latencyBase { 0 };
 
