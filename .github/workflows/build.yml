@@ -12,14 +12,14 @@ jobs:
       matrix:
         include:
           - name: macos
-            os: macos-14
+            os: macos-15
             cmake_args: -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
           - name: windows
             os: windows-latest
             cmake_args: ""
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Configure
         run: cmake -B build -DCMAKE_BUILD_TYPE=Release ${{ matrix.cmake_args }}
@@ -68,7 +68,7 @@ jobs:
           cp README.md dist/
           7z a setline-spike-windows.zip ./dist/*
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: setline-spike-${{ matrix.name }}
           path: setline-spike-${{ matrix.name }}.*
