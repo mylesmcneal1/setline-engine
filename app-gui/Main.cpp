@@ -69,13 +69,30 @@ public:
         settings = std::make_unique<juce::PropertiesFile>(settingsOptions());
         audio = std::make_unique<AudioHost>(*settings);
         audio->start();
-        bridge = std::make_unique<Bridge>(*audio);
+        bridge = std::make_unique<Bridge>(*audio, *settings);
         bridge->devMode = dev;
+        if (const int rt = args.indexOf("--session-roundtrip"); rt >= 0 && rt + 2 < args.size()) {
+            bridge->roundTripIn = juce::File::getCurrentWorkingDirectory().getChildFile(args[rt + 1].unquoted());
+            bridge->roundTripOut = juce::File::getCurrentWorkingDirectory().getChildFile(args[rt + 2].unquoted());
+        }
         window = std::make_unique<MainWindow>(*settings, *bridge, dev, page);
+        // Window title: "<session> — set.Line", with a dot while there are unsaved changes.
+        bridge->onDocument = [this](const juce::String& name, bool dirty) {
+            static const juce::String dot = juce::CharPointer_UTF8("\xe2\x80\xa2 "), dash = juce::CharPointer_UTF8(" \xe2\x80\x94 set.Line");
+            if (window) window->setName((dirty ? dot : juce::String()) + (name.isEmpty() ? juce::String("Untitled session") : name) + dash);
+        };
+       #if JUCE_MAC
+        menu = std::make_unique<MacMenu>(*bridge);
+        juce::MenuBarModel::setMacMainMenu(menu.get());
+       #endif
     }
 
     void shutdown() override
     {
+       #if JUCE_MAC
+        juce::MenuBarModel::setMacMainMenu(nullptr);
+        menu.reset();
+       #endif
         window.reset();   // the web view goes first: nothing may call the bridge after this
         bridge.reset();
         audio.reset();
@@ -84,10 +101,35 @@ public:
         platform::restoreTimers();
     }
 
-    void systemRequestedQuit() override { quit(); }
+    void systemRequestedQuit() override
+    {
+        if (! bridge || ! bridge->isDirty()) { quit(); return; }
+        juce::AlertWindow::showOkCancelBox(juce::MessageBoxIconType::WarningIcon, "Quit set.Line?",
+                                           "The session has unsaved changes. Quit without saving?", "Quit", "Cancel", nullptr,
+                                           juce::ModalCallbackFunction::create([](int ok) { if (ok) juce::JUCEApplication::quit(); }));
+    }
     void anotherInstanceStarted(const juce::String&) override { if (window) window->toFront(true); }
 
 private:
+   #if JUCE_MAC
+    // macOS menu bar: File > Open / Save / Save As with the usual ⌘ shortcuts (the page does the work).
+    struct MacMenu : juce::MenuBarModel {
+        explicit MacMenu(Bridge& b) : bridge(b) {}
+        juce::StringArray getMenuBarNames() override { return { "File" }; }
+        juce::PopupMenu getMenuForIndex(int, const juce::String&) override
+        {
+            juce::PopupMenu m;
+            m.addItem(juce::PopupMenu::Item("Open...").setID(1).setAction([this] { send("open"); }));
+            m.addItem(juce::PopupMenu::Item("Save").setID(2).setAction([this] { send("save"); }));
+            m.addItem(juce::PopupMenu::Item("Save As...").setID(3).setAction([this] { send("saveAs"); }));
+            return m;
+        }
+        void menuItemSelected(int, int) override {}
+        void send(const char* cmd) { auto* o = new juce::DynamicObject(); o->setProperty("cmd", cmd); bridge.emit("menu", juce::var(o)); }
+        Bridge& bridge;
+    };
+    std::unique_ptr<MacMenu> menu;
+   #endif
     std::unique_ptr<juce::PropertiesFile> settings;
     std::unique_ptr<AudioHost> audio;
     std::unique_ptr<Bridge> bridge;

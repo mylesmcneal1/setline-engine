@@ -35,6 +35,8 @@ public:
     juce::var transport(const juce::var& req);
     // req: {track, db, mute, solo}: live, glitch-free.
     juce::var setTrackLevel(const juce::var& req);
+    // req: {fromBar, fromBeat, toBar, toBeat} loops that range inside the engine (sample-exact); null/{} clears it.
+    juce::var setLoop(const juce::var& req);
     juce::var transportState();
     juce::var engineStats();
 

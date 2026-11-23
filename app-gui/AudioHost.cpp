@@ -310,15 +310,36 @@ juce::var AudioHost::transport(const juce::var& req)
 
 juce::var AudioHost::setTrackLevel(const juce::var& req)
 {
+    // One track {track, db, mute, solo}, or several: {tracks: [{track, db, mute, solo}, ...]}.
+    auto one = [this](const juce::var& r) {
+        auto& lv = levels[r["track"].toString()];
+        if (r.hasProperty("db")) lv.db = (float) (double) r["db"];
+        if (r.hasProperty("mute")) lv.mute = (bool) r["mute"];
+        if (r.hasProperty("solo")) lv.solo = (bool) r["solo"];
+    };
+    if (auto* list = req["tracks"].getArray()) for (auto& r : *list) one(r); else one(req);
     const auto t = req["track"].toString();
-    auto& lv = levels[t];
-    if (req.hasProperty("db")) lv.db = (float) (double) req["db"];
-    if (req.hasProperty("mute")) lv.mute = (bool) req["mute"];
-    if (req.hasProperty("solo")) lv.solo = (bool) req["solo"];
     applyLevels();
     auto* o = new juce::DynamicObject();
     o->setProperty("ok", true);
     o->setProperty("live", trackIds.count(t) > 0); // false: the track has no sound in the engine (yet)
+    return juce::var(o);
+}
+
+juce::var AudioHost::setLoop(const juce::var& req)
+{
+    if (! loaded) return errorObj("Load the song first.", "reload");
+    if (! req.isObject() || ! req.hasProperty("toBar")) { eng.clearJump(); }
+    else {
+        const auto& tm = eng.tempoMap();
+        const int64_t from = tm.sampleAt(juce::jmax(1, (int) req["fromBar"]), juce::jmax(1.0, (double) req["fromBeat"]));
+        const int64_t to = tm.sampleAt(juce::jmax(1, (int) req["toBar"]), juce::jmax(1.0, (double) req["toBeat"]));
+        if (to <= from) return errorObj("The loop ends before it starts.");
+        eng.setLoop(from, juce::jmin(to, eng.lengthSamples()));
+    }
+    auto* o = new juce::DynamicObject();
+    const auto j = eng.currentJump();
+    o->setProperty("looping", j.at >= 0);
     return juce::var(o);
 }
 

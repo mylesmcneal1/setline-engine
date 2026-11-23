@@ -12,7 +12,7 @@ juce::var errorVar(const juce::String& msg)
 }
 } // namespace
 
-Bridge::Bridge(AudioHost& host) : audio(host)
+Bridge::Bridge(AudioHost& host, juce::PropertiesFile& settings) : audio(host), session(settings)
 {
     audio.onSetupChanged = [this] { emit("audioSetupChanged", audio.getSetup()); };
     audio.emit = [this](const juce::Identifier& id, const juce::var& v) { emit(id, v); };
@@ -35,6 +35,17 @@ Bridge::Options Bridge::add(Options o, const char* name, Fn fn)
     });
 }
 
+Bridge::Options Bridge::addAsync(Options o, const char* name, AsyncFn fn)
+{
+    return o.withNativeFunction(name, [fn = std::move(fn), name](const juce::Array<juce::var>& args,
+                                                                 juce::WebBrowserComponent::NativeFunctionCompletion done) {
+        juce::var in;
+        if (! args.isEmpty() && args[0].isString() && args[0].toString().isNotEmpty()
+            && juce::JSON::parse(args[0].toString(), in).failed()) { done(juce::JSON::toString(errorVar(juce::String(name) + ": bad JSON"), true)); return; }
+        fn(in, [done](juce::var out) { done(juce::JSON::toString(out, true)); });
+    });
+}
+
 Bridge::Options Bridge::addTo(Options o)
 {
     o = add(o, "getAppInfo", [this](const juce::var&) {
@@ -48,6 +59,10 @@ Bridge::Options Bridge::addTo(Options o)
         r->setProperty("mac", false);
        #endif
         r->setProperty("dev", devMode);
+        if (roundTripIn != juce::File()) {
+            auto* rt = new juce::DynamicObject(); rt->setProperty("in", roundTripIn.getFullPathName()); rt->setProperty("out", roundTripOut.getFullPathName());
+            r->setProperty("roundTrip", juce::var(rt));
+        }
         return juce::var(r);
     });
     o = add(o, "getAudioSetup", [this](const juce::var& a) { return audio.getSetup(a.isObject() && (bool) a["rescan"]); });
@@ -63,6 +78,26 @@ Bridge::Options Bridge::addTo(Options o)
     o = add(o, "transport", [this](const juce::var& a) { return audio.transport(a); });
     o = add(o, "getTransport", [this](const juce::var&) { return audio.transportState(); });
     o = add(o, "getEngineStats", [this](const juce::var&) { return audio.engineStats(); });
+    o = add(o, "setTrackLevel", [this](const juce::var& a) { return audio.setTrackLevel(a); });
+    o = add(o, "setLoop", [this](const juce::var& a) { return audio.setLoop(a); });
+
+    // Sessions (.setline): the page sends / receives the session as JSON text.
+    o = addAsync(o, "openSession", [this](const juce::var&, auto done) { session.open(done); });
+    o = addAsync(o, "saveSession", [this](const juce::var& a, auto done) { session.save(a["text"].toString(), done); });
+    o = addAsync(o, "saveSessionAs", [this](const juce::var& a, auto done) { session.saveAs(a["text"].toString(), done); });
+    o = add(o, "roundTripRead", [this](const juce::var&) {
+        auto* r = new juce::DynamicObject(); r->setProperty("text", roundTripIn.loadFileAsString()); return juce::var(r);
+    });
+    o = add(o, "roundTripDone", [this](const juce::var& a) {
+        const bool ok = roundTripOut.replaceWithText(a["text"].toString(), false, false, "\n");
+        juce::MessageManager::callAsync([] { juce::JUCEApplication::quit(); });
+        auto* r = new juce::DynamicObject(); r->setProperty("ok", ok); return juce::var(r);
+    });
+    o = add(o, "setDocument", [this](const juce::var& a) {
+        dirty = (bool) a["dirty"];
+        if (onDocument) onDocument(a["name"].toString(), dirty);
+        auto* r = new juce::DynamicObject(); r->setProperty("ok", true); return juce::var(r);
+    });
     return o;
 }
 

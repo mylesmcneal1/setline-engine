@@ -3,6 +3,7 @@
 #include "Engine.h"
 #include "TempoMap.h"
 #include "Wav.h"
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
@@ -471,6 +472,97 @@ bool runSelfTest(bool verbose)
         check(s.at(0, from - fin) < 0.01f && s.at(0, from) == 0.5f && maxStep(s.out[0], 0, (size_t) fin + 10) <= 0.5f / (float) fin * 1.01f,
               "start inside the song: 5 ms fade-in ends exactly on the start sample");
         check(! s.e.start(s.e.lengthSamples()), "start past the end of the song is refused");
+    }
+
+
+    // Loops and jumps happen inside process(), on the exact sample, with stems streaming.
+    {
+        const int blk = 97; // odd block size: the loop point falls in the middle of a block
+        SongDef song = makeTestSong(3, 45, sr);
+        OfflineRun full; full.load(song, sr, 4, blk); full.start(0); full.runToEnd();
+        const auto& tm = full.e.tempoMap();
+        const int64_t B = tm.sampleAt(3, 1), A = tm.sampleAt(5, 1), L = A - B; // loop bars 3-4
+        auto expectLoop = [&](int64_t i) { return i < A ? i : B + (i - A) % L; }; // song sample heard at stream index i
+
+        OfflineRun lp; lp.load(song, sr, 4, blk); lp.e.setLoop(B, A); lp.start(0);
+        const int64_t total = A + 3 * L + 1000;
+        while ((int64_t) lp.out[0].size() < total) lp.step();
+        int64_t bad = -1;
+        for (int c = 0; c < 4 && bad < 0; ++c)
+            for (int64_t i = 0; i < total; ++i)
+                if (lp.out[(size_t) c][(size_t) i] != full.out[(size_t) c][(size_t) expectLoop(i)]) { bad = i; break; }
+        check(bad < 0 && lp.e.stats.underruns.load() == 0,
+              "loop bars 3-4: every output (stems, marker, click) sample-exact through 3+ passes, wrapping mid-block"
+              + (bad >= 0 ? " (first difference at stream sample " + std::to_string(bad) + ")" : std::string()));
+        const auto on = onsets(lp, 2, 0.05f, 100); // marker blips = downbeats heard
+        bool markerOk = true; int wraps = 0;
+        for (int64_t k = 0; k < 3; ++k) {
+            const int64_t wrapAt = A + k * L; // stream index where pass k+2 starts: must be bar 3's downbeat
+            markerOk &= std::find(on.begin(), on.end(), wrapAt) != on.end(); ++wraps;
+        }
+        check(markerOk, "loop: bar 3's downbeat marker lands exactly on the wrap sample, " + std::to_string(wraps) + " passes");
+
+        std::vector<int64_t> expectMidi;
+        for (auto& m : full.e.midiLog) if (m.sample < A) expectMidi.push_back(m.sample);
+        int perPass = 0;
+        for (int pass = 0; pass < 3; ++pass)
+            for (auto& m : full.e.midiLog) if (m.sample >= B && m.sample < A) { expectMidi.push_back(m.sample); if (pass == 0) ++perPass; }
+        bool midiOk = lp.e.midiLog.size() >= expectMidi.size();
+        for (size_t i = 0; midiOk && i < expectMidi.size(); ++i) midiOk = lp.e.midiLog[i].sample == expectMidi[i];
+        check(midiOk && perPass >= 4, "loop: the " + std::to_string(perPass) + " MIDI events inside the loop fire again on every pass, on the same samples; the one on the loop end doesn't");
+        int clicksPerPass = 0; for (auto& c : full.e.clickList()) if (c.sample >= B && c.sample < A) ++clicksPerPass;
+        int clickHeard = 0;
+        for (auto i : onsets(lp, 3)) if (i >= A && i < A + 3 * L) ++clickHeard;
+        check(clicksPerPass == 8 && clickHeard == 3 * clicksPerPass, "loop: all " + std::to_string(clicksPerPass) + " clicks inside the loop play on every pass (" + std::to_string(clickHeard) + " in 3 passes)");
+
+        // Clearing the loop during a pass: playback runs on past the loop end, no wrap.
+        OfflineRun cl; cl.load(song, sr, 4, blk); cl.e.setLoop(B, A); cl.start(0);
+        while ((int64_t) cl.out[0].size() < A + L / 2) cl.step();
+        cl.e.clearJump();
+        const int64_t endAt = A + L + L;
+        while ((int64_t) cl.out[0].size() < endAt) cl.step();
+        bool on2 = true;
+        for (int64_t i = A + L / 2 + blk; i < endAt && on2; ++i) on2 = cl.out[2][(size_t) i] == full.out[2][(size_t) (B + (i - A))] && cl.out[3][(size_t) i] == full.out[3][(size_t) (B + (i - A))];
+        check(on2, "loop cleared during a pass: playback continues straight past the old loop end");
+
+        // A one-shot jump armed while playing (skip bars 4-8): lands exactly, happens once.
+        OfflineRun jp; jp.load(song, sr, 4, blk); jp.start(0);
+        while ((int64_t) jp.out[0].size() < tm.sampleAt(2, 1)) jp.step();
+        const int64_t at = tm.sampleAt(4, 1), to = tm.sampleAt(9, 1);
+        jp.e.setJump(at, to, false);
+        while ((int64_t) jp.out[0].size() < at + 3 * (int64_t) sr) jp.step();
+        bool jOk = true;
+        for (int c = 0; c < 4 && jOk; ++c)
+            for (int64_t i = at - 1000; i < at + 3 * (int64_t) sr && jOk; ++i)
+                jOk = jp.out[(size_t) c][(size_t) i] == full.out[(size_t) c][(size_t) (i < at ? i : to + (i - at))];
+        check(jOk && jp.e.stats.jumps.load() == 1, "jump armed while playing (bar 4 -> bar 9): exact on the sample, once");
+    }
+
+    // Real time: a one-bar loop with 9 stems streaming from the disk thread.
+    {
+        SongDef song = makeTestSong(8, 12, sr);
+        Engine e; FakeSink sink;
+        Engine::Config cfg; cfg.sampleRate = sr; cfg.numOutputs = 4;
+        std::vector<std::string> warn;
+        e.load(song, cfg, warn);
+        e.setMidiSink(&sink);
+        e.setDeviceTiming(128, 64);
+        e.setDeviceRunning(true);
+        std::atomic<bool> run { true };
+        std::thread dev([&] {
+            std::vector<std::vector<float>> buf(4, std::vector<float>(128));
+            float* p[4] = { buf[0].data(), buf[1].data(), buf[2].data(), buf[3].data() };
+            auto next = Clock::now();
+            while (run) { e.process(p, 4, 128); next += std::chrono::microseconds(2667); std::this_thread::sleep_until(next); }
+        });
+        e.setLoop(0, e.tempoMap().sampleAt(2, 1)); // bar 1, wraps every 2 s
+        const bool started = e.start();
+        std::this_thread::sleep_for(std::chrono::seconds(6));
+        const int64_t jumps = e.stats.jumps.load(), under = e.stats.underruns.load();
+        run = false; dev.join();
+        e.setDeviceRunning(false);
+        e.stop();
+        check(started && jumps >= 2 && under == 0, "real-time: a 1-bar loop with 9 stems wraps " + std::to_string(jumps) + " times with no disk underruns");
     }
 
     std::printf(ok ? "ALL CHECKS PASSED\n" : "SOME CHECKS FAILED\n");

@@ -3,6 +3,7 @@
 #pragma once
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <functional>
+#include "SessionFile.h"
 
 namespace setline::gui {
 
@@ -12,7 +13,7 @@ class Bridge {
 public:
     using Options = juce::WebBrowserComponent::Options;
 
-    explicit Bridge(AudioHost& host);
+    Bridge(AudioHost& host, juce::PropertiesFile& settings);
     ~Bridge();
 
     Options addTo(Options o);
@@ -20,13 +21,23 @@ public:
     void emit(const juce::Identifier& event, const juce::var& payload);
 
     bool devMode = false;
+    // Test: --session-roundtrip <in> <out> opens <in> in the page, saves it to <out> and quits.
+    juce::File roundTripIn, roundTripOut;
+
+    // The page reports the session's name and whether it has unsaved changes (window title, quit check).
+    std::function<void(const juce::String& name, bool dirty)> onDocument;
+    bool isDirty() const { return dirty; }
 
 private:
     using Fn = std::function<juce::var(const juce::var&)>;
     static Options add(Options o, const char* name, Fn fn);
+    using AsyncFn = std::function<void(const juce::var&, std::function<void(juce::var)>)>;
+    static Options addAsync(Options o, const char* name, AsyncFn fn);
 
     AudioHost& audio;
     juce::WebBrowserComponent* browser = nullptr;
+    SessionFile session;
+    bool dirty = false;
 };
 
 } // namespace setline::gui

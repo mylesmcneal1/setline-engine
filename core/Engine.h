@@ -28,7 +28,7 @@ public:
     };
 
     struct Stats {
-        std::atomic<int64_t> callbacks { 0 }, underruns { 0 }, cbMaxUs { 0 }, cbOverBudget { 0 };
+        std::atomic<int64_t> callbacks { 0 }, underruns { 0 }, cbMaxUs { 0 }, cbOverBudget { 0 }, jumps { 0 };
     };
 
     struct LoggedMidi { int64_t sample; int port; uint8_t d[3]; int len; };
@@ -56,6 +56,15 @@ public:
     // Non-blocking stop: the audio thread fades out and stops by itself (also usable offline).
     void requestStop() { if (playing.load()) stopReq.store(true, std::memory_order_release); }
     bool isPlaying() const { return playing.load(std::memory_order_acquire); }
+
+    // Loops and jumps (control thread, also while playing): when playback reaches sample `at` it continues
+    // from sample `to`, exactly on that sample inside the audio callback. repeat = a loop (every pass),
+    // otherwise once. Stems are prepared in the background, so arm a jump some time before it's due.
+    struct Jump { int64_t at = -1, to = -1; bool repeat = false; };
+    void setJump(int64_t at, int64_t to, bool repeat);
+    void setLoop(int64_t start, int64_t end) { setJump(end, start, true); }
+    void clearJump();
+    Jump currentJump() const { return ctlJump; }
 
     // Live levels (any thread, glitch-free: ramped over 10 ms in the callback).
     // track: 0..numStems()-1 for stems, or ClickTrack / CueTrack.
@@ -89,6 +98,9 @@ private:
     void diskLoop();
     void waitForCallbackToFinish();
     void fadeOutAndStop(); // control lock held
+    void publishJump();
+    void armStems();
+    void renderSegment(float* const* outs, int numOuts, int off, int count, int64_t p, Clock::time_point t0);
 
     Config cfg;
     TempoMap tmap;
@@ -109,6 +121,14 @@ private:
     size_t nextClick = 0, nextMidi = 0;
     struct Voice { int remaining = 0; double phase = 0, inc = 0, env = 0, decay = 0; float amp = 0; } voice;
     int fadeInLeft = 0, fadeInLen = 0, fadeOutLeft = 0;
+
+    // jump / loop: the control side publishes {at, to, repeat} under a sequence number; the audio
+    // thread copies it when the sequence is even (complete) and new.
+    Jump ctlJump;
+    std::atomic<uint64_t> jumpSeq { 0 };
+    std::atomic<int64_t> jAt { -1 }, jTo { -1 };
+    std::atomic<bool> jRepeat { false };
+    Jump rtJump; uint64_t rtSeq = 0, rtDoneSeq = ~0ull; // audio thread
 
     std::atomic<bool> playing { false }, finished { false }, deviceRunning { false }, stopReq { false };
     std::atomic<int64_t> serial { 0 };
