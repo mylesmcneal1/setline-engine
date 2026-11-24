@@ -33,6 +33,9 @@ public:
     // The page reports the session's name and whether it has unsaved changes (window title, quit check).
     std::function<void(const juce::String& name, bool dirty)> onDocument;
     bool isDirty() const { return dirty; }
+    // Quitting with unsaved changes: the page asks Save / Don't save / Cancel ("menu" {cmd: "quit"}) and calls
+    // quitNow when it's done; onQuitAnswered tells the app the page is handling it.
+    std::function<void()> onQuitAnswered;
 
     // Files dragged onto the window (the web view hands the page no paths, so the window takes the drop).
     // state: "over" | "leave" | "drop"; x, y in page pixels.

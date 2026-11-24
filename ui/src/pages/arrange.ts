@@ -22,10 +22,14 @@ interface Page {
   colourOf(t: string): string; roleOf(t: string): string; rerender(): void; redrawTrack(s: Song, t: string): void;
   // step 2: spoken cues
   cueCfg(s: Song): CueVoice; cueVoiceAll(): CueVoice; setVoices(list: VoiceInfo[]): void;
+  setDirty(d: boolean): void; freshShow(): void;
+  menu(e: { clientX: number; clientY: number }, items: (MenuItem | "-")[]): void;
+  saveBox(title: string, body: string, choice: (c: "save" | "discard") => void): void;
   pron(): Record<string, string>; setVoiceModel(st: VoiceModel): void; setUnknownWords(list: string[]): void;
 }
 // Cue voice choice as saved (voice id + name: ids differ between computers) and an installed voice.
 interface CueVoice { voice: string; name: string; speed: number }
+interface MenuItem { label: string; icon?: string; key?: string; dis?: boolean; act: () => void }
 interface VoiceInfo { id: string; name: string; lang: string; isDefault: boolean; engine?: string; gender?: string; grade?: string; rank?: number }
 // The built-in Kokoro voices' download (Kokoro.h): missing | downloading | ready | failed.
 interface VoiceModel { state: string; done: number; total: number; error: string }
@@ -261,6 +265,8 @@ const SLE = {
   },
   save: (as: boolean) => saveSession(as),
   open: () => openSession(),
+  newSession: () => newSession(),
+  fileMenu: (at: { clientX: number; clientY: number }) => fileMenu(at),
   // ---- step 2: stems ----
   pickStems: () => pickStems(),
   importStems: (infos: AudioInfo[], copy: boolean) => importStems(infos, copy),
@@ -383,6 +389,7 @@ function remember(text = sessionText()) {
   const tracks = trackNames().map((x) => ({ ...x, colour: page().colourOf(x.name) }));
   try { sessionStorage.setItem("setline.session", JSON.stringify({ doc, text, tracks })); } catch {}
   const dirty = text !== doc.savedText;
+  page().setDirty(dirty);
   const key = doc.name + "|" + dirty;
   if (key !== lastReported) { lastReported = key; SL.call("setDocument", { name: doc.name, dirty }).catch(() => {}); }
   prepareCues();
@@ -481,17 +488,19 @@ function forgetMissingPeaks() {
 }
 
 let saving = false;
-async function saveSession(as: boolean) {
-  if (saving) return;
+// Saves (asks where for a new session or Save As). true when the session is on disk afterwards.
+// to: tests only, the target path instead of the dialog.
+async function saveSession(as: boolean, to?: string): Promise<boolean> {
+  if (saving) return false;
   saving = true;
   try {
     // A session lives in its own folder: <folder>/<name>.setline with the stems in <folder>/Audio.
     const cur = await SL.call<FileResult>("getSessionFile");
-    let target = cur.path || "";
-    if (as || !target) {
+    let target = to || cur.path || "";
+    if (!to && (as || !target)) {
       const r = await SL.call<FileResult>("chooseSessionFile");
-      if (r.cancelled) return;
-      if (r.error || !r.path) { page().toast(r.error || "Couldn't save"); return; }
+      if (r.cancelled) return false;
+      if (r.error || !r.path) { page().toast(r.error || "Couldn't save"); return false; }
       target = r.path;
     }
     // Stems flagged "Copy into session" are copied into its Audio folder; every reference becomes
@@ -500,18 +509,74 @@ async function saveSession(as: boolean) {
     if (files.length) {
       const c = await SL.call<{ map?: Record<string, string>; missing?: string[]; error?: string }>("collectAudio",
         { from: cur.path || "", to: target, files: files.map((x) => ({ ref: x.f.path, copy: !!x.f.copy })) });
-      if (c.error) { page().toast(c.error); return; }
+      if (c.error) { page().toast(c.error); return false; }
       applyRefMap(c.map || {});
       if (c.missing && c.missing.length) page().toast(`${c.missing.length} audio file${c.missing.length > 1 ? "s are" : " is"} missing; saved without copying ${c.missing.length > 1 ? "them" : "it"}`);
     }
     const text = sessionText();
     const r = await SL.call<FileResult>("writeSession", { path: target, text });
-    if (r.error) { page().toast(r.error); return; }
+    if (r.error) { page().toast(r.error); return false; }
     doc = { name: r.name || doc.name, savedText: text };
     page().setSessionName(doc.name);
     page().toast(`Saved “${doc.name}”`);
     remember(text);
+    return true;
   } finally { saving = false; }
+}
+
+// ---------------------------------------------------------------- File menu (phase 6b)
+// Before replacing the session (New, Open, Open Recent, Close, Quit): Save / Don't save / Cancel when it has
+// unsaved changes. then() runs once it's saved or the user chose not to.
+const isDirty = () => sessionText() !== doc.savedText;
+function askSave(what: string, then: () => void) {
+  if (!isDirty()) { then(); return; }
+  const name = doc.name || "Untitled session";
+  page().saveBox(`Save changes to “${name}”?`, `${what} Your changes are lost if you don’t save them.`, async (c) => {
+    if (c === "discard") { then(); return; }
+    if (await saveSession(false)) then();
+  });
+}
+const BLANK = JSON.stringify({ songs: [], setlists: [{ id: "L1", name: "Setlist 1", order: [] }], curSet: "L1" });
+// New and Close: an empty, untitled session (the next Save asks where).
+function newSession(verb = "Starting a new session closes this one.") {
+  askSave(verb, async () => {
+    await SL.call("closeSession");
+    doc = { name: "", savedText: "" };
+    page().freshShow();
+    applySession(BLANK);
+    doc.savedText = sessionText();
+    remember();
+  });
+}
+async function openPath(path: string) {
+  const r = await SL.call<FileResult>("openSessionPath", { path });
+  if (r.error || !r.text) { page().toast(r.error || "Couldn't open that file"); return; }
+  doc = { name: r.name || "", savedText: "" };
+  applySession(r.text);
+  doc.savedText = sessionText();
+  page().toast(`Opened “${doc.name}”`);
+  remember();
+  if (r.path) await checkAudio(r.path);
+}
+async function fileMenu(at: { clientX: number; clientY: number }) {
+  const mod = navigator.platform.startsWith("Mac") ? "⌘" : "Ctrl+";
+  let recent: { name: string; path: string; exists: boolean }[] = [];
+  try { recent = await SL.call("getRecentSessions"); } catch {}
+  const items: (MenuItem | "-")[] = [
+    { label: "New", icon: "＋", key: mod + "N", act: () => newSession() },
+    { label: "Open…", icon: "📂", key: mod + "O", act: () => openSession() },
+    { label: "Open Recent", icon: "", dis: true, act: () => {} },
+    ...(recent.length ? recent.map((x) => ({ label: x.name + (x.exists ? "" : " (not found)"), icon: "·", dis: !x.exists,
+      act: () => askSave("Opening another session closes this one.", () => openPath(x.path)) }))
+      : [{ label: "No recent sessions", icon: "", dis: true, act: () => {} }]),
+    ...(recent.length ? [{ label: "Clear the list", icon: "", act: () => { SL.call("clearRecentSessions").catch(() => {}); } }] : []),
+    "-",
+    { label: "Save", icon: "💾", key: mod + "S", act: () => { saveSession(false); } },
+    { label: "Save As…", icon: "", key: (mod === "⌘" ? "⇧⌘" : "Ctrl+Shift+") + "S", act: () => { saveSession(true); } },
+    "-",
+    { label: "Close", icon: "✕", act: () => newSession("Closing the session.") },
+  ];
+  page().menu(at, items);
 }
 
 // After opening: find the session's audio. Files found in the session's Audio folder under their name are
@@ -553,8 +618,7 @@ async function openSession() {
     remember();
     if (r.path) await checkAudio(r.path);
   };
-  if (sessionText() !== doc.savedText) page().confirm("Open another session?", "This session has unsaved changes. They will be lost.", "Open without saving", go);
-  else go();
+  askSave("Opening another session closes this one.", go);
 }
 
 // ---------------------------------------------------------------- stems (step 2)
@@ -693,10 +757,16 @@ async function main() {
   }
   // Kokoro voices: download progress; once they're in, the cues are rendered with them and the next Play reloads.
   SL.on("voiceDownload", (st: VoiceModel) => {
+    const clean = !isDirty();
     page().setVoiceModel(st);
+    if (clean) doc.savedText = sessionText();
     if (st.state === "ready") { preparedKey = ""; prepareCues(); loadedKey = null; }
   });
-  SL.on("menu", (m: { cmd: string }) => { if (m.cmd === "open") openSession(); else if (m.cmd === "save") saveSession(false); else if (m.cmd === "saveAs") saveSession(true); });
+  SL.on("menu", (m: { cmd: string }) => {
+    if (m.cmd === "open") openSession(); else if (m.cmd === "save") saveSession(false); else if (m.cmd === "saveAs") saveSession(true);
+    else if (m.cmd === "new") newSession(); else if (m.cmd === "close") newSession("Closing the session.");
+    else if (m.cmd === "quit") { SL.call("quitAnswered").catch(() => {}); askSave("Quitting set.Line.", () => { SL.call("quitNow").catch(() => {}); }); }
+  });
 
   // Session: carry on with the one from before a page switch, else this is a new, unsaved session.
   try {
@@ -723,7 +793,8 @@ async function main() {
 
   onSetup(await SL.call<Setup>("getAudioSetup"));
   try { page().setVoices(await SL.call<VoiceInfo[]>("getVoices")); } catch (e) { console.warn("set.Line: voices", e); }
-  try { page().setVoiceModel(await SL.call<VoiceModel>("voiceModel")); } catch (e) { console.warn("set.Line: voice model", e); }
+  // (a new show taking the Kokoro default voice is not an edit: an untouched session stays "saved")
+  try { const clean = !isDirty(); page().setVoiceModel(await SL.call<VoiceModel>("voiceModel")); if (clean) doc.savedText = sessionText(); } catch (e) { console.warn("set.Line: voice model", e); }
   prepareCues();
   showStatus(await SL.call<Stats>("getEngineStats"));
 
@@ -748,7 +819,7 @@ async function main() {
     try {
       const AsyncFn = Object.getPrototypeOf(async () => {}).constructor;
       const hooks = { SLE, page, importStems, probe, audioFiles, applyRefMap, checkAudio, onFileDrag, sessionText, applySession,
-        getRate: () => sessionRate, SLR, SLW, waves, SLC, prepareCues, remember, payload, getRoute: () => route, isDirty: () => sessionText() !== doc.savedText, setDoc: (n: string) => { doc = { name: n, savedText: "" }; } };
+        getRate: () => sessionRate, saveTo: (path: string) => saveSession(false, path), SLR, SLW, waves, SLC, prepareCues, remember, payload, getRoute: () => route, isDirty: () => sessionText() !== doc.savedText, setDoc: (n: string) => { doc = { name: n, savedText: "" }; } };
       out = await new AsyncFn("SL", "hooks", info.testScript)(SL, hooks);
     } catch (e) { out = { error: String((e as Error)?.stack || e) }; }
     if (out !== undefined) await SL.call("testDone", { text: JSON.stringify(out, null, 1) }); // undefined: it went to another page

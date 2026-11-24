@@ -24,14 +24,47 @@ void SessionFile::open(Done done)
                          [this, done](const juce::FileChooser& fc) {
         const auto f = fc.getResult();
         if (f == juce::File()) { done(result({ { "cancelled", true } })); return; }
-        juce::String text;
-        if (! f.existsAsFile() || (text = f.loadFileAsString()).isEmpty()) { done(result({ { "error", "Couldn't read " + f.getFullPathName() } })); return; }
-        if (! juce::JSON::parse(text).isObject()) { done(result({ { "error", f.getFileName() + " isn't a set.Line session." } })); return; }
-        current = f;
-        settings.setValue("sessionFolder", f.getParentDirectory().getFullPathName());
-        settings.setValue("lastSession", f.getFullPathName());
-        done(result({ { "name", f.getFileNameWithoutExtension() }, { "path", f.getFullPathName() }, { "text", text } }));
+        done(readSession(f));
     });
+}
+
+juce::var SessionFile::readSession(const juce::File& f)
+{
+    juce::String text;
+    if (! f.existsAsFile() || (text = f.loadFileAsString()).isEmpty()) return result({ { "error", "Couldn't read " + f.getFullPathName() } });
+    if (! juce::JSON::parse(text).isObject()) return result({ { "error", f.getFileName() + " isn't a set.Line session." } });
+    current = f;
+    settings.setValue("sessionFolder", f.getParentDirectory().getFullPathName());
+    settings.setValue("lastSession", f.getFullPathName());
+    addRecent(f);
+    return result({ { "name", f.getFileNameWithoutExtension() }, { "path", f.getFullPathName() }, { "text", text } });
+}
+
+juce::var SessionFile::openPath(const juce::File& f) { return readSession(f); }
+
+void SessionFile::addRecent(const juce::File& f)
+{
+    juce::StringArray list;
+    list.addLines(settings.getValue("recentSessions"));
+    list.removeString(f.getFullPathName());
+    list.removeEmptyStrings();
+    list.insert(0, f.getFullPathName());
+    while (list.size() > 10) list.remove(list.size() - 1);
+    settings.setValue("recentSessions", list.joinIntoString("\n"));
+    settings.saveIfNeeded();
+}
+
+juce::var SessionFile::recent() const
+{
+    juce::StringArray list;
+    list.addLines(settings.getValue("recentSessions"));
+    juce::Array<juce::var> out;
+    for (auto& p : list) {
+        if (p.isEmpty() || ! juce::File::isAbsolutePath(p)) continue;
+        const juce::File f(p);
+        out.add(result({ { "name", f.getFileNameWithoutExtension() }, { "path", f.getFullPathName() }, { "exists", f.existsAsFile() } }));
+    }
+    return out;
 }
 
 void SessionFile::save(const juce::String& text, Done done)
@@ -95,6 +128,7 @@ juce::var SessionFile::write(const juce::File& f, const juce::String& text)
     current = f;
     settings.setValue("sessionFolder", f.getParentDirectory().getFullPathName());
     settings.setValue("lastSession", f.getFullPathName());
+    addRecent(f);
     return result({ { "name", f.getFileNameWithoutExtension() }, { "path", f.getFullPathName() } });
 }
 

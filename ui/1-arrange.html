@@ -119,8 +119,11 @@
   .tl svg{width:14px;height:14px}
   .tl:hover{color:var(--text)} .tl.on{background:var(--s3);color:var(--text)}
   .zoom{display:flex;align-items:center;gap:4px;color:var(--muted);margin-left:6px}
-  .gridc{align-items:center;margin-left:6px} .gridc select{height:24px;background:transparent;border:0;color:var(--muted);font:inherit;font-size:12px;padding:0 4px;border-radius:6px;cursor:pointer}
-  .gridc select:hover{background:#1d2126;color:var(--text)} .gridc .ib2.on{color:var(--cyan)}
+  .filebar{display:flex;align-items:center;gap:2px;margin-left:6px} .filebar .fbtn{height:24px;padding:0 9px;border-radius:6px;color:var(--muted);font-size:12.5px;font-weight:500}
+  .filebar .fbtn:hover,.filebar .fbtn.open{background:#1d2126;color:var(--text)} .dirtymk{margin-left:8px;font-size:11px;color:var(--amber);white-space:nowrap} .dirtymk[hidden]{display:none}
+  .xm .it kbd{margin-left:auto;padding-left:22px;color:var(--muted);font:inherit;font-size:11px;opacity:.8}
+  .gridc{align-items:center;margin-left:6px;flex:none;width:max-content} .gridc select{flex:none;width:auto;min-width:96px;height:24px;background:transparent;border:0;color:var(--text);font:inherit;font-size:12px;padding:0 4px;border-radius:6px;cursor:pointer}
+  .gridc select:hover{background:#1d2126;color:var(--text)} .gridc .ib2.on{color:var(--cyan)} .gridc .gbtn{height:24px;padding:0 8px;border-radius:6px;color:var(--text);font-size:12px;white-space:nowrap} .gridc .gbtn:hover{background:#1d2126} .gridc select[hidden]{display:none}
   .zoom button{width:22px;height:22px;border-radius:4px;color:var(--muted)} .zoom button:hover{background:var(--s2);color:var(--text)}
   .zoom input{-webkit-appearance:none;appearance:none;width:90px;height:14px;background:transparent;border:0;padding:0}
   .zoom input::-webkit-slider-runnable-track{height:3px;border-radius:2px;background:#2a2f37}
@@ -774,6 +777,9 @@
   <div class="brand"><span class="slmark" style="display:inline-flex;flex-direction:column;gap:4px;font-weight:700;font-size:15px;letter-spacing:-.04em;line-height:1"><span>set<span style="color:#f5a524">.</span>Line</span><span style="position:relative;display:flex;gap:1.5px;height:3px"><i style="flex:8;background:#6b7cff"></i><i style="flex:16;background:#22c3a6"></i><i style="flex:8;background:#a46bff"></i><i style="flex:16;background:#f5a524"></i><i style="flex:8;background:#ff5fa2"></i><i style="flex:6;background:#7d8696"></i><b style="position:absolute;left:41%;top:-3px;width:1.5px;height:9px;background:#fff;border-radius:1px"></b></span></span></div>
   <button class="ibtn on" id="tglL" title="Setlist  [ "><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M6 2.5v11"/></svg></button>
   <button class="ibtn on" id="tglR" title="Inspector  ]"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M10 2.5v11"/></svg></button>
+  <div class="filebar"><button class="fbtn" id="fileBtn" title="New, Open, Open Recent, Save, Save As, Close">File ▾</button>
+    <button class="ibtn" id="openBtn" title="Open…  Ctrl+O"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><path d="M1.8 4.2c0-.6.5-1.1 1.1-1.1h3.2l1.3 1.4h5.6c.6 0 1.1.5 1.1 1.1v1.1"/><path d="M1.8 12.6 3.6 7c.1-.4.5-.6.9-.6h9.6c.6 0 1 .6.8 1.2l-1.6 4.6c-.1.4-.5.6-.9.6H2.6c-.5 0-.9-.4-.8-.8z"/></svg></button>
+    <button class="ibtn" id="saveBtn" title="Save  Ctrl+S"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><path d="M2.5 3.6c0-.6.5-1.1 1.1-1.1h7.2l2.7 2.7v7.2c0 .6-.5 1.1-1.1 1.1H3.6c-.6 0-1.1-.5-1.1-1.1z"/><path d="M5 2.5v3h5v-3M4.8 13.5V9.3h6.4v4.2"/></svg></button></div>
   <nav class="tabs">
     <a class="on" href="1-arrange.html">Edit</a>
     <a href="3-satellite.html?mac" title="This computer’s own canvas, full window">Perform</a>
@@ -814,10 +820,10 @@
   <!-- EDIT -->
   <section class="edit">
     <div class="etool">
-      <nav class="crumb" id="crumb"><button id="crumbAll">Untitled session</button><span id="crumbSong"></span></nav><span class="muted" id="sessCount"></span>
+      <nav class="crumb" id="crumb"><button id="crumbAll">Untitled session</button><span id="crumbSong"></span></nav><span class="dirtymk" id="dirtyMk" hidden title="Changes since the last save. Ctrl+S saves.">● Not saved</span><span class="muted" id="sessCount"></span>
       <div class="tools"><button class="tl on" data-tool="pointer" title="Pointer  V"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M3.5 1.8v11.4l3-2.9 2 4.2 1.8-.8-2-4.2h4.2z"/></svg></button><button class="tl" data-tool="split" title="Split tool: click an audio clip or a section to split it  B"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="4.5" cy="12" r="2"/><circle cx="11.5" cy="12" r="2"/><path d="M5.8 10.4 12 2M10.2 10.4 4 2"/></svg></button></div>
       <div class="igrp"><button class="ib2" id="undoB" title="Undo  ⌘Z">↶</button><button class="ib2" id="redoB" title="Redo  ⇧⌘Z">↷</button><button class="ib2" id="cutB" title="Cut  ⌘X">✂</button><button class="ib2" id="copyB" title="Copy  ⌘C">⧉</button><button class="ib2" id="pasteB" title="Paste at the playhead  ⌘V">⎘</button><button class="ib2" id="dupB" title="Duplicate  ⌘D">⊕</button></div>
-      <div class="igrp gridc" title="Grid: what clips, splits, fades, the playhead and MIDI events snap to"><button class="ib2 on" id="snapB" title="Snap to the grid (on). Hold Alt while dragging to place freely."><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 5h12M2 11h12M5 2v12M11 2v12"/></svg></button><select id="gridSel" title="Grid size"></select></div>
+      <div class="igrp gridc" title="Grid: what clips, splits, fades, the playhead and MIDI events snap to"><button class="ib2 on" id="snapB" title="Snap to the grid (on). Hold Alt while dragging to place freely."><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 5h12M2 11h12M5 2v12M11 2v12"/></svg></button><button class="gbtn" id="gridBtn" title="Grid size">Auto ▾</button><select id="gridSel" title="Grid size" style="display:none" aria-hidden="true"></select></div>
       <div class="zoom" title="Zoom  − / =  (or Ctrl + scroll)"><button id="zOut">−</button><input type="range" id="zoom" min="0" max="1000" step="1" value="0"><button id="zIn">+</button></div>
       <div class="sp">
         <div class="igrp"><button class="ib2" id="expandAll" title="Open all songs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"/></svg></button><button class="ib2" id="collapseAll" title="Close all songs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4-4 4 4"/></svg></button><button class="ib2" id="thBtn" title="Track height"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h10M3 8h10M3 12h10"/></svg></button></div>
@@ -1022,7 +1028,7 @@ function renderSetHead(){ const h=$('setHead'); if(!h) return; const c=curSetObj
 function renameSet(){ const c=curSetObj(), h=$('setHead'); h.innerHTML=`<input id="setName" value="${esc(c.name)}" style="font-weight:600;width:170px;height:28px">`; const i=$('setName'); i.focus(); i.select();
   const done=()=>{ c.name=i.value.trim()||c.name; renderSetHead(); }; i.onblur=done; i.onkeydown=e=>{ if(e.key==='Enter') i.blur(); if(e.key==='Escape'){ i.value=c.name; i.blur(); } }; }
 function ctxMenu(e,items){ document.querySelectorAll('.xm.ctx').forEach(x=>x.remove()); const m=document.createElement('div'); m.className='xm ctx';
-  items.forEach(it=>{ if(it==='-'){ m.insertAdjacentHTML('beforeend','<div class="sep"></div>'); return; } const d=document.createElement('div'); d.className='it'+(it.danger?' danger':'')+(it.dis?' dis':''); d.innerHTML=`<i>${it.icon||''}</i><span></span>`; d.lastChild.textContent=it.label;
+  items.forEach(it=>{ if(it==='-'){ m.insertAdjacentHTML('beforeend','<div class="sep"></div>'); return; } const d=document.createElement('div'); d.className='it'+(it.danger?' danger':'')+(it.dis?' dis':''); d.innerHTML=`<i>${it.icon||''}</i><span></span>${it.key?'<kbd></kbd>':''}`; d.querySelector('span').textContent=it.label; if(it.key) d.querySelector('kbd').textContent=it.key;
     if(!it.dis) d.onclick=ev=>{ ev.stopPropagation(); m.remove(); it.act(); }; m.appendChild(d); });
   document.body.appendChild(m); m.style.left=Math.min(innerWidth-m.offsetWidth-8,e.clientX)+'px'; m.style.top=Math.min(innerHeight-m.offsetHeight-8,e.clientY)+'px';
   m.addEventListener('pointerdown',ev=>ev.stopPropagation()); setTimeout(()=>document.addEventListener('pointerdown',function off(){ m.remove(); document.removeEventListener('pointerdown',off); }),0); }
@@ -1071,6 +1077,13 @@ function repeatBox(s,t,r){ const bg=document.createElement('div'); bg.className=
   const key=e=>{ if(e.key==='Escape'){ e.stopPropagation(); close(); } if(e.key==='Enter'){ e.stopPropagation(); e.preventDefault(); go(); } };
   document.addEventListener('keydown',key,true); bg.onclick=e=>{ if(e.target===bg) close(); }; $('rpN').onfocus=()=>{ bg.querySelector('input[value=n]').checked=true; };
   bg.querySelector('[data-a=no]').onclick=close; bg.querySelector('[data-a=ok]').onclick=go; $('rpN').select(); }
+// Save / Don't save / Cancel. choice("save" | "discard"); Cancel and Esc do nothing.
+function saveBox(title,body,choice){ const bg=document.createElement('div'); bg.className='cfbg';
+  bg.innerHTML=`<div class="cfbox"><b>${title}</b><p>${body}</p><div class="cfa"><button class="btn line" data-a="no">Cancel</button><button class="btn line" data-a="discard">Don’t save</button><button class="btn pri" data-a="save">Save</button></div></div>`;
+  document.body.appendChild(bg); const close=()=>{ bg.remove(); document.removeEventListener('keydown',key,true); };
+  const key=e=>{ if(e.key==='Escape'){ e.stopPropagation(); close(); } if(e.key==='Enter'){ e.stopPropagation(); e.preventDefault(); close(); choice('save'); } };
+  document.addEventListener('keydown',key,true); bg.onclick=e=>{ if(e.target===bg) close(); }; bg.querySelector('[data-a=no]').onclick=close;
+  bg.querySelector('[data-a=discard]').onclick=()=>{ close(); choice('discard'); }; bg.querySelector('[data-a=save]').onclick=()=>{ close(); choice('save'); }; bg.querySelector('[data-a=save]').focus(); }
 function toast(msg,undo){ let t=$('toastE'); if(!t){ t=document.createElement('div'); t.id='toastE'; t.className='toastE'; document.body.appendChild(t); }
   t.innerHTML=`<span></span>${undo?'<button>Undo</button>':''}`; t.firstChild.textContent=msg; t.classList.add('show'); clearTimeout(toast.h);
   if(undo) t.querySelector('button').onclick=()=>{ t.classList.remove('show'); undo(); }; toast.h=setTimeout(()=>t.classList.remove('show'),undo?7000:2600); }
@@ -1605,7 +1618,8 @@ function snapT(s,time,free){ if(free||!SNAP) return Math.round(time*1000)/1000; 
 function barBeatAt(s,time){ const b=s.bars[barIdx(s,time)]; let k=0; b.beatT.forEach((x,i)=>{ if(time>=x-1e-9) k=i; }); const t1=k+1<b.beatT.length?b.beatT[k+1]:b.t+b.dur;
   return {bar:b.bar,beat:Math.round((1+k+Math.max(0,Math.min(1,(time-b.beatT[k])/(t1-b.beatT[k]))))*1e6)/1e6}; }
 function updateGridSel(){ const sel=$('gridSel'); if(!sel) return; const s=songs.find(x=>x.id===selId)||songs[0];
-  sel.innerHTML=GRIDS.map(([v,n])=>`<option value="${v}" ${v===GRID?'selected':''}>${v==='auto'?`Auto (${(gridName(s)||'').replace('T',' T')})`:n}</option>`).join(''); }
+  sel.innerHTML=GRIDS.map(([v,n])=>`<option value="${v}" ${v===GRID?'selected':''}>${v==='auto'?`Auto (${(gridName(s)||'').replace('T',' T')})`:n}</option>`).join('');
+  const b=$('gridBtn'); if(b) b.textContent=(GRID==='auto'?`Auto (${(gridName(s)||'').replace('T',' T')})`:(GRIDS.find(g=>g[0]===GRID)||['',''])[1])+' ▾'; }
 const posTxt=(s,time)=>{ const b=s.bars.find((bb,i)=>time>=bb.t-1e-6&&time<(s.bars[i+1]?.t??1e9)-1e-6)||s.bars[0]; let k=0; b.beatT.forEach((x,i)=>{ if(time>=x-1e-6) k=i; }); return `${b.bar}.${k+1}`; };
 function redrawTrack(s,t){ const i=s.tracks.indexOf(t); document.querySelectorAll(`canvas[data-song="${s.id}"][data-t="${i}"]`).forEach(drawLane); }
 function selectClip(s,t,cl){ if(cl){ clickOpen=false; cueOpen=false; if(pick){ const p=pick; pick=null; const so=songs.find(x=>x.id===p.song); if(so) redrawSong(so); } } const prev=selClip; selClip=cl?{song:s.id,track:t,id:cl.id}:null; if(cl) selSec=null;
@@ -2217,6 +2231,10 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
     regSeq=Math.max(regSeq,(pre.r||0)+1,(pre.c||0)+1); setSeq=Math.max(setSeq,(pre.L||0)+1); pid=Math.max(pid,(pre.u||0)+1);
     undoS=[]; redoS=[]; if(!songs.find(x=>x.id===selId)) selId=songs[0]&&songs[0].id; open.clear(); if(selId) open.add(selId); refresh(); },
   setSessionName(n){ $('crumbAll').textContent=n||'Untitled session'; },
+  setDirty(d){ const m=$('dirtyMk'); if(m) m.hidden=!d; },
+  menu:(e,items)=>ctxMenu(e,items), saveBox:(t,b,c)=>saveBox(t,b,c),
+  // a new show: the set's cue voice starts fresh (Kokoro Heart once downloaded, else the computer's)
+  freshShow(){ CUEV={voice:'',name:'',speed:1}; cuevFresh=true; CLICKT={}; PRON={}; UNKNOWN=[]; if(VMODEL.state==='ready'){ CUEV={...KOKORO_DEFAULT}; cuevFresh=false; } },
   confirm(title,body,ok,fn){ confirmBox(title,body,ok,fn); },
   // step 2: stems
   // phase 6b: cues on the grid, count-in (tests)
@@ -2282,11 +2300,17 @@ document.querySelectorAll('.tl').forEach(b=>b.onclick=()=>setTool(b.dataset.tool
 const headW=()=>parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--head'));
 const ZMIN=2, ZMAX=480, zToSlider=z=>Math.round(1000*Math.log(z/ZMIN)/Math.log(ZMAX/ZMIN)), sliderToZ=v=>Math.round(ZMIN*Math.pow(ZMAX/ZMIN,v/1000)*100)/100;
 function setZoom(z,ax){ const sc=$('scroller'); z=Math.max(ZMIN,Math.min(ZMAX,z)); if(z===PXS) return; if(ax==null) ax=(sc.clientWidth-headW())/2; const tAt=(sc.scrollLeft+ax)/PXS; PXS=z; $('zoom').value=zToSlider(z); renderFolders(); sc.scrollLeft=Math.max(0,tAt*PXS-ax); redrawView(true); }
+// File menu + buttons (the app does the work: window.SLE; a plain browser just says so)
+$('fileBtn').onclick=e=>{ const r=$('fileBtn').getBoundingClientRect(); if(window.SLE) SLE.fileMenu({clientX:r.left,clientY:r.bottom+4}); else toast('In the app: New, Open, Open Recent, Save, Save As, Close'); };
+$('openBtn').onclick=()=>{ if(window.SLE) SLE.open(); else toast('In the app this opens a session'); };
+$('saveBtn').onclick=()=>{ if(window.SLE) SLE.save(false); else toast('In the app this saves the session'); };
 $('zoom').value=zToSlider(PXS); $('zoom').oninput=e=>setZoom(sliderToZ(+e.target.value)); $('zIn').onclick=()=>setZoom(Math.max(PXS+1,Math.round(PXS*1.4))); $('zOut').onclick=()=>setZoom(Math.min(PXS-1,Math.round(PXS/1.4)));
 $('scroller').addEventListener('scroll',()=>{ if(viewRaf) return; viewRaf=requestAnimationFrame(()=>{ viewRaf=0; redrawView(false); }); },{passive:true});
 addEventListener('resize',()=>redrawView(true));
 // Grid size + Snap toggle (edit toolbar)
 $('gridSel').onchange=e=>{ GRID=e.target.value; renderFolders(); renderInsp(); };
+$('gridBtn').onclick=()=>{ const r=$('gridBtn').getBoundingClientRect(), s=songs.find(x=>x.id===selId)||songs[0];
+  ctxMenu({clientX:r.left,clientY:r.bottom+4},GRIDS.map(([v,n])=>({label:v==='auto'?`Auto (now ${gridName(s).replace('T',' triplet')})`:n,icon:v===GRID?'✓':'',act:()=>{ GRID=v; renderFolders(); renderInsp(); }}))); };
 $('snapB').onclick=()=>{ SNAP=!SNAP; $('snapB').classList.toggle('on',SNAP); $('snapB').title=SNAP?'Snap to the grid (on). Hold Alt while dragging to place freely.':'Snap to the grid (off)'; renderInsp(); };
 $('scroller').addEventListener('wheel',e=>{ if(!(e.ctrlKey||e.metaKey)) return; e.preventDefault(); setZoom(e.deltaY<0?Math.max(PXS+1,Math.round(PXS*1.15)):Math.min(PXS-1,Math.round(PXS/1.15)),e.clientX-$('scroller').getBoundingClientRect().left-headW()); },{passive:false});
 const THS=[36,48,72]; $('thBtn').onclick=()=>{ TH=THS[(THS.indexOf(TH)+1)%THS.length]; document.documentElement.style.setProperty('--th',TH+'px'); renderFolders(); };
@@ -2323,7 +2347,7 @@ $('tglL').onclick=()=>setPanel('L',!isOpen('L')); $('tglR').onclick=()=>setPanel
 $('closeL').onclick=()=>setPanel('L',false); $('closeR').onclick=()=>setPanel('R',false);
 try{ if(localStorage.getItem('setline.panelL')==='0') setPanel('L',false); if(localStorage.getItem('setline.panelR')==='0') setPanel('R',false); }catch(e){}
 document.addEventListener('keydown',e=>{ if(/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
-  if(e.metaKey||e.ctrlKey){ const k=e.key.toLowerCase(); if(k==='s'){ e.preventDefault(); if(window.SLE) SLE.save(e.shiftKey); return; } if(k==='o'){ e.preventDefault(); if(window.SLE) SLE.open(); return; } if(k==='z'){ e.preventDefault(); e.shiftKey?redo():undo(); return; } if(k==='y'){ e.preventDefault(); redo(); return; }
+  if(e.metaKey||e.ctrlKey){ const k=e.key.toLowerCase(); if(k==='s'){ e.preventDefault(); if(window.SLE) SLE.save(e.shiftKey); return; } if(k==='o'){ e.preventDefault(); if(window.SLE) SLE.open(); return; } if(k==='n'){ e.preventDefault(); if(window.SLE) SLE.newSession(); return; } if(k==='z'){ e.preventDefault(); e.shiftKey?redo():undo(); return; } if(k==='y'){ e.preventDefault(); redo(); return; }
     if(k==='c'){ e.preventDefault(); doCopy(); return; } if(k==='x'){ e.preventDefault(); doCut(); return; } if(k==='v'){ e.preventDefault(); doPaste(); return; } if(k==='d'){ e.preventDefault(); doDup(); return; } }
   if(pick&&(e.key==='Delete'||e.key==='Backspace')){ e.preventDefault(); doDelete(); return; }
   if(pick&&e.key==='Escape'){ setPick(null); return; }

@@ -157,6 +157,21 @@ Bridge::Options Bridge::addRest(Options o)
         r->setProperty("name", session.name());
         return juce::var(r);
     });
+    // File menu: Open Recent, Close / New, and quitting once the page has dealt with unsaved changes.
+    o = add(o, "getRecentSessions", [this](const juce::var&) { return session.recent(); });
+    o = add(o, "clearRecentSessions", [this](const juce::var&) { session.clearRecent(); auto* r = new juce::DynamicObject(); r->setProperty("ok", true); return juce::var(r); });
+    o = add(o, "openSessionPath", [this](const juce::var& a) {
+        const auto p = a["path"].toString();
+        if (! juce::File::isAbsolutePath(p)) return errorVar("openSessionPath: expected an absolute path");
+        return session.openPath(juce::File(p));
+    });
+    o = add(o, "closeSession", [this](const juce::var&) { session.close(); auto* r = new juce::DynamicObject(); r->setProperty("ok", true); return juce::var(r); });
+    o = add(o, "quitAnswered", [this](const juce::var&) { if (onQuitAnswered) onQuitAnswered(); auto* r = new juce::DynamicObject(); r->setProperty("ok", true); return juce::var(r); });
+    o = add(o, "quitNow", [this](const juce::var&) {
+        dirty = false;
+        juce::MessageManager::callAsync([] { juce::JUCEApplication::quit(); });
+        auto* r = new juce::DynamicObject(); r->setProperty("ok", true); return juce::var(r);
+    });
     o = addAsync(o, "chooseSessionFile", [this](const juce::var&, auto done) { session.chooseLocation(done); });
     o = add(o, "writeSession", [this](const juce::var& a) {
         const auto path = a["path"].toString();

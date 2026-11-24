@@ -26,6 +26,14 @@ public:
     // Writes text to path (atomically) and makes it the current session. -> {name, path} | {error}
     juce::var writeTo(const juce::File& f, const juce::String& text) { return write(f, text); }
 
+    // Open Recent: the last sessions opened or saved, newest first -> [{name, path, exists}].
+    juce::var recent() const;
+    void clearRecent() { settings.setValue("recentSessions", juce::String()); }
+    // Opens a session by path (Open Recent) -> {name, path, text} | {error}
+    juce::var openPath(const juce::File& f);
+    // Close / New: no current file (the next Save asks where).
+    void close() { current = juce::File(); }
+
     juce::String name() const { return current.existsAsFile() ? current.getFileNameWithoutExtension() : juce::String(); }
     juce::File file() const { return current; }
 
@@ -33,6 +41,8 @@ public:
 
 private:
     juce::var write(const juce::File& f, const juce::String& text);
+    juce::var readSession(const juce::File& f);
+    void addRecent(const juce::File& f);
     juce::File startFolder() const;
 
     juce::PropertiesFile& settings;

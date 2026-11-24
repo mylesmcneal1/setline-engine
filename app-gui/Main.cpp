@@ -120,6 +120,17 @@ public:
     void systemRequestedQuit() override
     {
         if (! bridge || ! bridge->isDirty()) { quit(); return; }
+        // The page asks Save / Don't save / Cancel (it can save with the stems collected); if it doesn't answer
+        // within 2 s (page not loaded), the plain question below.
+        quitAnswered = false;
+        bridge->onQuitAnswered = [this] { quitAnswered = true; };
+        auto* o = new juce::DynamicObject(); o->setProperty("cmd", "quit");
+        bridge->emit("menu", juce::var(o));
+        juce::Timer::callAfterDelay(2000, [this] { if (bridge && ! quitAnswered) askQuitNative(); });
+    }
+    bool quitAnswered = false;
+    void askQuitNative()
+    {
         juce::AlertWindow::showOkCancelBox(juce::MessageBoxIconType::WarningIcon, "Quit set.Line?",
                                            "The session has unsaved changes. Quit without saving?", "Quit", "Cancel", nullptr,
                                            juce::ModalCallbackFunction::create([](int ok) { if (ok) juce::JUCEApplication::quit(); }));
@@ -135,9 +146,12 @@ private:
         juce::PopupMenu getMenuForIndex(int, const juce::String&) override
         {
             juce::PopupMenu m;
+            m.addItem(juce::PopupMenu::Item("New").setID(4).setAction([this] { send("new"); }));
             m.addItem(juce::PopupMenu::Item("Open...").setID(1).setAction([this] { send("open"); }));
             m.addItem(juce::PopupMenu::Item("Save").setID(2).setAction([this] { send("save"); }));
             m.addItem(juce::PopupMenu::Item("Save As...").setID(3).setAction([this] { send("saveAs"); }));
+            m.addSeparator();
+            m.addItem(juce::PopupMenu::Item("Close").setID(5).setAction([this] { send("close"); }));
             return m;
         }
         void menuItemSelected(int, int) override {}
