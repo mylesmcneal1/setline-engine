@@ -65,7 +65,6 @@ bool render(const juce::String& text, const juce::String& voiceId, double speed,
             std::lock_guard<std::mutex> g(st->m);
             if (st->finished) return;
             AVAudioPCMBuffer* pcm = (AVAudioPCMBuffer*) buffer;
-            dbg("buffer, frames", [pcm isKindOfClass:[AVAudioPCMBuffer class]] ? (long) pcm.frameLength : -1);
             if (! [pcm isKindOfClass:[AVAudioPCMBuffer class]] || pcm.frameLength == 0) { // the last buffer is empty
                 st->finished = true;
                 dispatch_semaphore_signal(st->done);
