@@ -33,6 +33,8 @@ public:
     // The page reports the session's name and whether it has unsaved changes (window title, quit check).
     std::function<void(const juce::String& name, bool dirty)> onDocument;
     bool isDirty() const { return dirty; }
+    bool copyingAudio() const { return media.copying(); }
+    void cancelAudioCopies() { media.cancelCopies(); }
     // Quitting with unsaved changes: the page asks Save / Don't save / Cancel ("menu" {cmd: "quit"}) and calls
     // quitNow when it's done; onQuitAnswered tells the app the page is handling it.
     std::function<void()> onQuitAnswered;

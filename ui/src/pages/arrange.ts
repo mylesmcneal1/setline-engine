@@ -23,6 +23,7 @@ interface Page {
   // step 2: spoken cues
   cueCfg(s: Song): CueVoice; cueVoiceAll(): CueVoice; setVoices(list: VoiceInfo[]): void;
   setDirty(d: boolean): void; freshShow(): void;
+  copyStatus(p: { done: number; total: number; files?: number; filesDone?: number; finished: boolean; error?: string }): void;
   recFor(s: Song, text: string): string; wordFiles(): { path: string; copy?: boolean }[];
   addWords(s: Song, list: { name: string; ref: string }[], only: boolean): void;
   menu(e: { clientX: number; clientY: number }, items: (MenuItem | "-")[]): void;
@@ -38,7 +39,7 @@ interface VoiceInfo { id: string; name: string; lang: string; isDefault: boolean
 interface VoiceModel { state: string; done: number; total: number; error: string }
 // A file as the app read it (Media::probe). ok = false: error says why it can't be imported.
 interface AudioInfo { path: string; name: string; ok: boolean; channels?: number; rate?: number; frames?: number; seconds?: number; format?: string; bits?: number; error?: string }
-interface Progress { done: number; total: number; file: string; finished: boolean }
+interface Progress { done: number; total: number; file: string; finished: boolean; files?: number; filesDone?: number; kind?: string; error?: string }
 interface Transport { playing: boolean; loaded: boolean; song: string; bar: number; beat: number; seconds: number; ended?: boolean }
 interface LoadResult { ok?: boolean; error?: string; code?: string; warnings?: string[]; epoch?: number }
 interface FileResult { name?: string; path?: string; text?: string; cancelled?: boolean; error?: string }
@@ -534,8 +535,9 @@ async function saveSession(as: boolean, to?: string): Promise<boolean> {
     // relative to the session folder (absolute only for files kept outside it).
     const files = audioFiles(), words = page().wordFiles();
     if (files.length || words.length) {
-      const c = await SL.call<{ map?: Record<string, string>; missing?: string[]; error?: string }>("collectAudio",
-        { from: cur.path || "", to: target, files: [...files.map((x) => ({ ref: x.f.path, copy: !!x.f.copy })), ...words.map((w) => ({ ref: w.path, copy: true, sub: "Cues/Words" }))] });
+      // the session saves right away; the audio is copied after it in the background ("Copying audio… n of N")
+      const c = await SL.call<{ map?: Record<string, string>; missing?: string[]; error?: string; copying?: number }>("collectAudio",
+        { from: cur.path || "", to: target, background: true, files: [...files.map((x) => ({ ref: x.f.path, copy: !!x.f.copy })), ...words.map((w) => ({ ref: w.path, copy: true, sub: "Cues/Words" }))] });
       if (c.error) { page().toast(c.error); return false; }
       applyRefMap(c.map || {});
       if (c.missing && c.missing.length) page().toast(`${c.missing.length} audio file${c.missing.length > 1 ? "s are" : " is"} missing; saved without copying ${c.missing.length > 1 ? "them" : "it"}`);
@@ -616,7 +618,8 @@ async function fileMenu(at: { clientX: number; clientY: number }) {
 async function checkAudio(sessionPath: string) {
   const refs = [...new Set(audioFiles().map((x) => x.f.path))];
   if (!refs.length) return;
-  const r = await SL.call<{ missing: string[]; map: Record<string, string> }>("checkAudio", { session: sessionPath, refs });
+  const r = await SL.call<{ missing: string[]; map: Record<string, string>; resumed?: number }>("checkAudio", { session: sessionPath, refs });
+  if (r.resumed) page().toast(`Finishing the audio copy that was interrupted (${r.resumed} file${r.resumed > 1 ? "s" : ""})`);
   applyRefMap(r.map || {});
   if (r.missing && r.missing.length) askLocate(sessionPath, r.missing);
 }
@@ -703,6 +706,7 @@ async function addStems(s: Song) {
 // Copy progress: a small sheet with a bar while files are copied.
 let progressEl: HTMLElement | null = null;
 function onProgress(p: Progress) {
+  if (p.kind === "save") { page().copyStatus(p); return; } // Save / Save As: a small indicator, nothing blocks
   if (p.finished) { progressEl?.remove(); progressEl = null; return; }
   if (!progressEl) {
     progressEl = document.createElement("div");

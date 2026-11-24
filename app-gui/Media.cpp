@@ -1,4 +1,12 @@
 #include "Media.h"
+#include <map>
+#include <mutex>
+#include <thread>
+#if JUCE_WINDOWS
+ #include <windows.h>
+#elif JUCE_MAC
+ #include <copyfile.h>
+#endif
 
 namespace setline::gui {
 
@@ -31,6 +39,46 @@ juce::File destinationFor(const juce::File& dir, const juce::File& src, bool& al
     }
 }
 
+// One file with the OS's own copy (what Explorer / Finder use; a clone on APFS). bytes: called as data moves.
+// cancel stops a copy in progress. dst must not exist.
+bool osCopy(const juce::File& src, const juce::File& dst, std::atomic<bool>& cancel, const std::function<void(juce::int64)>& bytes, juce::String& error)
+{
+   #if JUCE_WINDOWS
+    struct Ctx { std::atomic<bool>* cancel; const std::function<void(juce::int64)>* bytes; } ctx { &cancel, &bytes };
+    auto routine = [](LARGE_INTEGER, LARGE_INTEGER done, LARGE_INTEGER, LARGE_INTEGER, DWORD, DWORD, HANDLE, HANDLE, LPVOID p) -> DWORD {
+        auto* c = static_cast<Ctx*>(p);
+        (*c->bytes)((juce::int64) done.QuadPart);
+        return c->cancel->load() ? PROGRESS_CANCEL : PROGRESS_CONTINUE;
+    };
+    BOOL stop = FALSE;
+    if (CopyFileExW(src.getFullPathName().toWideCharPointer(), dst.getFullPathName().toWideCharPointer(), routine, &ctx, &stop, 0)) return true;
+    const auto e = GetLastError();
+    error = e == ERROR_REQUEST_ABORTED ? juce::String("Copy cancelled")
+          : e == ERROR_DISK_FULL ? "The disk is full: " + dst.getParentDirectory().getFullPathName()
+          : "Couldn't copy " + src.getFileName() + " (error " + juce::String((int) e) + ")";
+    return false;
+   #elif JUCE_MAC
+    if (cancel.load()) { error = "Copy cancelled"; return false; }
+    if (copyfile(src.getFullPathName().toRawUTF8(), dst.getFullPathName().toRawUTF8(), nullptr, COPYFILE_ALL | COPYFILE_CLONE) == 0) { bytes(src.getSize()); return true; }
+    error = "Couldn't copy " + src.getFileName() + " (" + juce::String(strerror(errno)) + ")";
+    return false;
+   #else
+    if (cancel.load()) { error = "Copy cancelled"; return false; }
+    if (src.copyFileTo(dst)) { bytes(src.getSize()); return true; }
+    error = "Couldn't copy " + src.getFileName();
+    return false;
+   #endif
+}
+
+// The same file already there: same size and (copies keep it) the same modified time.
+bool sameFile(const juce::File& a, const juce::File& b)
+{
+    return b.existsAsFile() && a.getSize() == b.getSize()
+        && std::abs(a.getLastModificationTime().toMilliseconds() - b.getLastModificationTime().toMilliseconds()) < 2000;
+}
+
+juce::File journalFor(const juce::File& folder) { return folder.getChildFile(".setline-copying.json"); }
+
 // Worker thread running one function; joined on destruction.
 struct Worker : juce::Thread {
     explicit Worker(std::function<void(juce::Thread&)> f) : juce::Thread("set.Line copy"), fn(std::move(f)) {}
@@ -45,6 +93,7 @@ struct Media::Job {
     struct Copy { juce::File src, dst; };
     std::vector<Copy> copies;
     std::function<void(const juce::String& error)> finish;
+    juce::String kind = "import"; // "import" | "save" (the page shows them differently)
 };
 
 Media::Media(juce::PropertiesFile& s) : settings(s) { formats.registerBasicFormats(); }
@@ -52,8 +101,12 @@ Media::Media(juce::PropertiesFile& s) : settings(s) { formats.registerBasicForma
 Media::~Media()
 {
     *alive = false;
-    worker.reset(); // waits for a copy in progress
+    cancel->store(true); // a copy in progress stops; its journal lets the next open finish it
+    worker.reset();
 }
+
+bool Media::copying() const { return worker != nullptr && worker->isThreadRunning(); }
+void Media::cancelCopies() { cancel->store(true); if (worker) worker->stopThread(15000); }
 
 bool Media::isAudioFile(const juce::File& f)
 {
@@ -140,6 +193,10 @@ void Media::pick(const juce::var& arg, Done done)
 
 void Media::runJob(std::unique_ptr<Job> job)
 {
+    // Identical files already there are never copied again.
+    std::vector<Job::Copy> todo;
+    for (auto& c : job->copies) if (! sameFile(c.src, c.dst)) todo.push_back(c);
+    job->copies = todo;
     if (job->copies.empty()) { job->finish({}); return; }
     juce::int64 total = 0;
     for (auto& c : job->copies) total += c.src.getSize();
@@ -147,49 +204,103 @@ void Media::runJob(std::unique_ptr<Job> job)
     std::shared_ptr<Job> shared(std::move(job));
     auto alive_ = alive;
     auto emit_ = emit;
-    auto progress = [alive_, emit_](juce::int64 done, juce::int64 total, const juce::String& file, bool finished) {
+    const auto kind = shared->kind;
+    const int files = (int) shared->copies.size();
+    auto progress = [alive_, emit_, kind, files](juce::int64 done, juce::int64 all, int filesDone, const juce::String& file, bool finished, const juce::String& error, double ms = 0) {
         juce::MessageManager::callAsync([=] {
-            if (*alive_ && emit_) emit_("audioProgress", obj({ { "done", (double) done }, { "total", (double) total }, { "file", file }, { "finished", finished } }));
+            if (*alive_ && emit_) emit_("audioProgress", obj({ { "done", (double) done }, { "total", (double) all }, { "file", file }, { "finished", finished },
+                                                               { "files", files }, { "filesDone", filesDone }, { "kind", kind }, { "error", error }, { "ms", ms } }));
         });
     };
+    // The journal: what's still to copy, next to where it goes (removed once every file is there).
+    std::map<juce::String, juce::Array<juce::var>> byFolder;
+    for (auto& c : shared->copies) byFolder[c.dst.getParentDirectory().getFullPathName()].add(obj({ { "src", c.src.getFullPathName() }, { "dst", c.dst.getFileName() } }));
+    for (auto& [dir, list] : byFolder) {
+        juce::File(dir).createDirectory();
+        journalFor(juce::File(dir)).replaceWithText(juce::JSON::toString(obj({ { "copies", list } })));
+    }
+    cancel = std::make_shared<std::atomic<bool>>(false);
+    auto stop = cancel;
 
-    worker = std::make_unique<Worker>([shared, total, progress, alive_](juce::Thread& t) {
-        juce::String error;
-        juce::int64 copied = 0;
-        auto lastReport = juce::Time::getMillisecondCounter();
-        juce::HeapBlock<char> buf(1 << 20);
-        for (auto& c : shared->copies) {
-            if (t.threadShouldExit()) { error = "Copy cancelled"; break; }
-            if (! c.dst.getParentDirectory().createDirectory()) { error = "Couldn't create " + c.dst.getParentDirectory().getFullPathName(); break; }
-            // Copy to a temporary name first, so an interrupted copy never looks like a finished file.
-            const auto tmp = c.dst.getSiblingFile(c.dst.getFileName() + ".part");
-            {
-                juce::FileInputStream in(c.src);
-                juce::FileOutputStream out(tmp);
-                if (! in.openedOk()) { error = "Couldn't read " + c.src.getFullPathName(); break; }
-                if (! out.openedOk() || ! out.setPosition(0) || ! out.truncate().wasOk()) { error = "Couldn't write " + tmp.getFullPathName(); break; }
-                for (;;) {
-                    const auto n = in.read(buf.get(), 1 << 20);
-                    if (n <= 0) break;
-                    if (! out.write(buf.get(), (size_t) n)) { error = "Couldn't write " + c.dst.getFullPathName() + " (disk full?)"; break; }
-                    copied += n;
-                    const auto now = juce::Time::getMillisecondCounter();
-                    if (now - lastReport > 100) { lastReport = now; progress(copied, total, c.src.getFileName(), false); }
-                    if (t.threadShouldExit()) { error = "Copy cancelled"; break; }
-                }
-                out.flush();
-                if (error.isEmpty() && out.getStatus().failed()) error = "Couldn't write " + c.dst.getFullPathName();
-            }
-            if (error.isNotEmpty() || ! tmp.moveFileTo(c.dst)) {
+    worker = std::make_unique<Worker>([shared, total, progress, alive_, stop, byFolder](juce::Thread& t) {
+        // 3 files at a time, each with the OS copy, each to "<name>.part" and renamed when complete.
+        std::atomic<size_t> next { 0 };
+        std::atomic<juce::int64> bytesDone { 0 };
+        std::atomic<int> filesDone { 0 };
+        std::atomic<double> lastDone { 0 };
+        std::mutex errLock;
+        juce::String error, current;
+        auto one = [&] {
+            for (;;) {
+                const size_t i = next++;
+                if (i >= shared->copies.size() || stop->load() || t.threadShouldExit()) return;
+                const auto& c = shared->copies[i];
+                { std::lock_guard<std::mutex> g(errLock); if (error.isNotEmpty()) return; current = c.src.getFileName(); }
+                if (! c.dst.getParentDirectory().createDirectory()) { std::lock_guard<std::mutex> g(errLock); if (error.isEmpty()) error = "Couldn't create " + c.dst.getParentDirectory().getFullPathName(); return; }
+                const auto tmp = c.dst.getSiblingFile(c.dst.getFileName() + ".part");
                 tmp.deleteFile();
-                if (error.isEmpty()) error = "Couldn't write " + c.dst.getFullPathName();
-                break;
+                juce::int64 mine = 0;
+                juce::String err;
+                bool ok = osCopy(c.src, tmp, *stop, [&](juce::int64 b) { bytesDone += b - mine; mine = b; }, err);
+                if (ok) { c.dst.deleteFile(); ok = tmp.moveFileTo(c.dst); }
+                if (! ok) {
+                    tmp.deleteFile();
+                    std::lock_guard<std::mutex> g(errLock);
+                    if (error.isEmpty()) error = err.isNotEmpty() ? err : "Couldn't write " + c.dst.getFullPathName();
+                    return;
+                }
+                ++filesDone;
+                lastDone = juce::Time::getMillisecondCounterHiRes();
             }
+        };
+        const auto t0 = juce::Time::getMillisecondCounterHiRes();
+        std::thread a(one), b(one), c(one);
+        for (;;) {
+            if (filesDone.load() >= (int) shared->copies.size()) break;
+            { std::lock_guard<std::mutex> g(errLock); if (error.isNotEmpty()) break; }
+            if (stop->load() || t.threadShouldExit()) break;
+            juce::String file;
+            { std::lock_guard<std::mutex> g(errLock); file = current; }
+            progress(bytesDone.load(), total, filesDone.load(), file, false, {});
+            juce::Thread::sleep(120);
         }
-        progress(copied, total, {}, true);
+        if (t.threadShouldExit()) stop->store(true); // quitting: stop the copies in progress
+        a.join(); b.join(); c.join();
+        const double ms = (lastDone.load() > 0 ? lastDone.load() : juce::Time::getMillisecondCounterHiRes()) - t0; // the copy itself (reported for tests)
+        if (error.isEmpty() && filesDone.load() < (int) shared->copies.size()) error = "Copy cancelled";
+        if (error.isEmpty()) for (auto& [dir, list] : byFolder) journalFor(juce::File(dir)).deleteFile(); // all there
+        progress(bytesDone.load(), total, filesDone.load(), {}, true, error, ms);
         juce::MessageManager::callAsync([shared, error, alive_] { if (*alive_) shared->finish(error); });
     });
-    worker->startThread(juce::Thread::Priority::low);
+    worker->startThread(juce::Thread::Priority::normal);
+}
+
+juce::var Media::resumeCopies(const juce::File& sessionFile)
+{
+    const auto folder = sessionFolder(sessionFile);
+    int resumed = 0, cleaned = 0;
+    if (folder == juce::File()) return obj({ { "resumed", 0 }, { "cleaned", 0 } });
+    auto job = std::make_unique<Job>();
+    job->kind = "save";
+    for (auto dir : { folder.getChildFile("Audio"), folder.getChildFile("Cues").getChildFile("Words") }) {
+        // half-copied files from an interrupted copy
+        for (auto& f : dir.findChildFiles(juce::File::findFiles, false, "*.part")) { f.deleteFile(); ++cleaned; }
+        const auto j = journalFor(dir);
+        if (! j.existsAsFile()) continue;
+        bool pending = false;
+        const auto journal = juce::JSON::parse(j); // keep it alive while its list is read
+        if (auto* list = journal["copies"].getArray())
+            for (auto& c : *list) {
+                const juce::File src(c["src"].toString());
+                const auto dst = dir.getChildFile(c["dst"].toString());
+                if (src.existsAsFile() && ! sameFile(src, dst)) { job->copies.push_back({ src, dst }); pending = true; }
+            }
+        if (! pending) j.deleteFile();
+    }
+    resumed = (int) job->copies.size();
+    job->finish = [](const juce::String&) {};
+    if (resumed > 0 && ! copying()) runJob(std::move(job));
+    return obj({ { "resumed", resumed }, { "cleaned", cleaned } });
 }
 
 // Where copies go inside the show: Audio (stems) or Cues/Words (recorded cue words).
@@ -229,7 +340,8 @@ void Media::import(const juce::var& arg, Done done)
 
 void Media::collect(const juce::var& arg, Done done)
 {
-    if (worker != nullptr && worker->isThreadRunning()) { done(obj({ { "error", "Still copying files; try again when that finishes." } })); return; }
+    // A save always goes through (a plain Save has nothing to copy; Save As elsewhere replaces a running copy).
+    if (! (bool) arg["background"] && copying()) { done(obj({ { "error", "Still copying files; try again when that finishes." } })); return; }
     const juce::File from(arg["from"].toString()), to(arg["to"].toString());
     const auto folder = sessionFolder(to);
     auto job = std::make_unique<Job>();
@@ -258,6 +370,15 @@ void Media::collect(const juce::var& arg, Done done)
                 map->setProperty(ref, makeRef(src, to));
             }
         }
+    if ((bool) arg["background"]) { // Save / Save As: the session saves now, the audio follows
+        job->kind = "save";
+        const int n = (int) job->copies.size();
+        job->finish = [](const juce::String&) {};
+        if (n > 0 && copying()) cancelCopies(); // Save As elsewhere while copying: the new copy replaces it (its journal covers it)
+        runJob(std::move(job));
+        done(obj({ { "map", mapVar }, { "missing", missing }, { "copying", n } }));
+        return;
+    }
     job->finish = [done, mapVar, missing](const juce::String& error) {
         if (error.isNotEmpty()) done(obj({ { "error", error } }));
         else done(obj({ { "map", mapVar }, { "missing", missing } }));
@@ -270,12 +391,18 @@ juce::var Media::check(const juce::var& arg)
     const juce::File session(arg["session"].toString());
     const auto folder = sessionFolder(session);
     juce::Array<juce::var> missing;
+    // files an interrupted save is still copying (resumeCopies) aren't missing
+    juce::StringArray pending;
+    if (folder != juce::File())
+        for (auto dir : { folder.getChildFile("Audio"), folder.getChildFile("Cues").getChildFile("Words") })
+            if (const auto journal = juce::JSON::parse(journalFor(dir)); auto* l = journal["copies"].getArray())
+                for (auto& c : *l) pending.add(dir.getChildFile(c["dst"].toString()).getFullPathName());
     auto* map = new juce::DynamicObject();
     juce::var mapVar(map);
     if (auto* refs = arg["refs"].getArray())
         for (auto& r : *refs) {
             const auto ref = r.toString();
-            if (resolve(ref, session).existsAsFile()) continue;
+            if (resolve(ref, session).existsAsFile() || pending.contains(resolve(ref, session).getFullPathName())) continue;
             // Moved with the session but stored elsewhere (e.g. an absolute path from the other computer).
             const auto name = ref.fromLastOccurrenceOf("/", false, false).fromLastOccurrenceOf("\\", false, false);
             if (folder != juce::File() && name.isNotEmpty()) {

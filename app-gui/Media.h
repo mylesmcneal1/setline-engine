@@ -5,14 +5,19 @@
 // - references: a session stores audio paths relative to its folder ("Audio/Drums.wav", always with
 //   forward slashes), so a show folder can move between computers and between Windows and macOS.
 //   Files outside the folder are stored as absolute paths.
-// - copy: imported files are copied into <session folder>/Audio on a background thread, with progress
-//   events ("audioProgress") for the page. An unsaved session keeps absolute paths until its first save.
+// - copy: files are copied into <session folder>/Audio in the background with the OS's own file copy
+//   (CopyFileEx on Windows, clonefile/copyfile on macOS), 3 files at a time, with progress events
+//   ("audioProgress": files and bytes). A file already at the destination with the same size and date is never
+//   copied again. Each copy goes to "<name>.part" and is renamed when complete; a journal
+//   (<folder>/Audio/.setline-copying.json) lists what's still to copy, so an interrupted copy is finished
+//   later (resumeCopies). An unsaved session keeps absolute paths until its first save.
 // - missing files: lists what can't be found (trying <folder>/Audio/<name> first) and locates the rest
 //   from one file the user points at (others in that folder are matched by name).
 // Message thread only; copying happens on a worker thread and reports back on the message thread.
 #pragma once
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <juce_audio_formats/juce_audio_formats.h>
+#include <atomic>
 #include <functional>
 
 namespace setline::gui {
@@ -38,7 +43,15 @@ public:
     // Before saving to `to` (from `from`, "" if never saved): copies files flagged copy into <to folder>/Audio
     // and rewrites every reference relative to the new folder.
     // {from, to, files: [{ref, copy}]} -> {map: {oldRef: newRef}, missing: [ref]} | {error}
+    // background: true (Save / Save As): answers at once with the new references and copies afterwards
+    // ({..., copying: n}); "audioProgress" reports it ("finished", with an error if one failed).
     void collect(const juce::var& arg, Done done);
+    // A copy in progress (quitting: cancel it; the journal lets the next open finish it).
+    bool copying() const;
+    void cancelCopies();
+    // Finishes copies an interrupted save left behind (journal) and removes half-copied files.
+    // -> {resumed: n, cleaned: n}
+    juce::var resumeCopies(const juce::File& sessionFile);
     // {session, refs: [ref]} -> {missing: [ref], map: {ref: newRef}}  (map = found in <folder>/Audio)
     juce::var check(const juce::var& arg);
     // {session, missing: [ref]} -> chooser -> {map: {ref: newRef}} | {cancelled}
@@ -61,6 +74,7 @@ private:
     juce::AudioFormatManager formats;
     std::unique_ptr<juce::FileChooser> chooser;
     std::unique_ptr<juce::Thread> worker;
+    std::shared_ptr<std::atomic<bool>> cancel = std::make_shared<std::atomic<bool>>(false);
     std::shared_ptr<bool> alive = std::make_shared<bool>(true);
 };
 

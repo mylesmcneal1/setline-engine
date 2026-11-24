@@ -266,7 +266,9 @@ Bridge::Options Bridge::addRest(Options o)
     });
     o = addAsync(o, "collectAudio", [this](const juce::var& a, auto done) { media.collect(a, done); });
     o = add(o, "checkAudio", [this](const juce::var& a) {
+        const auto resumed = media.resumeCopies(juce::File(a["session"].toString())); // an interrupted save: finish it
         auto r = media.check(a);
+        if (auto* o2 = r.getDynamicObject()) o2->setProperty("resumed", resumed["resumed"]);
         // Opening a session: waveforms not cached yet are computed in the background (found files only).
         juce::Array<juce::var> refs;
         if (auto* list = a["refs"].getArray())
