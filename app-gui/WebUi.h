@@ -22,9 +22,9 @@ public:
 
     void resized() override { web->setBounds(getLocalBounds()); }
 
-    // Files dragged onto the window: the web view gives the page no paths, so the window takes the drop
-    // (WebView2's own drop handling is off, see cmake/PatchJuce.cmake; on macOS the WKWebView stops
-    // accepting file drags, see MacDrop.mm) and reports it here.
+    // macOS: files dragged onto the window. A page gets no file paths, so the WKWebView stops accepting
+    // file drags (MacDrop.mm) and this JUCE component takes the drop and reports it here.
+    // (Windows: the page takes the drop and WebView2 hands over the paths; see Bridge.cpp "setlineDrop".)
     std::function<void(const juce::String& state, juce::Point<int> at, const juce::StringArray& files)> onFileDrag;
     bool isInterestedInFileDrag(const juce::StringArray&) override { return true; }
     void fileDragEnter(const juce::StringArray& f, int x, int y) override { if (onFileDrag) onFileDrag("over", { x, y }, f); }

@@ -19,6 +19,7 @@ interface Page {
   guessRole(fileName: string): string;
   addNative(list: AudioInfo[]): void; openNewSong(): void; modalOpen(): boolean; dropZone(): HTMLElement;
   addStems(s: Song, list: { role: string; info: AudioInfo }[], refs: Record<string, string>, copy: boolean): void;
+  colourOf(t: string): string; roleOf(t: string): string; rerender(): void;
 }
 // A file as the app read it (Media::probe). ok = false: error says why it can't be imported.
 interface AudioInfo { path: string; name: string; ok: boolean; channels?: number; rate?: number; frames?: number; seconds?: number; format?: string; bits?: number; error?: string }
@@ -27,17 +28,98 @@ interface Transport { playing: boolean; loaded: boolean; song: string; bar: numb
 interface LoadResult { ok?: boolean; error?: string; code?: string; warnings?: string[]; epoch?: number }
 interface FileResult { name?: string; path?: string; text?: string; cancelled?: boolean; error?: string }
 interface Stats { running: boolean; xruns: number | null; underruns: number; midiSent: number; midiDropped: number; midiLateMaxMs: number; cpu: number; callbackMaxMs: number; budgetMs: number }
-interface Setup { current: { driver: string; device: string; rate: number; buffer: number; latencyMs: number } | null; error?: string }
+interface Setup { current: { driver: string; device: string; rate: number; buffer: number; latencyMs: number; outputs?: string[] } | null; error?: string }
 
-declare global { interface Window { SLPage?: Page; SLE?: typeof SLE } }
+declare global { interface Window { SLPage?: Page; SLE?: typeof SLE; SLR?: typeof SLR } }
 
-// Default routing = the Outputs page's design defaults (outputs numbered from 1).
-const DEFAULT_ROUTING: Record<string, number[]> = {
+// ---------------------------------------------------------------- output routing (by track name)
+// Each distinct track name is routed once for the whole show: every song's track with that name follows
+// it. A song can override a track's outputs for that song only (s.outs[track]). A name with no route
+// plays nowhere ("not routed") until it's routed on the Outputs & MIDI page. Click and cues are tracks
+// like any other. Stored in the session as routing: {v: 2, tracks: {name: [outputs, 1-based]}}.
+interface Routing { v: 2; tracks: Record<string, number[]> }
+let route: Routing = { v: 2, tracks: {} };
+let outNames: string[] = [];
+
+// Step 1 routed fixed track types (roles); these were its defaults.
+const OLD_DEFAULTS: Record<string, number[]> = {
   click: [1], cues: [2], drums: [3, 4], bass: [5], keys: [7, 8], guitars: [9, 10], bgvs: [11, 12], synth: [13, 14], fx: [15],
 };
-function routing(): Record<string, number[]> {
-  try { return { ...DEFAULT_ROUTING, ...JSON.parse(localStorage.getItem("setline.routing") || "{}") }; } catch { return DEFAULT_ROUTING; }
+const STEREO_ROLES = new Set(["drums", "keys", "guitars", "bgvs", "synth", "strings"]);
+const isMidiTrack = (s: Song, t: string) => !!(s.midiCfg && s.midiCfg[t]);
+
+// Every routable (non-MIDI) track name in the session, in order of first appearance.
+function trackNames(): { name: string; songs: number; ch: number; overrides: number }[] {
+  const m = new Map<string, { name: string; songs: number; ch: number; overrides: number }>();
+  for (const s of page().songs)
+    for (const t of s.tracks) {
+      if (isMidiTrack(s, t)) continue;
+      let e = m.get(t);
+      if (!e) { e = { name: t, songs: 0, ch: 0, overrides: 0 }; m.set(t, e); }
+      e.songs++;
+      const f = (s.files || {})[t];
+      e.ch = Math.max(e.ch, f && f.ch ? f.ch : STEREO_ROLES.has(page().roleOf(t)) ? 2 : 1);
+      if (s.outs && Array.isArray(s.outs[t])) e.overrides++;
+    }
+  return [...m.values()];
 }
+// Old type-based routing {role: outputs} -> {name: outputs}, through each name's role.
+function migrate(old: Record<string, unknown> | null | undefined): Routing {
+  const src = old && typeof old === "object" ? old : OLD_DEFAULTS;
+  const r: Routing = { v: 2, tracks: {} };
+  for (const { name } of trackNames()) {
+    const o = src[page().roleOf(name)];
+    if (Array.isArray(o) && o.length) r.tracks[name] = o.map(Number);
+  }
+  return r;
+}
+function oldLocalRouting(): Record<string, unknown> | null {
+  try { const o = JSON.parse(localStorage.getItem("setline.routing") || "null"); return o && !o.v ? o : null; } catch { return null; }
+}
+function loadRouting(o: any) {
+  route = o && o.v === 2 && o.tracks && typeof o.tracks === "object" ? { v: 2, tracks: { ...o.tracks } } : migrate(o || oldLocalRouting());
+}
+// The outputs track t plays on in song s ([] = not routed).
+function outsOf(s: Song, t: string): number[] {
+  const o = s.outs && Array.isArray(s.outs[t]) ? s.outs[t] : route.tracks[t];
+  return Array.isArray(o) ? o : [];
+}
+// "Line 3-4", "Out 5", "ADAT 1-2 + Line 7"
+function outLabel(outs: number[]): string {
+  const sorted = [...outs].sort((a, b) => a - b), runs: number[][] = [];
+  for (const o of sorted) { const r = runs[runs.length - 1]; if (r && o === r[r.length - 1] + 1) r.push(o); else runs.push([o]); }
+  const nm = (o: number) => outNames[o - 1] || `Out ${o}`;
+  return runs.map((r) => {
+    const a = nm(r[0]), b = nm(r[r.length - 1]);
+    if (r.length === 1) return a;
+    const ma = a.match(/^(.*?)\s*(\d+)$/), mb = b.match(/^(.*?)\s*(\d+)$/);
+    return ma && mb && ma[1] === mb[1] ? `${ma[1]} ${ma[2]}-${mb[2]}` : `${a} – ${b}`;
+  }).join(" + ");
+}
+const SLR = {
+  label: (s: Song, t: string) => { const o = outsOf(s, t); return o.length ? outLabel(o) : ""; },
+  isOverride: (s: Song, t: string) => !!(s.outs && Array.isArray(s.outs[t])),
+  // Choices for the inspector's per-song menu: the show's routing, then each output and stereo pair.
+  choices(s: Song, t: string) {
+    const show = route.tracks[t] || [], cur = SLR.isOverride(s, t) ? JSON.stringify(s.outs[t]) : "";
+    const list = [{ v: "", l: `Show: ${show.length ? outLabel(show) : "not routed"}`, on: cur === "" }];
+    const n = Math.max(outNames.length, ...show, ...(s.outs?.[t] || []), 2);
+    const stereo = ((s.files || {})[t]?.ch || (STEREO_ROLES.has(page().roleOf(t)) ? 2 : 1)) === 2;
+    const add = (o: number[]) => { const v = JSON.stringify(o); list.push({ v, l: `This song: ${outLabel(o)}`, on: v === cur }); };
+    if (stereo) for (let i = 1; i < n; i += 2) add([i, i + 1]);
+    for (let i = 1; i <= n; i++) add([i]);
+    add([]);
+    list[list.length - 1].l = "This song: nowhere";
+    if (cur && !list.some((c) => c.on)) list.push({ v: cur, l: `This song: ${outLabel(s.outs[t])}`, on: true });
+    return list;
+  },
+  setOverride(s: Song, t: string, outs: number[] | null) {
+    if (outs) (s.outs || (s.outs = {}))[t] = outs;
+    else if (s.outs) { delete s.outs[t]; if (!Object.keys(s.outs).length) delete s.outs; }
+    loadedKey = null;
+  },
+};
+window.SLR = SLR;
 
 const page = () => window.SLPage!;
 let loadedKey: string | null = null, loadedSongId: string | null = null, warnedKey: string | null = null, loopKey = "";
@@ -69,7 +151,9 @@ function payload(s: Song) {
   const song = JSON.parse(JSON.stringify(s, (k, v) => (k === "bars" || k === "secPos" || k === "_yy" ? undefined : v)));
   const roles: Record<string, string> = {};
   s.tracks.forEach((t) => (roles[t] = p.ROLE[t] || ""));
-  return { song, routing: routing(), roles, click: p.clickCfg(s) };
+  const outs: Record<string, number[]> = {};
+  s.tracks.forEach((t) => { if (!isMidiTrack(s, t)) outs[t] = outsOf(s, t); });
+  return { song, outs, roles, click: p.clickCfg(s) };
 }
 // What forces a reload: everything except the mixer levels, which change live (setTrackLevel).
 function loadKey(body: ReturnType<typeof payload>): string {
@@ -155,7 +239,7 @@ const SLE = {
   // Meter level for a track: the peak of the outputs it's routed to (the engine meters outputs).
   trackLevel(s: Song, t: string): number {
     if (s.id !== loadedSongId) return 0;
-    const outs = routing()[page().ROLE[t] || ""] || [];
+    const outs = outsOf(s, t);
     let v = 0;
     for (const o of outs) v = Math.max(v, peaks[o - 1] || 0);
     return v;
@@ -200,6 +284,8 @@ function showStatus(stats?: Stats) {
 function onSetup(s: Setup) {
   const c = s.current;
   deviceRate = c ? c.rate : null;
+  outNames = c?.outputs || [];
+  page().rerender();
   setupText = c ? `${String(Math.round(c.rate / 100) / 10).replace(/\.0$/, "")} kHz · ${c.buffer}` : "";
   setupTip = c ? `${c.device} (${c.driver.replace(/^Windows Audio/, "WASAPI")}) · ${c.rate / 1000} kHz · ${c.buffer} samples · ${c.latencyMs.toFixed(1)} ms output latency`
                : s.error || "No audio device. Choose one on the Outputs & MIDI page.";
@@ -228,11 +314,13 @@ function tidy(v: any): any {
 let sessionRate: number | null = null;
 let deviceRate: number | null = null;
 const rateForImport = () => sessionRate || deviceRate || 48000;
-const sessionText = () => JSON.stringify(tidy({ format: "setline-session", version: 1, ...(sessionRate ? { rate: sessionRate } : {}), ...page().sessionData(), routing: routing() }), null, 1);
+const sessionText = () => JSON.stringify(tidy({ format: "setline-session", version: 1, ...(sessionRate ? { rate: sessionRate } : {}), ...page().sessionData(), routing: route }), null, 1);
 let lastReported = "";
 
 function remember(text = sessionText()) {
-  try { sessionStorage.setItem("setline.session", JSON.stringify({ doc, text })); } catch {}
+  // tracks: what the Outputs & MIDI page lists (it's a separate page; it edits routing in this copy).
+  const tracks = trackNames().map((x) => ({ ...x, colour: page().colourOf(x.name) }));
+  try { sessionStorage.setItem("setline.session", JSON.stringify({ doc, text, tracks })); } catch {}
   const dirty = text !== doc.savedText;
   const key = doc.name + "|" + dirty;
   if (key !== lastReported) { lastReported = key; SL.call("setDocument", { name: doc.name, dirty }).catch(() => {}); }
@@ -240,12 +328,13 @@ function remember(text = sessionText()) {
 
 function applySession(text: string) {
   const o = JSON.parse(text);
-  if (o.routing && typeof o.routing === "object") localStorage.setItem("setline.routing", JSON.stringify(o.routing));
   if (page().playing) { SLE.stop(); page().setPlaying(false); }
   loadedKey = null; loadedSongId = null;
   sessionRate = typeof o.rate === "number" && o.rate > 0 ? o.rate : null;
   page().loadSession(o);
+  loadRouting(o.routing); // after the songs: old type-based routing is migrated through their track names
   page().setSessionName(doc.name);
+  page().rerender();
 }
 
 // Every audio file the session refers to (song stems).
@@ -422,6 +511,33 @@ async function onFileDrag(d: { state: string; x: number; y: number; paths: strin
   p.addNative(list);
 }
 
+// Windows: the page takes the drop. A dropped File has no path in a page, so the files are posted to the
+// app with WebView2's postMessageWithAdditionalObjects; the app reads their real paths and answers with a
+// "fileDrag" drop event (onFileDrag above). macOS: the window takes the drop instead (app-gui/MacDrop.mm).
+function installDrop() {
+  const wv = (window as any).chrome?.webview;
+  if (!wv || typeof wv.postMessageWithAdditionalObjects !== "function") return;
+  const hasFiles = (e: DragEvent) => !!e.dataTransfer && Array.from(e.dataTransfer.types).includes("Files");
+  const highlight = (on: boolean) => page().dropZone().classList.toggle("over", on && page().modalOpen());
+  // Capture phase: file drags never reach the page's own drag handlers (those move songs and clips).
+  window.addEventListener("dragenter", (e) => { if (hasFiles(e)) { e.preventDefault(); highlight(true); } }, true);
+  window.addEventListener("dragover", (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault(); e.stopPropagation();
+    e.dataTransfer!.dropEffect = "copy";
+    highlight(true);
+  }, true);
+  window.addEventListener("dragleave", (e) => { if (hasFiles(e) && !e.relatedTarget) highlight(false); }, true);
+  window.addEventListener("drop", (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault(); e.stopPropagation();
+    highlight(false);
+    const files = e.dataTransfer!.files;
+    if (!files.length) return;
+    wv.postMessageWithAdditionalObjects(JSON.stringify({ eventId: "setlineDrop", payload: { x: e.clientX, y: e.clientY } }), files);
+  }, true);
+}
+
 // ---------------------------------------------------------------- start
 async function main() {
   if (!SL.native) return;
@@ -433,6 +549,7 @@ async function main() {
   SL.on("engineStats", (x: Stats) => showStatus(x));
   SL.on("audioProgress", onProgress);
   SL.on("fileDrag", (d) => { onFileDrag(d).catch((e) => page().toast(String(e))); });
+  installDrop();
   const copyBox = document.getElementById("mCopy") as HTMLInputElement | null;
   if (copyBox) {
     document.getElementById("mCopyL")!.hidden = false;
@@ -445,26 +562,17 @@ async function main() {
   try {
     const kept = JSON.parse(sessionStorage.getItem("setline.session") || "null");
     if (kept && kept.text) { doc = kept.doc; applySession(kept.text); }
-    else doc = { name: "", savedText: sessionText() };
-  } catch (e) { console.warn("set.Line: session", e); doc = { name: "", savedText: sessionText() }; }
+    else { loadRouting(oldLocalRouting()); doc = { name: "", savedText: sessionText() }; }
+  } catch (e) { console.warn("set.Line: session", e); loadRouting(null); doc = { name: "", savedText: sessionText() }; }
+  page().rerender();
+  addEventListener("pagehide", () => remember()); // switching pages: keep the very latest
   page().setSessionName(doc.name);
   remember();
   setInterval(() => remember(), 1000); // unsaved marker + page-switch copy
 
   // Test hook (--session-roundtrip): open a file exactly as Open does, write it back exactly as Save does.
   const info = await SL.call<{ roundTrip?: { in: string; out: string }; testScript?: string }>("getAppInfo");
-  // Test hook (--test-script): run an async script with the page and this module's functions; write its result.
-  if (info.testScript) {
-    let out: unknown;
-    try {
-      const AsyncFn = Object.getPrototypeOf(async () => {}).constructor;
-      const hooks = { SLE, page, importStems, probe, audioFiles, applyRefMap, checkAudio, onFileDrag, sessionText, applySession,
-        getRate: () => sessionRate, setDoc: (n: string) => { doc = { name: n, savedText: "" }; } };
-      out = await new AsyncFn("SL", "hooks", info.testScript)(SL, hooks);
-    } catch (e) { out = { error: String((e as Error)?.stack || e) }; }
-    await SL.call("testDone", { text: JSON.stringify(out, null, 1) });
-    return;
-  }
+
   if (info.roundTrip) {
     const r = await SL.call<{ text: string }>("roundTripRead");
     doc = { name: "roundtrip", savedText: "" };
@@ -491,6 +599,17 @@ async function main() {
     const real = outs.map((o) => o.name);
     p.PORTS.splice(0, p.PORTS.length, ...real, ...[...used].filter((u) => !real.includes(u)));
   } catch (e) { console.warn("set.Line: MIDI outputs", e); }
+  // Test hook (--test-script): run an async script with the page and this module's functions; write its result.
+  if (info.testScript) {
+    let out: unknown;
+    try {
+      const AsyncFn = Object.getPrototypeOf(async () => {}).constructor;
+      const hooks = { SLE, page, importStems, probe, audioFiles, applyRefMap, checkAudio, onFileDrag, sessionText, applySession,
+        getRate: () => sessionRate, SLR, remember, payload, getRoute: () => route, isDirty: () => sessionText() !== doc.savedText, setDoc: (n: string) => { doc = { name: n, savedText: "" }; } };
+      out = await new AsyncFn("SL", "hooks", info.testScript)(SL, hooks);
+    } catch (e) { out = { error: String((e as Error)?.stack || e) }; }
+    if (out !== undefined) await SL.call("testDone", { text: JSON.stringify(out, null, 1) }); // undefined: it went to another page
+  }
 }
 
 main().catch((e) => console.error("set.Line edit page:", e));

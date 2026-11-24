@@ -100,6 +100,14 @@ Bridge::Options Bridge::addTo(Options o)
         if (! juce::File::isAbsolutePath(path)) return errorVar("writeSession: expected an absolute path");
         return session.writeTo(juce::File(path), a["text"].toString());
     });
+    // Windows: the page posts dropped files with chrome.webview.postMessageWithAdditionalObjects; the
+    // JUCE patch (cmake/PatchJuce.cmake) adds their real paths to the payload. Sent back to the page as
+    // a "fileDrag" drop, the same event the macOS window drop (WebUi) produces.
+    o = o.withEventListener("setlineDrop", [this](const juce::var& p) {
+        juce::StringArray paths;
+        if (auto* a = p["paths"].getArray()) for (auto& v : *a) paths.add(v.toString());
+        fileDrag("drop", { (int) p["x"], (int) p["y"] }, paths);
+    });
     o = addAsync(o, "pickAudioFiles", [this](const juce::var& a, auto done) { media.pick(a, done); });
     o = add(o, "probeAudio", [this](const juce::var& a) { return media.probePaths(a); });
     o = addAsync(o, "importAudio", [this](const juce::var& a, auto done) { media.import(a, done); });

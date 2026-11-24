@@ -215,7 +215,7 @@
 
     <div class="bar">
       <span class="chip on">Template: Default (all songs)</span>
-      <span class="chip">Per-song overrides: 1</span>
+      <span class="chip" id="ovrChip">Per-song overrides: 1</span>
       <span class="chip">Export patch sheet (PDF)</span>
     </div>
 
@@ -295,7 +295,7 @@ const rows = [
 ];
 // Saved routing (outputs numbered from 1), shared with the Edit page.
 try{ const saved=JSON.parse(localStorage.getItem('setline.routing')||'null'); if(saved) rows.forEach(r=>{ if(r.role&&Array.isArray(saved[r.role])) r.to=saved[r.role]; }); }catch(e){}
-function saveRouting(){ try{ const o={}; rows.forEach(r=>{ if(r.role) o[r.role]=r.to; }); localStorage.setItem('setline.routing',JSON.stringify(o)); }catch(e){} }
+function saveRouting(){ if(window.SLRouting&&SLRouting.onChange){ SLRouting.onChange(rows); return; } try{ const o={}; rows.forEach(r=>{ if(r.role) o[r.role]=r.to; }); localStorage.setItem('setline.routing',JSON.stringify(o)); }catch(e){} }
 
 const mx=document.getElementById('mx');
 const pl = i => pairL.has(i)?'pairL':'';
@@ -328,7 +328,9 @@ mx.querySelectorAll('td[data-o]').forEach(td=>td.onclick=()=>{
 buildMatrix();
 // The desktop app calls this with the device's real outputs (consecutive names with the same stem form a group).
 window.SLRouting={ setOutputs(names){ const g=[]; names.forEach(n=>{ const stem=String(n).replace(/\s*(\d+|L|R)$/i,'').trim()||n; const last=g[g.length-1]; if(last&&last.g===stem) last.ch.push(n); else g.push({g:stem,ch:[n]}); });
-  groups=g.length?g:[{g:'Outputs',ch:[]}]; flat=groups.flatMap(x=>x.ch.map(n=>({n}))); pairL=new Set(flat.map((_,k)=>k+1).filter(i=>i%2===1)); buildMatrix(); }, rows };
+  groups=g.length?g:[{g:'Outputs',ch:[]}]; flat=groups.flatMap(x=>x.ch.map(n=>({n}))); pairL=new Set(flat.map((_,k)=>k+1).filter(i=>i%2===1)); buildMatrix(); }, rows,
+  // The desktop app lists the session's track names instead of the fixed rows (src/pages/routing.ts).
+  setRows(list){ rows.splice(0,rows.length,...list); buildMatrix(); }, onChange:null };
 
 // Mockup meters in a normal browser; the desktop app shows the engine's output meters.
 if(!window.__JUCE__) setInterval(()=>{

@@ -9,7 +9,7 @@ interface Current {
 }
 interface Setup { drivers: { name: string; devices: string[] }[]; current: Current | null; error?: string }
 
-declare global { interface Window { SLRouting?: { setOutputs(names: string[]): void } } }
+declare global { interface Window { SLRouting?: { setOutputs(names: string[]): void; setRows?(rows: unknown[]): void; onChange?: unknown } } }
 
 const $ = (id: string) => document.getElementById(id)!;
 const esc = (s: unknown) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
@@ -18,6 +18,7 @@ const STD_RATES = [44100, 48000, 88200, 96000];
 const STD_BUFFERS = [64, 128, 256, 512]; // as in the design (four fit the panel); the current size is added if different
 
 let state: Setup | null = null;
+let rebuildRows: (() => void) | null = null; // track rows depend on how many outputs the device has
 let busy = false;
 
 function render(s: Setup) {
@@ -57,6 +58,7 @@ function render(s: Setup) {
   }
 
   window.SLRouting?.setOutputs(cur?.outputs ?? []);
+  rebuildRows?.();
 }
 
 async function apply(req: Record<string, unknown>) {
@@ -69,8 +71,56 @@ async function apply(req: Record<string, unknown>) {
   finally { busy = false; document.body.style.cursor = ""; $("devList").style.opacity = ""; }
 }
 
+// ---------------------------------------------------------------- routing by track name
+// The session (kept by the Edit page in sessionStorage while you switch pages) lists every track name
+// with how many songs use it. Each name is routed once for the whole show; edits go straight back
+// into that session copy, so the Edit page picks them up (and marks the session as changed).
+interface KeptTrack { name: string; songs: number; ch: number; overrides: number; colour?: string }
+interface Row { n?: string; name?: string; c?: string; st?: boolean; to?: number[]; lv?: number | string; info?: string; sep?: string }
+
+function sessionRows() {
+  const raw = sessionStorage.getItem("setline.session");
+  if (!raw || !window.SLRouting) return;
+  const kept = JSON.parse(raw);
+  const o = JSON.parse(kept.text);
+  const route: { v: 2; tracks: Record<string, number[]> } = o.routing && o.routing.v === 2 ? o.routing : { v: 2, tracks: {} };
+  const tracks: KeptTrack[] = kept.tracks || [];
+  const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+  const info = (t: KeptTrack) => {
+    const outs = route.tracks[t.name] || [], n = state?.current?.outputs.length ?? 0;
+    const missing = n ? outs.filter((o) => o > n) : [];
+    return (!outs.length ? `<span style="color:var(--red)" title="Plays nowhere until it's routed">not routed</span> · `
+      : missing.length ? `<span style="color:var(--amber)" title="This device has ${n} outputs; the track is silent on the missing ones">output ${missing.join(", ")} not on this device</span> · ` : "")
+      + `${plural(t.songs, "song")} · ${t.ch === 2 ? "stereo" : "mono"}`
+      + (t.overrides ? ` · <span title="Songs that send this track somewhere else (set in the Edit page inspector)">${plural(t.overrides, "override")}</span>` : "");
+  };
+  const build = (): Row[] => [
+    { sep: "Tracks" },
+    ...tracks.map((t) => ({ n: esc(t.name), name: t.name, c: t.colour || "#9aa0aa", st: t.ch === 2, to: [...(route.tracks[t.name] || [])], lv: 0, info: info(t) })),
+    { sep: "Buses (optional)" },
+    { n: "+ New bus", c: "var(--dim)", st: true, to: [], info: "sum tracks → any outputs", lv: "new" },
+  ];
+  const ovr = tracks.reduce((a, t) => a + (t.overrides || 0), 0);
+  const chip = document.getElementById("ovrChip");
+  if (chip) chip.textContent = `Per-song overrides: ${ovr}`;
+  const sl = window.SLRouting as any;
+  sl.onChange = (rows: Row[]) => {
+    for (const r of rows) if (r.name !== undefined) {
+      if (r.to && r.to.length) route.tracks[r.name] = [...r.to];
+      else delete route.tracks[r.name];
+    }
+    o.routing = route;
+    kept.text = JSON.stringify(o, null, 1);
+    try { sessionStorage.setItem("setline.session", JSON.stringify(kept)); } catch {}
+    sl.setRows(build()); // "not routed" labels follow
+  };
+  sl.setRows(build());
+  rebuildRows = () => sl.setRows(build());
+}
+
 async function main() {
   if (!SL.native) return;
+  try { sessionRows(); } catch (e) { console.warn("set.Line: routing rows", e); }
   render(await SL.call<Setup>("getAudioSetup"));
   $("rescanBtn").onclick = async () => render(await SL.call<Setup>("getAudioSetup", { rescan: true }));
   SL.on("audioSetupChanged", (s: Setup) => { if (!busy) render(s); });
@@ -88,6 +138,15 @@ async function main() {
     const b = $("engStat").querySelectorAll("div > b")[1];
     if (b && typeof x.cpu === "number") b.textContent = `${Math.round(x.cpu)}%`;
   });
+  // Test hook (--test-script): the same script runs on whichever page is showing (it checks location).
+  const info = await SL.call<{ testScript?: string }>("getAppInfo");
+  if (info.testScript) {
+    try {
+      const AsyncFn = Object.getPrototypeOf(async () => {}).constructor;
+      const out = await new AsyncFn("SL", "hooks", info.testScript)(SL, { routing: window.SLRouting });
+      if (out !== undefined) await SL.call("testDone", { text: JSON.stringify(out, null, 1) });
+    } catch (e) { await SL.call("testDone", { text: JSON.stringify({ error: String((e as Error)?.stack || e) }) }); }
+  }
 }
 
 main().catch((e) => console.error("set.Line routing page:", e));

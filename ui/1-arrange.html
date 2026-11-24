@@ -722,7 +722,7 @@
   /* the open song already says its name: keep its overview strip to colour only */
   .folder.open .frl{display:none}
   /* inspector: drop the routing list (it's on Outputs & MIDI, and on hover in the track headers) */
-  .sect.routing{display:none}
+  .sect.routing select{font:11px var(--mono);max-width:150px}
   .trk .lh .tx{position:relative;align-self:center} .trk .lh .rt{position:absolute;top:100%;left:0;margin-top:1px;white-space:nowrap;font-size:10.5px}
   .trk .lh{align-items:center}
 
@@ -900,6 +900,8 @@ const curSetObj=()=>setlists.find(x=>x.id===curSet)||setlists[0];
 function syncSet(){ const c=curSetObj(); if(c) c.order=setOrder; }
 function useSet(id){ syncSet(); curSet=id; setOrder=curSetObj().order; refresh(); }
 const ROLE={'Click':'click','Cues':'cues','Drums':'drums','Bass':'bass','Keys':'keys','Guitars':'guitars','BGVs':'bgvs','Synth / Pads':'synth','FX / Risers':'fx','Pads':'synth','Strings':'strings'};
+const routeOf=(s,t)=>window.SLR?SLR.label(s,t):(ROUTE[ROLE[t]]||'');
+const routeOvr=(s,t)=>!!(window.SLR&&SLR.isOverride(s,t));
 const ROUTE={click:'Line 1',cues:'Line 2',drums:'Line 3-4',bass:'Line 5',keys:'Line 7-8',guitars:'ADAT 1-2',bgvs:'ADAT 3-4',synth:'ADAT 5-6',fx:'ADAT 7'};
 const TCOL={'Drums':'#ff6b6b','Bass':'#ff9f43','Keys':'#5aa9ff','Guitars':'#a55eea','BGVs':'#1dd1a1','Synth / Pads':'#c56cf0','Pads':'#c56cf0','FX / Risers':'#ff9ff3','Strings':'#e5c07b','Click':'#c9cdd4','Cues':'#9aa0aa'};
 
@@ -1274,12 +1276,12 @@ function renderFolders(){
     const EB={loop:'⟲',hold:'⏸',stop:'■'};
     h+=`<div class="row secs"><div class="lh" data-tip="Drag across empty space to add a section · drag to move · edges resize · double-click to rename · right-click for options">Sections<button class="lhadd" data-song="${id}" title="Add a section at the playhead">＋</button></div><div class="lane" data-song="${id}" style="width:${W}px">${s.secPos.length?'':'<span class="lanehint">Drag across this lane to add a section</span>'}${s.secPos.map(p=>`<div class="sec ${selSec&&selSec.song===id&&selSec.id===p.id?'sel':''}" data-sid="${p.id}" style="left:${x(p.start)+1}px;width:${x(p.start+p.bars)-x(p.start)-2}px;background:${SEC_C[p.type]}"><i class="se l"></i>${EB[p.end]?`<span class="eb">${EB[p.end]}</span>`:''}<span class="sn">${esc(p.name)}</span><i class="se r"></i></div>`).join('')}</div></div>`;
     s.tracks.forEach((t,ti)=>{
-      const mid=isMidiTrack(s,t), role=ROLE[t], route=mid?`${PORT_SHORT[s.midiCfg[t].port]} · Ch ${s.midiCfg[t].ch}`:(ROUTE[role]||''), c=mid?'var(--blue)':(TCOL[t]||'#999');
+      const mid=isMidiTrack(s,t), role=ROLE[t], route=mid?`${PORT_SHORT[s.midiCfg[t].port]} · Ch ${s.midiCfg[t].ch}`:(routeOf(s,t)?esc(routeOf(s,t))+(routeOvr(s,t)?' <span style="color:var(--cyan)" title="This song only (set in the inspector)">· this song</span>':''):''), c=mid?'var(--blue)':(TCOL[t]||'#999');
       const off=!mid&&isOff(s,t), solo=!!(s.solo||{})[t];
       h+=`<div class="row trk ${mid?'midi':''} ${off?'muted':''}"><div class="lh"><span class="c" style="background:${c}"></span><span class="tno">${ti+1}</span>
         <span class="tx"><span class="tn">${esc(t)}</span><span class="rt">${route||'<span style="color:var(--accent)">not routed</span>'}${role==='click'?` · <span style="color:var(--muted)">${esc(clickCfg(s).sound==='custom'&&clickCfg(s).name?clickCfg(s).name:CLICK_SOUNDS[clickCfg(s).sound].n)}</span>`:''}${mid?` · ${altSelect(s,t)}`:''}</span></span>
         ${role==='click'?`<button class="cgear" data-song="${id}" title="Click sound">⚙</button>`:''}
-        ${!mid&&!ROUTE[role]?'<span class="newr" data-tip="New role: not routed yet. Route it once on the Outputs page"></span>':''}
+        ${!mid&&!routeOf(s,t)?'<span class="newr" data-tip="Not routed yet: plays nowhere. Route this track name once on the Outputs page"></span>':''}
         ${mid?`<button class="edm" data-song="${id}" data-track="${esc(t)}">Edit MIDI</button>`:`<span class="ms"><button class="mb ${(s.mute||{})[t]?'on':''}" data-song="${id}" data-track="${esc(t)}" title="Mute">M</button><button class="sb ${solo?'on':''}" data-song="${id}" data-track="${esc(t)}" title="Solo (Alt-click: solo only this)">S</button></span>${volCtl(s,t,false).replace(/<button class="mb[^>]*>M<\/button>/,'')}<span class="hm"><b data-m="${id}|${esc(t)}"></b></span>`}</div>
         <div class="lane" style="width:${W}px"><canvas data-song="${id}" data-t="${ti}" width="${W}" height="${TH}" style="width:${W}px;height:${TH}px"></canvas></div></div>`;
     });
@@ -1683,8 +1685,9 @@ function renderInsp(){
       <table class="tmap"><tr><th>Bar</th><th>BPM</th><th>Meter</th><th></th><th></th><th></th></tr>${rows}</table>
       <div class="acts"><button class="btn line">Import MIDI file…</button><button class="btn" id="resetMap">Revert</button></div></div>
     <div class="sect"><h3><span data-tip="Per-song track levels. Set them in the mixer or on each track header.">Levels</span><button id="lvlReset" title="Reset all to 0 dB">↺</button></h3><button class="btn line" id="openMix" style="width:100%;justify-content:center">Open mixer</button></div>
-    <div class="sect routing"><h3>Routing</h3>${roles.map(r=>`<div class="rl"><span>${r}</span><span>${ROUTE[r]||'<span style="color:var(--accent)">not routed</span>'}</span></div>`).join('')}</div>
+    <div class="sect routing"><h3><span data-tip="Each track name is routed once for the whole show (Outputs & MIDI page). Pick an output here to change it for this song only.">Routing</span></h3>${window.SLR?s.tracks.filter(t=>!isMidiTrack(s,t)).map(t=>`<div class="rl"><span>${esc(t)}</span><select data-rt="${esc(t)}" ${routeOvr(s,t)?'style="color:var(--cyan)"':''}>${SLR.choices(s,t).map(c=>`<option value="${c.v}" ${c.on?'selected':''}>${esc(c.l)}</option>`).join('')}</select></div>`).join(''):roles.map(r=>`<div class="rl"><span>${r}</span><span>${ROUTE[r]||'<span style="color:var(--accent)">not routed</span>'}</span></div>`).join('')}</div>
     <div class="sect"><h3>MIDI<button class="addMidiI" title="Add MIDI track">＋</button></h3>${midiT.length?midiT.map(t=>`<div class="rl" style="cursor:pointer" data-mt="${esc(t)}"><span>${esc(t)} <span class="faint">· ${esc(curAlt(s,t).name)}${altsOf(s,t).length>1?` (${altsOf(s,t).length} alts)`:''}</span></span><span class="lk">${s.midi[t].length} events ›</span></div>`).join(''):'<div class="faint" style="font-size:12px">No MIDI tracks</div>'}</div>`;
+  $('insp').querySelectorAll('select[data-rt]').forEach(sl=>sl.onchange=()=>{ snap(); SLR.setOverride(s,sl.dataset.rt,sl.value?JSON.parse(sl.value):null); refresh(); });
   $('insp').querySelectorAll('.tmap tr[data-i]').forEach(tr=>{ const e=s.tmap[+tr.dataset.i];
     tr.querySelectorAll('input[data-f=bpm],input[data-f=bar]').forEach(inp=>inp.onkeydown=ev=>{ if(ev.key==='Enter'){ inp.blur(); return; } if(ev.key!=='ArrowUp'&&ev.key!=='ArrowDown') return; ev.preventDefault(); const f=inp.dataset.f, st=f==='bar'?1:(ev.shiftKey?10:ev.altKey?.1:1), d=ev.key==='ArrowUp'?st:-st;
       if(f==='bpm'&&e.bpm!==undefined){ e.bpm=Math.round(Math.max(20,Math.min(300,e.bpm+d))*10)/10; } else if(f==='bar'&&tr.dataset.i!=='0'){ const n=e.bar+Math.sign(d); if(n>1&&n<=s.total&&!s.tmap.some(o=>o!==e&&o.bar===n)) e.bar=n; } else return;
@@ -1724,7 +1727,7 @@ const drawer=$('drawer');
 function openMidi(songId,track){ Object.assign(ed,{song:songId,track,sel:null,tab:'events',pSel:null}); selId=songId; open.add(songId); drawer.classList.add('open'); refresh();
   setTimeout(()=>{ const s=songs.find(x=>x.id===songId); const i=s.tracks.indexOf(track); document.querySelector(`canvas[data-song="${songId}"][data-t="${i}"]`)?.scrollIntoView({block:'nearest'}); },0); }
 function closeMidi(){ ed.song=null; drawer.classList.remove('open'); drawer.innerHTML=''; setTimeout(()=>$('scroller').style.setProperty('--vw',$('scroller').clientWidth+'px'),0); }
-function renameTrack(s,a,b){ s.tracks[s.tracks.indexOf(a)]=b; ['midiCfg','midi','secMap','malts','muse','gain','mute','solo','clips','files','troles'].forEach(k=>{ if(s[k]&&s[k][a]!==undefined){ s[k][b]=s[k][a]; delete s[k][a]; } }); if(ROLE[b]===undefined&&ROLE[a]!==undefined&&s.files&&s.files[b]){ (s.troles||(s.troles={}))[b]=s.troles[b]||a; regRoles(s); } }
+function renameTrack(s,a,b){ s.tracks[s.tracks.indexOf(a)]=b; ['midiCfg','midi','secMap','malts','muse','gain','mute','solo','clips','files','troles','outs'].forEach(k=>{ if(s[k]&&s[k][a]!==undefined){ s[k][b]=s[k][a]; delete s[k][a]; } }); if(ROLE[b]===undefined&&ROLE[a]!==undefined&&s.files&&s.files[b]){ (s.troles||(s.troles={}))[b]=s.troles[b]||a; regRoles(s); } }
 function newMidiTrack(songId){ const s=songs.find(x=>x.id===songId); let n=1,name='MIDI '+n; while(s.tracks.includes(name)) name='MIDI '+(++n);
   s.tracks.push(name); s.midiCfg[name]={port:PORTS[3],ch:16,profile:'gen',early:'0'}; s.midi[name]=[]; s.secMap[name]={}; ed.settings=true; openMidi(songId,name); }
 const curSong=()=>songs.find(x=>x.id===ed.song);
@@ -2004,6 +2007,7 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
   setSessionName(n){ $('crumbAll').textContent=n||'Untitled session'; },
   confirm(title,body,ok,fn){ confirmBox(title,body,ok,fn); },
   // step 2: stems
+  rerender:()=>refresh(), colourOf:t=>TCOL[t]||'#9aa0aa', roleOf:t=>ROLE[t]||'',
   guessRole:n=>{ const g=ROLE_GUESS.find(([re])=>re.test(n)); return g&&g[1]!=="__skip"?g[1]:""; },
   addNative, openNewSong, modalOpen:()=>modal.classList.contains('show'), dropZone:()=>dz,
   addStems(s,list,refs,copy){ snap(); const a=s.audio; attachStems(s,list,refs,copy); if(s.audio!==a) buildBars(s); refresh(); } };
@@ -2065,7 +2069,7 @@ $('mixBtn').onclick=()=>setMixer(!mixOpen);
 const _openMidi=openMidi; openMidi=function(...a){ if(mixOpen) setMixer(false); return _openMidi(...a); };
 function renderMixer(){ const m=$('mixer'); if(!mixOpen){ m.innerHTML=''; return; } const s=songs.find(x=>x.id===(playId||selId));
   if(!s){ m.innerHTML='<div class="mxh"><b>Mixer</b><div class="sp"><button class="ibtn" id="mxClose" title="Close  X">✕</button></div></div><div class="blank sm"><div class="bs">Select a song to mix its tracks.</div></div>'; $('mxClose').onclick=()=>setMixer(false); return; }
-  const strips=s.tracks.filter(t=>!isMidiTrack(s,t)).map(t=>{ const v=gainOf(s,t), r=ROUTE[ROLE[t]], k=`${s.id}|${esc(t)}`;
+  const strips=s.tracks.filter(t=>!isMidiTrack(s,t)).map(t=>{ const v=gainOf(s,t), r=routeOf(s,t), k=`${s.id}|${esc(t)}`;
     return `<div class="strip ${isOff(s,t)?'off':''}" style="--c:${TCOL[t]||'#9aa0aa'}"><div class="out ${r?'':'no'}" title="Output (set on the Outputs page)">${r||'Not routed'}</div>
       <div class="fz"><div class="vf" data-song="${s.id}" data-track="${esc(t)}" style="--pv:${(v+60)/66}" title="Drag to set level. Double-click for 0 dB"><i class="z"></i><div class="cap"></div></div>
         <div class="mm"><span class="mt"><b data-m="${k}"></b></span><span class="mt"><b data-m="${k}" data-ch="R"></b></span></div></div>

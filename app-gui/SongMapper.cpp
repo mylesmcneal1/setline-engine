@@ -45,7 +45,7 @@ MappedSong mapSong(const juce::var& payload, double sr, int numOutputs,
     MappedSong out;
     auto& def = out.def;
     auto warn = [&](const juce::String& w) { out.warnings.push_back(w.toStdString()); };
-    const juce::var s = payload["song"], routing = payload["routing"], roles = payload["roles"];
+    const juce::var s = payload["song"], outs = payload["outs"], roles = payload["roles"];
     juce::var click = payload["click"];
     if (s.hasProperty("click") && s["click"].isObject()) click = s["click"]; // per-song click settings
 
@@ -66,9 +66,11 @@ MappedSong mapSong(const juce::var& payload, double sr, int numOutputs,
     TempoMap tmap; // for "send early" in beats
     tmap.build(def.tempo, sr, 0, std::max(def.lengthBars, 1) + 2);
 
-    auto outsFor = [&](const juce::String& role, const juce::String& track) {
+    // Outputs per track name, already resolved by the page: the show's routing for that name, or this
+    // song's override. A track with none plays nowhere.
+    auto outsFor = [&](const juce::String& track) {
         std::vector<int> o;
-        if (auto* a = routing[juce::Identifier(role.isEmpty() ? "_" : role)].getArray())
+        if (auto* a = outs[juce::Identifier(track.isEmpty() ? "_" : track)].getArray())
             for (auto& v : *a) {
                 const int n = (int) v;
                 if (n >= 1 && n <= numOutputs) o.push_back(n - 1);
@@ -95,12 +97,13 @@ MappedSong mapSong(const juce::var& payload, double sr, int numOutputs,
             if (role == "click") {
                 if (haveClick) continue;
                 haveClick = true;
-                def.clickOuts = outsFor("click", t);
+                def.clickOuts = outsFor(t);
                 if (def.clickOuts.empty()) warn("The click isn't routed to an output (Outputs & MIDI page), so it won't be heard.");
                 out.engineTrack[t] = Engine::ClickTrack;
             } else if (role == "cues") {
                 out.engineTrack[t] = Engine::CueTrack;
             } else {
+                if (outsFor(t).empty()) warn(quoted(t) + " isn't routed (Outputs & MIDI page), so it plays nowhere.");
                 ++audioTracks;
             }
         }
