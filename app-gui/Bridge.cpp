@@ -1,5 +1,6 @@
 #include "Bridge.h"
 #include "AudioHost.h"
+#include "Log.h"
 
 #ifndef SETLINE_ORT_VERSION
  #define SETLINE_ORT_VERSION "?"
@@ -67,6 +68,43 @@ Cues::Choice Bridge::choiceOf(const juce::var& v, juce::String* missing) const
 }
 
 // The cues of the open show are stored in its folder (Cues.h).
+// Everything support needs to know, as text: version, OS, audio, listen mode, MIDI, the show, engine stats, the log.
+juce::String Bridge::diagnostics()
+{
+    juce::StringArray t;
+    const auto ver = juce::JUCEApplication::getInstance()->getApplicationVersion();
+    t.add("set.Line diagnostics, " + juce::Time::getCurrentTime().toString(true, true, true, true));
+    t.add("Version: " + ver + (ver.endsWith(".0") ? " (dev build)" : ""));
+    t.add("OS: " + juce::SystemStats::getOperatingSystemName() + (juce::SystemStats::isOperatingSystem64Bit() ? " (64-bit)" : ""));
+    t.add("CPU: " + juce::SystemStats::getCpuModel() + ", " + juce::String(juce::SystemStats::getNumCpus()) + " cores, " + juce::String(juce::SystemStats::getMemorySizeInMegabytes()) + " MB RAM");
+    const auto setup = audio.getSetup(false);
+    const auto c = setup["current"];
+    if (c.isObject()) {
+        juce::StringArray outs; if (auto* a = c["outputs"].getArray()) for (auto& o : *a) outs.add(o.toString());
+        t.add("Audio: " + c["driver"].toString() + " / " + c["device"].toString() + " / " + juce::String((int) (double) c["rate"]) + " Hz / buffer " + c["buffer"].toString()
+              + " / " + juce::String(outs.size()) + " outputs (" + outs.joinIntoString(", ") + ")" + (c.hasProperty("latencyMs") ? " / " + juce::String((double) c["latencyMs"], 1) + " ms output latency" : ""));
+    } else t.add("Audio: no device open" + (setup["error"].toString().isNotEmpty() ? " (" + setup["error"].toString() + ")" : juce::String()));
+    const auto l = audio.listenState();
+    if ((bool) l["on"]) {
+        juce::StringArray o; if (auto* a = l["output"].getArray()) for (auto& v : *a) o.add(v.toString());
+        t.add("Listen: ON, on this computer (" + l["current"].toString() + "), " + (l["mode"].toString() == "output" ? "output " + o.joinIntoString("-") + " only" : juce::String("everything"))
+              + ", click " + ((bool) l["click"] ? "on" : "off") + ", cues " + ((bool) l["cues"] ? "on" : "off") + ", MIDI " + ((bool) l["midi"] ? "sent" : "held back"));
+    } else t.add("Listen: off (the show's outputs)");
+    juce::StringArray ports; if (auto* a = audio.midiOutputs().getArray()) for (auto& p : *a) ports.add(p["name"].toString());
+    t.add("MIDI outputs: " + (ports.isEmpty() ? juce::String("none") : ports.joinIntoString(", ")));
+    t.add("Show: " + (session.file() == juce::File() ? juce::String("Untitled (not saved)") : session.name() + " (" + session.file().getFullPathName() + ")"));
+    const auto st = audio.engineStats();
+    auto num = [](const juce::var& v, int dp) { return v.isVoid() || v.toString().isEmpty() ? juce::String("n/a") : juce::String((double) v, dp); };
+    t.add("Engine: running " + juce::String((bool) st["running"] ? "yes" : "no") + ", xruns " + (st["xruns"].isVoid() || st["xruns"].toString().isEmpty() ? juce::String("n/a (this driver doesn't report them)") : st["xruns"].toString())
+          + ", underruns " + st["underruns"].toString() + ", worst callback " + num(st["callbackMaxMs"], 2) + " ms of " + num(st["budgetMs"], 2) + " ms, CPU " + num((double) st["cpu"] * 100.0, 1) + "%"
+          + ", MIDI sent " + st["midiSent"].toString() + ", dropped " + st["midiDropped"].toString() + ", latest " + num(st["midiLateMaxMs"], 2) + " ms");
+    t.add("Kokoro voices: " + kokoro::stateName(kokoro::status().state));
+    t.add("");
+    t.add("Log (last 200 lines of " + applog::current().getFullPathName() + "):");
+    t.add(applog::tail(200));
+    return t.joinIntoString("\n");
+}
+
 void Bridge::syncShow() { cues.setShowFolder(session.file() == juce::File() ? juce::File() : session.file().getParentDirectory()); }
 
 Bridge::~Bridge() { kokoro::setListener(nullptr); *alive = nullptr; audio.onSetupChanged = nullptr; audio.emit = nullptr; audio.cueAudio = nullptr; media.emit = nullptr; }
@@ -124,6 +162,27 @@ Bridge::Options Bridge::addTo(Options o)
     });
     o = add(o, "getMidiOutputs", [this](const juce::var&) { return audio.midiOutputs(); });
     // Listen on this computer (AudioHost.h): the state, change it, the computer's output devices at a rate.
+    // Diagnostics (About / Help): text only, no audio or show contents.
+    o = add(o, "diagnostics", [this](const juce::var&) { auto* r = new juce::DynamicObject(); r->setProperty("text", diagnostics()); return juce::var(r); });
+    o = add(o, "copyDiagnostics", [this](const juce::var&) {
+        juce::SystemClipboard::copyTextToClipboard(diagnostics());
+        applog::line("Diagnostics copied to the clipboard");
+        auto* r = new juce::DynamicObject(); r->setProperty("ok", true); return juce::var(r);
+    });
+    o = addAsync(o, "saveDiagnostics", [this](const juce::var&, auto done) {
+        auto text = diagnostics();
+        diagChooser = std::make_unique<juce::FileChooser>("Save diagnostics", juce::File::getSpecialLocation(juce::File::userDesktopDirectory)
+                                                              .getChildFile("set.Line diagnostics " + juce::Time::getCurrentTime().formatted("%Y-%m-%d %H-%M") + ".txt"), "*.txt");
+        diagChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles | juce::FileBrowserComponent::warnAboutOverwriting,
+                                 [done, text](const juce::FileChooser& fc) {
+            auto* r = new juce::DynamicObject();
+            const auto f = fc.getResult();
+            if (f == juce::File()) r->setProperty("cancelled", true);
+            else if (f.replaceWithText(text)) { r->setProperty("path", f.getFullPathName()); applog::line("Diagnostics saved: " + f.getFullPathName()); }
+            else r->setProperty("error", "Couldn't write " + f.getFullPathName());
+            done(juce::var(r));
+        });
+    });
     o = add(o, "getListen", [this](const juce::var&) { return audio.listenState(); });
     o = add(o, "setListen", [this](const juce::var& a) { return audio.setListen(a); });
     o = add(o, "listenDevices", [this](const juce::var& a) { return audio.listenDevices((double) a.getProperty("rate", 0.0)); });
@@ -170,7 +229,7 @@ Bridge::Options Bridge::addRest(Options o)
     o = add(o, "setLoop", [this](const juce::var& a) { return audio.setLoop(a); });
 
     // Sessions (.setline): the page sends / receives the session as JSON text.
-    o = addAsync(o, "openSession", [this](const juce::var&, auto done) { session.open([this, done](juce::var r) { syncShow(); done(r); }); });
+    o = addAsync(o, "openSession", [this](const juce::var&, auto done) { session.open([this, done](juce::var r) { syncShow(); if (r["path"].toString().isNotEmpty()) applog::line("Opened " + r["path"].toString()); done(r); }); });
     o = addAsync(o, "saveSession", [this](const juce::var& a, auto done) { session.save(a["text"].toString(), [this, done](juce::var r) { syncShow(); done(r); }); });
     o = addAsync(o, "saveSessionAs", [this](const juce::var& a, auto done) { session.saveAs(a["text"].toString(), [this, done](juce::var r) { syncShow(); done(r); }); });
     // Step 2: sessions live in their own folder; audio references are relative to it (see Media.h).
@@ -188,6 +247,7 @@ Bridge::Options Bridge::addRest(Options o)
         if (! juce::File::isAbsolutePath(p)) return errorVar("openSessionPath: expected an absolute path");
         auto r = session.openPath(juce::File(p));
         syncShow();
+        applog::line(r["error"].toString().isNotEmpty() ? "Couldn't open " + p + ": " + r["error"].toString() : "Opened " + p);
         return r;
     });
     // After a save: every cue of the show stored in <show>/Cues (missing ones rendered), unused ones removed.
@@ -206,7 +266,7 @@ Bridge::Options Bridge::addRest(Options o)
     o = add(o, "closeSession", [this](const juce::var&) { session.close(); syncShow(); auto* r = new juce::DynamicObject(); r->setProperty("ok", true); return juce::var(r); });
     // ---- start-up (the loading window) ----
     o = add(o, "loadingStep", [this](const juce::var& a) { if (onLoadingStep) onLoadingStep(a); auto* r = new juce::DynamicObject(); r->setProperty("ok", true); return juce::var(r); });
-    o = add(o, "loadingDone", [this](const juce::var&) { loading = false; if (onLoadingDone) onLoadingDone(); auto* r = new juce::DynamicObject(); r->setProperty("ok", true); return juce::var(r); });
+    o = add(o, "loadingDone", [this](const juce::var&) { loading = false; applog::line("Loading done"); if (onLoadingDone) onLoadingDone(); auto* r = new juce::DynamicObject(); r->setProperty("ok", true); return juce::var(r); });
     // {refs, session, prepare} -> {ready, total}: waveforms whose cache is there (prepare: start computing the rest)
     o = add(o, "peaksReady", [this](const juce::var& a) {
         const juce::File sessionFile(a["session"].toString());
@@ -247,6 +307,7 @@ Bridge::Options Bridge::addRest(Options o)
         if (! juce::File::isAbsolutePath(path)) return errorVar("writeSession: expected an absolute path");
         auto r = session.writeTo(juce::File(path), a["text"].toString());
         syncShow();
+        applog::line(r["error"].toString().isNotEmpty() ? "Save failed: " + r["error"].toString() : "Saved " + path);
         return r;
     });
     // Windows: the page posts dropped files with chrome.webview.postMessageWithAdditionalObjects; the

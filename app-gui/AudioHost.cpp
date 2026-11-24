@@ -1,4 +1,5 @@
 #include "AudioHost.h"
+#include "Log.h"
 #include <cmath>
 
 namespace setline::gui {
@@ -162,6 +163,7 @@ juce::String AudioHost::open(const juce::String& driver, const juce::String& dev
     lastDeviceKey = dm.getCurrentAudioDeviceType() + "|" + d->getName() + "|" + juce::String(d->getCurrentSampleRate()) + "|" + juce::String(d->getCurrentBufferSizeSamples());
     error.clear();
     if (remember) save(); // the listen device never replaces the show's interface in the settings
+    applog::line("Audio device: " + deviceSummary() + (remember ? "" : " (listening on this computer)"));
     return {};
 }
 
@@ -429,7 +431,8 @@ juce::var AudioHost::loadSong(const juce::var& payload)
     listenOut1.store(listen.on && listen.mode == "output" && ! listen.output.empty() ? listen.output[0] : -1);
     listenOut2.store(listen.on && listen.mode == "output" && listen.output.size() > 1 ? listen.output[1] : (listen.on && listen.mode == "output" && ! listen.output.empty() ? listen.output[0] : -1));
     std::vector<std::string> warnings = mapped.warnings;
-    if (auto err = eng.load(mapped.def, cfg, warnings); ! err.empty()) { loaded = false; return errorObj(err); }
+    if (auto err = eng.load(mapped.def, cfg, warnings); ! err.empty()) { loaded = false; applog::line("Song \"" + juce::String(mapped.def.name) + "\" didn't load: " + juce::String(err)); return errorObj(err); }
+    applog::line("Loaded \"" + juce::String(mapped.def.name) + "\"" + (listen.on ? " (listening on this computer)" : "") + (warnings.empty() ? juce::String() : ", " + juce::String((int) warnings.size()) + " warning(s): " + juce::String(warnings.front())));
     loaded = true;
     loadedEpoch = deviceEpoch;
     loadedName = juce::String(mapped.def.name);

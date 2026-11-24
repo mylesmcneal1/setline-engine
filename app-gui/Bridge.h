@@ -65,6 +65,8 @@ private:
     void withCues(const juce::var& payload, std::function<void()> then);
     Cues::Choice choiceOf(const juce::var& v, juce::String* missingRecording = nullptr) const;
     void syncShow();
+    juce::String diagnostics();
+    std::unique_ptr<juce::FileChooser> diagChooser;
     Options addRest(Options o);
     void preparePeaks(const juce::var& refs, const juce::File& sessionFile);
     bool dirty = false;

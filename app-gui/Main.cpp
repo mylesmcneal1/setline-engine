@@ -8,6 +8,7 @@
 #include "WebUi.h"
 #include "Ort.h"
 #include "Splash.h"
+#include "Log.h"
 
 namespace setline::gui {
 
@@ -79,6 +80,8 @@ public:
             return;
         }
         settings = std::make_unique<juce::PropertiesFile>(settingsOptions());
+        applog::start(JUCE_APPLICATION_VERSION_STRING);
+        applog::line("Started: " + args.joinIntoString(" "));
         // The loading window first (not in test runs unless asked: --with-splash); the rest starts once it has
         // painted, so set.Line shows up at once.
         const bool testRun = args.indexOf("--test-script") >= 0 || args.indexOf("--session-roundtrip") >= 0;
@@ -114,6 +117,7 @@ public:
     }
     void askAudio()
     {
+        applog::line("Start-up: audio interface problem: " + audio->savedDeviceLabel() + " " + audio->savedDeviceProblem());
         const auto label = audio->savedDeviceLabel();
         splash->setStep(Splash::audio, Splash::State::failed);
         splash->showError(label.isNotEmpty() ? "Your audio interface isn't connected" : "No audio output found",
@@ -196,6 +200,7 @@ public:
     // The show couldn't be opened: the page has started an empty session; the user picks what's next.
     void askShow(const juce::String& why)
     {
+        applog::line("Start-up: the show couldn't be opened: " + why);
         showError = true;
         splash->showError("This show couldn't be opened", why + " Open another show, or start a new one.",
             { { juce::String::fromUTF8("Open another show\xe2\x80\xa6"), [this] { showError = false; if (! bridge) openMain(startPage); sendMenu("open"); finishLoading(); } },
@@ -215,6 +220,7 @@ public:
 
     void shutdown() override
     {
+        applog::line("Quit");
         splash.reset();
         if (testThread.joinable()) testThread.join();
         testCues.reset();
@@ -228,6 +234,7 @@ public:
         if (settings) settings->saveIfNeeded();
         settings.reset();
         platform::restoreTimers();
+        applog::stop();
     }
 
     void systemRequestedQuit() override
@@ -259,10 +266,15 @@ private:
     // macOS menu bar: File > Open / Save / Save As with the usual ⌘ shortcuts (the page does the work).
     struct MacMenu : juce::MenuBarModel {
         explicit MacMenu(Bridge& b) : bridge(b) {}
-        juce::StringArray getMenuBarNames() override { return { "File" }; }
-        juce::PopupMenu getMenuForIndex(int, const juce::String&) override
+        juce::StringArray getMenuBarNames() override { return { "File", "Help" }; }
+        juce::PopupMenu getMenuForIndex(int index, const juce::String&) override
         {
             juce::PopupMenu m;
+            if (index == 1) { // Help
+                m.addItem(juce::PopupMenu::Item("Copy diagnostics").setID(21).setAction([this] { send("copyDiagnostics"); }));
+                m.addItem(juce::PopupMenu::Item("Save diagnostics...").setID(22).setAction([this] { send("saveDiagnostics"); }));
+                return m;
+            }
             m.addItem(juce::PopupMenu::Item("New").setID(4).setAction([this] { send("new"); }));
             m.addItem(juce::PopupMenu::Item("Open...").setID(1).setAction([this] { send("open"); }));
             m.addItem(juce::PopupMenu::Item("Save").setID(2).setAction([this] { send("save"); }));

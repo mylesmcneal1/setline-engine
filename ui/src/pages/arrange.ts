@@ -276,6 +276,7 @@ const SLE = {
   open: () => openSession(),
   newSession: () => newSession(),
   listen: (req: Partial<ListenState>) => setListen(req),
+  diagnostics: (how: "copy" | "save") => diagnostics(how),
   listenMenu: (at: { clientX: number; clientY: number }) => listenMenu(at),
   fileMenu: (at: { clientX: number; clientY: number }) => fileMenu(at),
   // ---- step 2: stems ----
@@ -646,6 +647,13 @@ async function openPath(path: string) {
   remember();
   if (r.path) await checkAudio(r.path);
 }
+// Diagnostics: version, OS, audio, listen mode, MIDI, the show, engine stats, the last 200 log lines (no audio, no
+// show contents) on the clipboard or in a text file.
+async function diagnostics(how: "copy" | "save") {
+  if (how === "copy") { await SL.call("copyDiagnostics"); page().toast("Diagnostics copied: paste them into a message"); return; }
+  const r = await SL.call<{ path?: string; error?: string; cancelled?: boolean }>("saveDiagnostics");
+  if (r.path) page().toast("Diagnostics saved: " + r.path); else if (r.error) page().toast(r.error);
+}
 async function showAbout() { page().about(await SL.call("getAppInfo")); }
 async function fileMenu(at: { clientX: number; clientY: number }) {
   const mod = navigator.platform.startsWith("Mac") ? "⌘" : "Ctrl+";
@@ -665,6 +673,8 @@ async function fileMenu(at: { clientX: number; clientY: number }) {
     "-",
     { label: "Close", icon: "✕", act: () => newSession("Closing the session.") },
     "-",
+    { label: "Copy diagnostics", icon: "⧉", act: () => { diagnostics("copy"); } },
+    { label: "Save diagnostics…", icon: "", act: () => { diagnostics("save"); } },
     { label: "About set.Line", icon: "ⓘ", act: () => { showAbout(); } },
   ];
   page().menu(at, items);
@@ -901,6 +911,7 @@ async function main() {
   SL.on("menu", (m: { cmd: string }) => {
     if (m.cmd === "open") openSession(); else if (m.cmd === "save") saveSession(false); else if (m.cmd === "saveAs") saveSession(true);
     else if (m.cmd === "about") showAbout();
+    else if (m.cmd === "copyDiagnostics") diagnostics("copy"); else if (m.cmd === "saveDiagnostics") diagnostics("save");
     else if (m.cmd === "new") newSession(); else if (m.cmd === "close") newSession("Closing the session.");
     else if (m.cmd === "quit") { SL.call("quitAnswered").catch(() => {}); askSave("Quitting set.Line.", () => { SL.call("quitNow").catch(() => {}); }); }
   });

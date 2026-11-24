@@ -153,6 +153,7 @@ if(SETLINE_WITH_JUCE)
       app-gui/Peaks.cpp
       app-gui/Cues.cpp
       app-gui/Splash.cpp
+      app-gui/Log.cpp
       app-gui/Kokoro.cpp
       app-gui/Ort.cpp
       app-gui/SpeechWin.cpp
