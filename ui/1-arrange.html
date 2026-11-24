@@ -123,6 +123,10 @@
   .filebar .fbtn:hover,.filebar .fbtn.open{background:#1d2126;color:var(--text)} .dirtymk{margin-left:8px;font-size:11px;color:var(--amber);white-space:nowrap} .dirtymk[hidden]{display:none}
   .copymk{margin-left:10px;display:inline-flex;align-items:center;gap:7px;font-size:11px;color:var(--muted);white-space:nowrap} .copymk[hidden]{display:none}
   .copymk i{display:block;width:70px;height:4px;border-radius:2px;background:rgba(255,255,255,.1);overflow:hidden} .copymk b{display:block;height:100%;width:0;background:var(--amber,#f5a524)}
+  .listenc{display:flex;align-items:center;gap:2px;margin-left:10px} .listenc .seg{margin-left:0;background:#0b0c0e;border:1px solid #1f2328;border-radius:8px;padding:2px}
+  .listenc .seg button{padding:3px 9px;font-size:11.5px;border-radius:6px} .listenc .seg button.on{background:#22262d;color:var(--text)} .listenc .seg button.on[data-v="pc"]{background:#f5a524;color:#1a1000}
+  .listenbar{position:fixed;left:50%;transform:translateX(-50%);top:46px;z-index:9000;display:flex;align-items:center;gap:12px;padding:5px 8px 5px 14px;border-radius:0 0 10px 10px;background:#f5a524;color:#1a1000;font-size:12px;font-weight:600;box-shadow:0 6px 20px rgba(0,0,0,.4)}
+  .listenbar[hidden]{display:none} .listenbar button{background:rgba(0,0,0,.16);color:#1a1000;border-radius:6px;padding:3px 9px;font-weight:600}
   .xm .it kbd{margin-left:auto;padding-left:22px;color:var(--muted);font:inherit;font-size:11px;opacity:.8}
   .gridc{align-items:center;margin-left:6px;flex:none;width:max-content} .gridc select{flex:none;width:auto;min-width:96px;height:24px;background:transparent;border:0;color:var(--text);font:inherit;font-size:12px;padding:0 4px;border-radius:6px;cursor:pointer}
   .gridc select:hover{background:#1d2126;color:var(--text)} .gridc .ib2.on{color:var(--cyan)} .gridc .gbtn{height:24px;padding:0 8px;border-radius:6px;color:var(--text);font-size:12px;white-space:nowrap} .gridc .gbtn:hover{background:#1d2126} .gridc select[hidden]{display:none}
@@ -804,6 +808,8 @@
     <div><b id="lcdSig">–</b><span>METER</span></div>
     <div class="lsong"><b id="lcdSong">No song</b><span id="lcdSec">–</span></div>
   </div>
+  <div class="listenc" title="Where you hear the show: its own outputs (normal), or this computer's speakers / headphones"><div class="seg" id="listenSeg"><button data-v="show" class="on">Show outputs</button><button data-v="pc">This computer</button></div><button class="ib2" id="listenMenuB" title="Device, what to listen to, click / cues / MIDI">▾</button></div>
+  <div class="listenbar" id="listenBar" hidden>Listening on <span id="listenDev"></span><span id="listenWhat" style="font-weight:500"></span><button id="listenOffB">Back to show outputs</button></div>
   <div class="status" id="statusChip" title="USB Audio Interface · 48 kHz · 128 samples"><div class="omt" title="Output level"><i><b id="omL"></b></i><i><b id="omR"></b></i></div><span class="dot" id="statusDot"></span><span id="statusTxt">48 kHz · 128</span></div>
 </header>
 
@@ -2267,6 +2273,9 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
     undoS=[]; redoS=[]; if(!songs.find(x=>x.id===selId)) selId=songs[0]&&songs[0].id; open.clear(); if(selId) open.add(selId); refresh(); },
   setSessionName(n){ $('crumbAll').textContent=n||'Untitled session'; },
   setDirty(d){ const m=$('dirtyMk'); if(m) m.hidden=!d; },
+  // "Listen on this computer": the switch and the orange banner
+  setListen(st,what){ LISTEN=st||{}; $('listenSeg').querySelectorAll('button').forEach(b=>b.classList.toggle('on',(b.dataset.v==='pc')===!!LISTEN.on)); $('listenBar').hidden=!LISTEN.on;
+    $('listenDev').textContent=LISTEN.current||LISTEN.device||'this computer'; $('listenWhat').textContent=LISTEN.on?' · '+(what||'everything')+(LISTEN.click===false?' · no click':'')+(LISTEN.cues===false?' · no cues':'')+(LISTEN.midi===false?' · MIDI held back':''):''; },
   copyStatus(p){ const m=$('copyMk'); if(!m) return; if(p.finished){ m.hidden=true; if(p.error) toast('The audio copy stopped: '+p.error); else if(p.files) toast(`Audio copied into the show (${p.files} file${p.files>1?'s':''})`); return; }
     m.hidden=false; $('copyTxt').textContent=`Copying audio… ${p.filesDone||0} of ${p.files||0}`; $('copyBar').style.width=(p.total>0?100*p.done/p.total:0)+'%'; },
   menu:(e,items)=>ctxMenu(e,items), saveBox:(t,b,c)=>saveBox(t,b,c), about:info=>aboutBox(info),
@@ -2343,6 +2352,13 @@ function setZoom(z,ax){ const sc=$('scroller'); z=Math.max(ZMIN,Math.min(ZMAX,z)
 $('fileBtn').onclick=e=>{ const r=$('fileBtn').getBoundingClientRect(); if(window.SLE) SLE.fileMenu({clientX:r.left,clientY:r.bottom+4}); else toast('In the app: New, Open, Open Recent, Save, Save As, Close'); };
 $('openBtn').onclick=()=>{ if(window.SLE) SLE.open(); else toast('In the app this opens a session'); };
 $('saveBtn').onclick=()=>{ if(window.SLE) SLE.save(false); else toast('In the app this saves the session'); };
+// Listen on this computer: the switch, its menu, the banner, and a warning before Perform
+let LISTEN={};
+$('listenSeg').querySelectorAll('button').forEach(b=>b.onclick=()=>{ if(window.SLE) SLE.listen({on:b.dataset.v==='pc'}); else toast('In the app this plays the show on this computer'); });
+$('listenMenuB').onclick=()=>{ const r=$('listenMenuB').getBoundingClientRect(); if(window.SLE) SLE.listenMenu({clientX:r.left-180,clientY:r.bottom+4}); };
+$('listenOffB').onclick=()=>{ if(window.SLE) SLE.listen({on:false}); };
+document.querySelectorAll('.tabs a').forEach(a=>{ if(/3-satellite\.html\?mac/.test(a.getAttribute('href'))) a.addEventListener('click',e=>{ if(!LISTEN.on) return; e.preventDefault();
+  confirmBox('You’re listening on this computer','The show is playing on '+esc(LISTEN.current||'this computer')+', not on its outputs. Start the performance anyway?','Perform anyway',()=>{ location.href=a.getAttribute('href'); }); }); });
 $('zoom').value=zToSlider(PXS); $('zoom').oninput=e=>setZoom(sliderToZ(+e.target.value)); $('zIn').onclick=()=>setZoom(Math.max(PXS+1,Math.round(PXS*1.4))); $('zOut').onclick=()=>setZoom(Math.min(PXS-1,Math.round(PXS/1.4)));
 $('scroller').addEventListener('scroll',()=>{ if(viewRaf) return; viewRaf=requestAnimationFrame(()=>{ viewRaf=0; redrawView(false); }); },{passive:true});
 addEventListener('resize',()=>redrawView(true));

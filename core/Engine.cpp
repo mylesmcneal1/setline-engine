@@ -118,6 +118,7 @@ std::string Engine::load(const SongDef& song, const Config& c, std::vector<std::
 
     // --- spoken cues: preloaded one-shots from their bar's sample ---
     cueOuts = song.cueOuts;
+    cueGain = LiveGain::dbToGain(song.cueGainDb);
     for (int o : cueOuts) maxOut = std::max(maxOut, o);
     longestCue = 0;
     for (auto& c : song.cues) {
@@ -414,7 +415,7 @@ void Engine::renderSegment(float* const* outs, int numOuts, int off, int count, 
             const int64_t from = std::max(p, it->sample), to = std::min(end, it->sample + (int64_t) a.size());
             for (int64_t s = from; s < to; ++s) {
                 const int i = (int) (s - p);
-                const float v = a[(size_t) (s - it->sample)] * live.at(i);
+                const float v = a[(size_t) (s - it->sample)] * live.at(i) * cueGain;
                 for (int o : cueOuts) if (o >= 0 && o < no && seg[o]) seg[o][i] += v;
             }
         }

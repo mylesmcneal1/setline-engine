@@ -116,6 +116,7 @@ private:
     int64_t longestCue = 0;
     std::unique_ptr<LiveGain[]> stemGains; // one per stem (allocated in load)
     LiveGain cueLive;
+    float cueGain = 1.0f;
     std::array<std::atomic<float>, MaxMeters> meters {};
     int rampSamples = 480, fadeOutSamples = 480;
     int64_t songLen = 0;

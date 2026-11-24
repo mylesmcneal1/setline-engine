@@ -28,6 +28,21 @@ public:
     // "iD14 · ASIO · 48 kHz · 128" for the open device, or "" if none.
     juce::String deviceSummary();
 
+    // ---- "Listen on this computer" (stored per computer, never in the show) ----
+    // The show's routing never changes. Instead of the show's interface, the computer's own output plays:
+    //  - everything: every routed track folded to stereo (stereo stays stereo, mono centred at -3 dB),
+    //    with all faders, mutes and solos;
+    //  - one show output (or pair): exactly what that output gets, on both / left-right.
+    // Click and Cues can be left out, MIDI can be held back. Never resampled: the device must run at the
+    // show's rate (setListen says so and lists the devices that can).
+    // {on, driver, device, rate, mode: "everything" | "output", output: [1-based], click, cues, midi}
+    // -> the state ({on, driver, device, mode, output, click, cues, midi, summary}) or {error, devices}
+    juce::var setListen(const juce::var& req);
+    juce::var listenState() const;
+    // The computer's output devices (not ASIO) and whether each runs at rate: [{driver, device, rate ok}]
+    juce::var listenDevices(double rate);
+    bool listening() const { return listen.on; }
+
     // ---- audio setup ----
     // {drivers:[{name, devices:[...]}], current:{driver, device, rate, buffer, rates, buffers, outputs, ...}, error}
     juce::var getSetup(bool rescan = false);
@@ -75,15 +90,28 @@ private:
         std::array<std::unique_ptr<juce::MidiOutput>, Max> outs;
         std::array<juce::String, Max> names;
         std::atomic<int> count { 0 };
+        std::atomic<bool>* enabled = nullptr; // "Listen on this computer" can hold MIDI back
         void sendNow(int port, const uint8_t* d, int len) override
         {
+            if (enabled != nullptr && ! enabled->load(std::memory_order_relaxed)) return;
             if (port >= 0 && port < count.load(std::memory_order_acquire) && outs[(size_t) port])
                 outs[(size_t) port]->sendMessageNow(juce::MidiMessage(d, len));
         }
         int resolve(const juce::String& want, std::vector<std::string>& warnings);
     };
 
-    juce::String open(const juce::String& driver, const juce::String& device, double rate, int buffer);
+    juce::String open(const juce::String& driver, const juce::String& device, double rate, int buffer, bool remember = true);
+    struct Listen { bool on = false; juce::String driver, device, mode = "everything"; std::vector<int> output; bool click = true, cues = true, midi = true; };
+    Listen listen;
+    void saveListen();
+    // The song as heard on this computer (the show's routing kept, the outputs changed): see setListen.
+    static void applyListen(SongDef& def, const Listen& l);
+    // "One show output": the engine renders every show output here and the chosen ones go to the device.
+    static constexpr int scratchOuts = 64, scratchFrames = 8192;
+    std::vector<std::vector<float>> scratch;
+    std::array<float*, scratchOuts> scratchPtrs {};
+    std::atomic<int> listenOut1 { -1 }, listenOut2 { -1 }; // audio thread reads; -1 = not in "one output" mode
+    std::atomic<bool> midiOn { true };
     void save();
     void applyLevels();
     void changeListenerCallback(juce::ChangeBroadcaster*) override;

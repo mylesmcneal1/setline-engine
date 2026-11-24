@@ -123,6 +123,10 @@ Bridge::Options Bridge::addTo(Options o)
         return audio.setSetup(a);
     });
     o = add(o, "getMidiOutputs", [this](const juce::var&) { return audio.midiOutputs(); });
+    // Listen on this computer (AudioHost.h): the state, change it, the computer's output devices at a rate.
+    o = add(o, "getListen", [this](const juce::var&) { return audio.listenState(); });
+    o = add(o, "setListen", [this](const juce::var& a) { return audio.setListen(a); });
+    o = add(o, "listenDevices", [this](const juce::var& a) { return audio.listenDevices((double) a.getProperty("rate", 0.0)); });
     // Loading a song: its cues are rendered first (on the Cues worker, usually already cached), then the
     // song is mapped and loaded on the message thread, which never waits for speech.
     o = addAsync(o, "loadSong", [this](const juce::var& a, auto done) {

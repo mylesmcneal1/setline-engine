@@ -80,6 +80,7 @@ struct SongDef {
     // Spoken cues: rendered audio played from each cue's bar on the Cues track's outputs (step 2).
     std::vector<CueDef> cues;
     std::vector<int> cueOuts; // 0-based; empty = cues play nowhere
+    float cueGainDb = 0;      // the cues' fixed level (e.g. -3 dB when folded to the centre of a stereo pair)
     // The song lasts at least this many bars (0 = as long as its stems / tempo map / content say).
     int lengthBars = 0;
 };

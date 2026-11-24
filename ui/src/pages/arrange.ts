@@ -23,6 +23,7 @@ interface Page {
   // step 2: spoken cues
   cueCfg(s: Song): CueVoice; cueVoiceAll(): CueVoice; setVoices(list: VoiceInfo[]): void;
   setDirty(d: boolean): void; freshShow(): void;
+  setListen(st: ListenState, what?: string): void;
   copyStatus(p: { done: number; total: number; files?: number; filesDone?: number; finished: boolean; error?: string }): void;
   recFor(s: Song, text: string): string; wordFiles(): { path: string; copy?: boolean }[];
   addWords(s: Song, list: { name: string; ref: string }[], only: boolean): void;
@@ -33,6 +34,7 @@ interface Page {
 }
 // Cue voice choice as saved (voice id + name: ids differ between computers) and an installed voice.
 interface CueVoice { voice: string; name: string; speed: number }
+interface ListenState { on?: boolean; driver?: string; device?: string; current?: string; mode?: string; output?: number[]; click?: boolean; cues?: boolean; midi?: boolean; error?: string; devices?: { driver: string; device: string }[] }
 interface MenuItem { label: string; icon?: string; key?: string; dis?: boolean; act: () => void }
 interface VoiceInfo { id: string; name: string; lang: string; isDefault: boolean; engine?: string; gender?: string; grade?: string; rank?: number }
 // The built-in Kokoro voices' download (Kokoro.h): missing | downloading | ready | failed.
@@ -273,6 +275,8 @@ const SLE = {
   save: (as: boolean) => saveSession(as),
   open: () => openSession(),
   newSession: () => newSession(),
+  listen: (req: Partial<ListenState>) => setListen(req),
+  listenMenu: (at: { clientX: number; clientY: number }) => listenMenu(at),
   fileMenu: (at: { clientX: number; clientY: number }) => fileMenu(at),
   // ---- step 2: stems ----
   pickStems: () => pickStems(),
@@ -309,10 +313,63 @@ function showStatus(stats?: Stats) {
   chip.title = tip;
   dot.style.background = colour;
 }
+// ---------------------------------------------------------------- listen on this computer
+// The show's interface output names, remembered while it's open (when listening, the device is the computer's).
+let showOutNames: string[] = JSON.parse(localStorage.getItem("setline.showOutputNames") || "[]");
+let listen: ListenState = {};
+function showOutLabel(outs: number[]): string {
+  const n = (i: number) => showOutNames[i - 1] || `Out ${i}`;
+  return outs.length === 2 ? `${n(outs[0])} + ${n(outs[1])}` : n(outs[0]);
+}
+function listenWhat(): string {
+  return listen.mode === "output" && listen.output && listen.output.length ? showOutLabel(listen.output) + " only" : "everything";
+}
+async function setListen(req: Partial<ListenState>) {
+  const r = await SL.call<ListenState>("setListen", { ...req, rate: sessionRate || deviceRate || 48000 });
+  if (r.error) {
+    // never resampled: offer a device that can run at the show's rate
+    const can = r.devices || [];
+    if (!can.length) { page().toast(r.error); return; }
+    page().menu({ clientX: innerWidth - 420, clientY: 60 }, [
+      { label: r.error, icon: "⚠", dis: true, act: () => {} },
+      { label: "These can run at the show's rate:", icon: "", dis: true, act: () => {} },
+      ...can.map((d) => ({ label: `${d.device} (${d.driver})`, icon: "🔈", act: () => { setListen({ on: true, driver: d.driver, device: d.device }); } })),
+    ]);
+    return;
+  }
+  listen = r;
+  page().setListen(listen, listenWhat());
+  loadedKey = null; // mapped again for the new outputs
+  onSetup(await SL.call<Setup>("getAudioSetup"));
+}
+async function listenMenu(at: { clientX: number; clientY: number }) {
+  const devices = await SL.call<{ driver: string; device: string; default: boolean; rateOk: boolean }[]>("listenDevices", { rate: sessionRate || deviceRate || 48000 });
+  // the show outputs the songs use, as pairs / singles
+  const groups = new Map<string, number[]>();
+  for (const s of page().songs) for (const t of s.tracks) { const o = outsOf(s, t); if (o.length) groups.set(o.join("-"), [...o].sort((a, b) => a - b)); }
+  const outs = [...groups.values()].sort((a, b) => a[0] - b[0]);
+  const tick = (b: boolean | undefined) => (b !== false ? "✓" : "");
+  const same = (a?: number[], b?: number[]) => JSON.stringify(a || []) === JSON.stringify(b || []);
+  page().menu(at, [
+    { label: "Play on", icon: "", dis: true, act: () => {} },
+    ...devices.map((d) => ({ label: `${d.device}${d.rateOk ? "" : " (not at the show's rate)"}`, icon: listen.on && listen.device === d.device ? "●" : "", dis: !d.rateOk,
+      act: () => { setListen({ on: true, driver: d.driver, device: d.device }); } })),
+    "-",
+    { label: "Listen to", icon: "", dis: true, act: () => {} },
+    { label: "Everything (folded to stereo)", icon: listen.mode !== "output" ? "●" : "", act: () => { setListen({ on: true, mode: "everything" }); } },
+    ...outs.map((o) => ({ label: showOutLabel(o) + " only", icon: listen.mode === "output" && same(listen.output, o) ? "●" : "", act: () => { setListen({ on: true, mode: "output", output: o }); } })),
+    "-",
+    { label: "Click", icon: tick(listen.click), act: () => { setListen({ click: listen.click === false }); } },
+    { label: "Cues", icon: tick(listen.cues), act: () => { setListen({ cues: listen.cues === false }); } },
+    { label: "Send MIDI", icon: tick(listen.midi), act: () => { setListen({ midi: listen.midi === false }); } },
+  ]);
+}
+
 function onSetup(s: Setup) {
   const c = s.current;
   deviceRate = c ? c.rate : null;
   outNames = c?.outputs || [];
+  if (!listen.on && c?.outputs?.length) { showOutNames = c.outputs; localStorage.setItem("setline.showOutputNames", JSON.stringify(showOutNames)); }
   page().rerender();
   setupText = c ? `${String(Math.round(c.rate / 100) / 10).replace(/\.0$/, "")} kHz · ${c.buffer}` : "";
   setupTip = c ? `${c.device} (${c.driver.replace(/^Windows Audio/, "WASAPI")}) · ${c.rate / 1000} kHz · ${c.buffer} samples · ${c.latencyMs.toFixed(1)} ms output latency`
@@ -876,6 +933,7 @@ async function main() {
     return;
   }
 
+  try { listen = await SL.call<ListenState>("getListen"); page().setListen(listen, listenWhat()); } catch (e) { console.warn("set.Line: listen", e); }
   onSetup(await SL.call<Setup>("getAudioSetup"));
   try { page().setVoices(await SL.call<VoiceInfo[]>("getVoices")); } catch (e) { console.warn("set.Line: voices", e); }
   // (a new show taking the Kokoro default voice is not an edit: an untouched session stays "saved")
@@ -906,7 +964,7 @@ async function main() {
     try {
       const AsyncFn = Object.getPrototypeOf(async () => {}).constructor;
       const hooks = { SLE, page, importStems, probe, audioFiles, applyRefMap, checkAudio, onFileDrag, sessionText, applySession,
-        getRate: () => sessionRate, saveTo: (path: string) => saveSession(false, path), cueList: () => cueList(), SLR, SLW, waves, SLC, prepareCues, remember, payload, getRoute: () => route, isDirty: () => sessionText() !== doc.savedText, setDoc: (n: string) => { doc = { name: n, savedText: "" }; } };
+        getRate: () => sessionRate, saveTo: (path: string) => saveSession(false, path), cueList: () => cueList(), setListen: (r: Partial<ListenState>) => setListen(r), SLR, SLW, waves, SLC, prepareCues, remember, payload, getRoute: () => route, isDirty: () => sessionText() !== doc.savedText, setDoc: (n: string) => { doc = { name: n, savedText: "" }; } };
       out = await new AsyncFn("SL", "hooks", info.testScript)(SL, hooks);
     } catch (e) { out = { error: String((e as Error)?.stack || e) }; }
     if (out !== undefined) await SL.call("testDone", { text: JSON.stringify(out, null, 1) }); // undefined: it went to another page

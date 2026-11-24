@@ -130,6 +130,14 @@ public:
                   splash->setStep(Splash::audio, Splash::State::done, audio->deviceSummary().isNotEmpty() ? audio->deviceSummary() : juce::String("choose on Outputs & MIDI"));
                   openMain("2-routing.html");
               } },
+              { "Listen on this computer", [this] { // the show's routing stays; this computer's speakers / headphones play it
+                  auto* req = new juce::DynamicObject();
+                  req->setProperty("on", true);
+                  const auto r = audio->setListen(juce::var(req));
+                  if (r["error"].toString().isNotEmpty()) { askAudio(); return; }
+                  splash->setStep(Splash::audio, Splash::State::done, "Listening on " + r["current"].toString());
+                  openMain(startPage);
+              } },
               { "Open without audio", [this] {
                   audio->closeDevice();
                   splash->setStep(Splash::audio, Splash::State::done, "no audio");

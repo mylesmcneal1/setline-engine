@@ -29,6 +29,19 @@ juce::var obj(std::initializer_list<std::pair<const char*, juce::var>> props)
 AudioHost::AudioHost(juce::PropertiesFile& s) : settings(s)
 {
     dm.addChangeListener(this);
+    // "Listen to one output": scratch outputs allocated once, here (the audio thread never allocates)
+    scratch.assign(scratchOuts, std::vector<float>((size_t) scratchFrames, 0.0f));
+    for (int c = 0; c < scratchOuts; ++c) scratchPtrs[(size_t) c] = scratch[(size_t) c].data();
+    midiOuts.enabled = &midiOn;
+    // listen settings (this computer only)
+    const auto l = juce::JSON::parse(settings.getValue("listen"));
+    if (l.isObject()) {
+        listen.on = (bool) l["on"]; listen.driver = l["driver"].toString(); listen.device = l["device"].toString();
+        listen.mode = l["mode"].toString() == "output" ? "output" : "everything";
+        if (auto* o = l["output"].getArray()) for (auto& v : *o) if ((int) v >= 1) listen.output.push_back((int) v - 1);
+        listen.click = l.hasProperty("click") ? (bool) l["click"] : true; listen.cues = l.hasProperty("cues") ? (bool) l["cues"] : true; listen.midi = l.hasProperty("midi") ? (bool) l["midi"] : true;
+        midiOn.store(! listen.on || listen.midi);
+    }
 }
 
 AudioHost::~AudioHost()
@@ -52,6 +65,12 @@ void AudioHost::start()
 
     juce::String note;
     const auto saved = juce::JSON::parse(settings.getValue("audio"));
+    // Listening on this computer when set.Line was last closed: start there again (the show's interface stays saved).
+    if (listen.on && listen.device.isNotEmpty()) {
+        const double rate = saved.isObject() && (double) saved["rate"] > 0 ? (double) saved["rate"] : 48000.0;
+        if (open(listen.driver, listen.device, rate, 0, false).isEmpty()) return;
+        listen.on = false; saveListen(); // that device is gone: back to the show's interface
+    }
     if (saved.isObject()) {
         const auto err = open(saved["driver"].toString(), saved["device"].toString(), (double) saved["rate"], (int) saved["buffer"]);
         if (err.isEmpty()) return;
@@ -94,7 +113,7 @@ juce::String AudioHost::deviceSummary()
     return d->getName() + dot + dm.getCurrentAudioDeviceType() + dot + khz + " kHz" + dot + juce::String(d->getCurrentBufferSizeSamples());
 }
 
-juce::String AudioHost::open(const juce::String& driver, const juce::String& device, double rate, int buffer)
+juce::String AudioHost::open(const juce::String& driver, const juce::String& device, double rate, int buffer, bool remember)
 {
     const juce::ScopedValueSetter<bool> busy(opening, true);
     juce::AudioIODeviceType* type = nullptr;
@@ -142,8 +161,118 @@ juce::String AudioHost::open(const juce::String& driver, const juce::String& dev
     xrunBase = d->getXRunCount();
     lastDeviceKey = dm.getCurrentAudioDeviceType() + "|" + d->getName() + "|" + juce::String(d->getCurrentSampleRate()) + "|" + juce::String(d->getCurrentBufferSizeSamples());
     error.clear();
-    save();
+    if (remember) save(); // the listen device never replaces the show's interface in the settings
     return {};
+}
+
+// ---------------------------------------------------------------- listen on this computer
+namespace {
+bool isComputerDriver(const juce::String& t) { return t != "ASIO"; } // Windows Audio / DirectSound / CoreAudio
+}
+
+void AudioHost::saveListen()
+{
+    juce::Array<juce::var> out; for (int o : listen.output) out.add(o + 1);
+    settings.setValue("listen", juce::JSON::toString(obj({ { "on", listen.on }, { "driver", listen.driver }, { "device", listen.device }, { "mode", listen.mode },
+                                                           { "output", out }, { "click", listen.click }, { "cues", listen.cues }, { "midi", listen.midi } }), true));
+    settings.saveIfNeeded();
+}
+
+juce::var AudioHost::listenState() const
+{
+    juce::Array<juce::var> out; for (int o : listen.output) out.add(o + 1);
+    auto* d = dm.getCurrentAudioDevice();
+    return obj({ { "on", listen.on }, { "driver", listen.driver }, { "device", listen.device }, { "mode", listen.mode }, { "output", out },
+                 { "click", listen.click }, { "cues", listen.cues }, { "midi", listen.midi },
+                 { "current", d ? d->getName() : juce::String() }, { "rate", d ? d->getCurrentSampleRate() : 0.0 } });
+}
+
+juce::var AudioHost::listenDevices(double rate)
+{
+    juce::Array<juce::var> list;
+    for (auto* t : dm.getAvailableDeviceTypes()) {
+        if (! isComputerDriver(t->getTypeName())) continue;
+        t->scanForDevices();
+        const auto names = t->getDeviceNames(false);
+        const int def = t->getDefaultDeviceIndex(false);
+        for (int i = 0; i < names.size(); ++i) {
+            bool ok = rate <= 0;
+            auto* cur = dm.getCurrentAudioDevice();
+            if (! ok && cur != nullptr && dm.getCurrentAudioDeviceType() == t->getTypeName() && cur->getName() == names[i]) ok = cur->getAvailableSampleRates().contains(rate);
+            else if (! ok) if (std::unique_ptr<juce::AudioIODevice> probe { t->createDevice(names[i], {}) }) ok = probe->getAvailableSampleRates().contains(rate);
+            list.add(obj({ { "driver", t->getTypeName() }, { "device", names[i] }, { "default", i == def }, { "rateOk", ok } }));
+        }
+    }
+    return list;
+}
+
+juce::var AudioHost::setListen(const juce::var& req)
+{
+    auto next = listen;
+    if (req.hasProperty("on")) next.on = (bool) req["on"];
+    if (req.hasProperty("driver")) next.driver = req["driver"].toString();
+    if (req.hasProperty("device")) next.device = req["device"].toString();
+    if (req.hasProperty("mode")) next.mode = req["mode"].toString() == "output" ? "output" : "everything";
+    if (auto* o = req["output"].getArray()) { next.output.clear(); for (auto& v : *o) if ((int) v >= 1) next.output.push_back((int) v - 1); }
+    if (req.hasProperty("click")) next.click = (bool) req["click"];
+    if (req.hasProperty("cues")) next.cues = (bool) req["cues"];
+    if (req.hasProperty("midi")) next.midi = (bool) req["midi"];
+    if (next.mode == "output" && next.output.empty()) next.mode = "everything";
+    const double rate = (double) req.getProperty("rate", sampleRate() > 0 ? sampleRate() : 48000.0);
+
+    const bool deviceChange = next.on != listen.on || (next.on && (next.driver != listen.driver || next.device != listen.device));
+    if (next.on && deviceChange) {
+        // The computer's default output if none is chosen yet (Windows Audio / CoreAudio first).
+        if (next.device.isEmpty()) {
+            for (auto* t : dm.getAvailableDeviceTypes()) {
+                if (! isComputerDriver(t->getTypeName()) || t->getTypeName() == "DirectSound") continue;
+                t->scanForDevices();
+                const auto names = t->getDeviceNames(false);
+                if (names.isEmpty()) continue;
+                next.driver = t->getTypeName();
+                next.device = names[juce::jmax(0, t->getDefaultDeviceIndex(false))];
+                break;
+            }
+        }
+        if (next.device.isEmpty()) return obj({ { "error", "This computer has no audio output." } });
+        if (auto err = open(next.driver, next.device, rate, 0, false); err.isNotEmpty()) {
+            // Never resampled: say so, and which devices can run at the show's rate.
+            juce::Array<juce::var> can;
+            if (auto* l = listenDevices(rate).getArray()) for (auto& d : *l) if ((bool) d["rateOk"]) can.add(d);
+            retrySaved();
+            return obj({ { "error", err.contains("can't run at") ? "\"" + next.device + "\" can't run at the show's rate (" + juce::String(rate / 1000.0, 1) + " kHz), and set.Line never resamples."
+                                                                : err },
+                         { "devices", can } });
+        }
+    } else if (! next.on && deviceChange) {
+        listen.on = false; // the show's interface again (saved in the settings)
+        const auto err = retrySaved();
+        if (err.isNotEmpty()) error = err;
+    }
+    listen = next;
+    midiOn.store(! listen.on || listen.midi);
+    loaded = false; ++deviceEpoch; // the song is mapped again for the new outputs
+    saveListen();
+    return listenState();
+}
+
+// The fold-down (see setListen). Tracks the show doesn't route stay silent; Click / Cues can be left out.
+void AudioHost::applyListen(SongDef& def, const Listen& l)
+{
+    constexpr float centre = -3.0103f; // a mono track in the middle of a stereo pair: -3 dB on each side
+    if (l.mode == "everything") {
+        for (auto& s : def.stems) {
+            if (s.outs.empty()) continue;
+            const bool mono = s.source && s.source->numChannels() == 1;
+            s.outs = { 0, 1 };
+            if (mono) s.gainDb += centre;
+        }
+        if (! def.clickOuts.empty()) { def.clickOuts = { 0, 1 }; def.clickGainDb += centre; }
+        for (auto& c : def.moreClicks) if (! c.outs.empty()) { c.outs = { 0, 1 }; c.gainDb += centre; }
+        if (! def.cueOuts.empty()) { def.cueOuts = { 0, 1 }; def.cueGainDb += centre; }
+    }
+    if (! l.click) { def.clickOuts.clear(); for (auto& c : def.moreClicks) c.outs.clear(); }
+    if (! l.cues) def.cueOuts.clear();
 }
 
 void AudioHost::save()
@@ -190,6 +319,7 @@ juce::var AudioHost::getSetup(bool rescan)
 
 juce::var AudioHost::setSetup(const juce::var& req)
 {
+    if (listen.on) { listen.on = false; midiOn.store(true); saveListen(); } // choosing the show's interface ends "Listen on this computer"
     auto* d = dm.getCurrentAudioDevice();
     const auto driver = req.hasProperty("driver") ? req["driver"].toString() : dm.getCurrentAudioDeviceType();
     juce::String device = req.hasProperty("device") ? req["device"].toString() : (d ? d->getName() : juce::String());
@@ -292,6 +422,12 @@ juce::var AudioHost::loadSong(const juce::var& payload)
     cfg.sampleRate = sr;
     cfg.numOutputs = outs;
     cfg.midiOffsetMs = settings.getDoubleValue("midiOffsetMs", 0.0);
+    if (listen.on) {
+        applyListen(mapped.def, listen);
+        if (listen.mode == "output") cfg.numOutputs = scratchOuts; // every show output, into the scratch buffers
+    }
+    listenOut1.store(listen.on && listen.mode == "output" && ! listen.output.empty() ? listen.output[0] : -1);
+    listenOut2.store(listen.on && listen.mode == "output" && listen.output.size() > 1 ? listen.output[1] : (listen.on && listen.mode == "output" && ! listen.output.empty() ? listen.output[0] : -1));
     std::vector<std::string> warnings = mapped.warnings;
     if (auto err = eng.load(mapped.def, cfg, warnings); ! err.empty()) { loaded = false; return errorObj(err); }
     loaded = true;
@@ -456,7 +592,20 @@ void AudioHost::timerCallback()
 void AudioHost::audioDeviceIOCallbackWithContext(const float* const*, int, float* const* out, int numOut, int n,
                                                  const juce::AudioIODeviceCallbackContext&)
 {
-    eng.process(out, numOut, n);
+    const int l1 = listenOut1.load(std::memory_order_relaxed), l2 = listenOut2.load(std::memory_order_relaxed);
+    if (l1 >= 0 && l1 < scratchOuts && l2 < scratchOuts) {
+        // "Listen to one output": every show output into the scratch buffers, the chosen one(s) to the device
+        for (int c = 0; c < numOut; ++c) if (out[c]) std::fill(out[c], out[c] + n, 0.0f);
+        for (int done = 0; done < n;) {
+            const int k = std::min(n - done, (int) scratchFrames);
+            eng.process(scratchPtrs.data(), scratchOuts, k);
+            if (numOut > 0 && out[0]) std::copy(scratchPtrs[(size_t) l1], scratchPtrs[(size_t) l1] + k, out[0] + done);
+            if (numOut > 1 && out[1]) std::copy(scratchPtrs[(size_t) l2], scratchPtrs[(size_t) l2] + k, out[1] + done);
+            done += k;
+        }
+    } else {
+        eng.process(out, numOut, n);
+    }
     if (auto* p = previewIn.exchange(nullptr, std::memory_order_acq_rel)) { if (previewNow) retirePreview(previewNow); previewNow = p; }
     if (auto* p = previewNow) {
         const auto& a = *p->audio;
@@ -482,6 +631,7 @@ void AudioHost::collectPreviews()
 void AudioHost::playPreview(std::shared_ptr<const std::vector<float>> audio, std::vector<int> outs, float gain)
 {
     if (! audio || audio->empty()) return;
+    if (listen.on) { outs = { 0, 1 }; gain *= 0.7071f; } // listening on this computer: the cue preview in the middle
     auto* p = new Preview { std::move(audio), std::move(outs), gain, 0 };
     delete previewIn.exchange(p, std::memory_order_acq_rel); // a preview the audio thread hadn't taken yet
 }
@@ -502,12 +652,24 @@ juce::var AudioHost::renderOffline(const juce::var& payload, const juce::var& op
 {
     auto* d = dm.getCurrentAudioDevice();
     const double sr = d ? d->getCurrentSampleRate() : 48000.0;
-    const int numOut = d ? d->getActiveOutputChannels().countNumberOfSetBits() : 8;
+    const int numOut = opts.hasProperty("outputs") ? juce::jlimit(1, 64, (int) opts["outputs"]) // tests: as if the interface had this many
+                     : d ? d->getActiveOutputChannels().countNumberOfSetBits() : 8;
     // MIDI is only logged offline: every port resolves to 0, so no device is opened.
     auto mapped = mapSong(payload, sr, numOut, [](const juce::String&, std::vector<std::string>&) { return 0; },
                           [this, sr](const juce::String& text, const juce::var& voice, std::vector<std::string>& w) {
                               return cueAudio ? cueAudio(text, voice, sr, w) : std::shared_ptr<const std::vector<float>>();
                           });
+    // opts.listen ({mode, output, click, cues}): the song as "Listen on this computer" plays it
+    Listen lo;
+    const bool listenTest = opts["listen"].isObject();
+    if (listenTest) {
+        const auto lv = opts["listen"];
+        lo.on = true; lo.mode = lv["mode"].toString() == "output" ? "output" : "everything";
+        if (auto* o = lv["output"].getArray()) for (auto& v : *o) lo.output.push_back((int) v - 1);
+        lo.click = lv.hasProperty("click") ? (bool) lv["click"] : true;
+        lo.cues = lv.hasProperty("cues") ? (bool) lv["cues"] : true;
+        applyListen(mapped.def, lo);
+    }
     Engine e;
     Engine::Config cfg; cfg.sampleRate = sr; cfg.numOutputs = numOut; cfg.offline = true;
     std::vector<std::string> warnings = mapped.warnings;
@@ -530,7 +692,16 @@ juce::var AudioHost::renderOffline(const juce::var& payload, const juce::var& op
             for (int c = 0; c < numOut; ++c) for (int i = 0; i < block && done + i < total; ++i) out[(size_t) c][(size_t) (done + i)] = buf[(size_t) c][(size_t) i];
         }
     }
-    for (int c = 0; c < numOut; ++c) {
+    if (listenTest && lo.mode == "output" && ! lo.output.empty()) { // what the device gets: the chosen output(s) on L / R
+        const int a = lo.output[0], b = lo.output.size() > 1 ? lo.output[1] : lo.output[0];
+        std::vector<std::vector<float>> two(2, std::vector<float>((size_t) total, 0.0f));
+        if (a < numOut) two[0] = out[(size_t) a];
+        if (b < numOut) two[1] = out[(size_t) b];
+        out.swap(two);
+    }
+    auto* samples = new juce::DynamicObject(); // tests: a few samples of every output, to compare exactly
+    for (size_t c = 0; c < out.size(); ++c) { juce::Array<juce::var> v; for (int64_t i = 0; i < total && v.size() < 4096; i += 97) v.add(out[c][(size_t) i]); samples->setProperty(juce::Identifier("o" + juce::String((int) c)), v); }
+    for (int c = 0; c < (int) out.size(); ++c) {
         juce::Array<juce::var> on;
         float peak = 0; int64_t lastLoud = -1000000;
         const auto& x = out[(size_t) c];
@@ -553,6 +724,7 @@ juce::var AudioHost::renderOffline(const juce::var& payload, const juce::var& op
     o->setProperty("outs", res);
     o->setProperty("midi", midi);
     o->setProperty("warnings", w);
+    o->setProperty("samples", juce::var(samples));
     return juce::var(o);
 }
 

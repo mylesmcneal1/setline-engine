@@ -896,6 +896,21 @@ bool runSelfTest(bool verbose)
         check(exact && got == rest, "count-in cues on beats, 8ths and 7/8 beats start on their exact samples (blocks 128/97/33/1024, and from bar 3 beat 1.75)" + why);
     }
 
+    // ---- Listen on this computer: the cues' fixed level (-3 dB when folded to the centre of a stereo pair)
+    {
+        SongDef s; s.name = "Cue level"; s.tempo = { { 1, 120, 4, 4 } }; s.lengthBars = 3;
+        auto a = std::make_shared<std::vector<float>>((size_t) 4000, 0.5f);
+        CueDef c; c.bar = 2; c.audio = a; c.text = "x"; s.cues.push_back(c);
+        s.cueOuts = { 0, 1 };
+        s.cueGainDb = -3.0103f;
+        OfflineRun r; r.load(s, sr, 2, 128); r.start(0); r.runToEnd();
+        float peak0 = 0, peak1 = 0;
+        for (float x : r.out[0]) peak0 = std::max(peak0, std::fabs(x));
+        for (float x : r.out[1]) peak1 = std::max(peak1, std::fabs(x));
+        const float want = 0.5f * std::pow(10.0f, -3.0103f / 20.0f);
+        check(std::fabs(peak0 - want) < 1e-5f && std::fabs(peak1 - want) < 1e-5f, "cue level: a cue at -3 dB plays at exactly 0.7071 of its level on both sides");
+    }
+
     std::printf(ok ? "ALL CHECKS PASSED\n" : "SOME CHECKS FAILED\n");
     return ok;
 }
