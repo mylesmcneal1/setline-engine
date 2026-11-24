@@ -19,6 +19,14 @@ public:
 
     // Opens the saved device, or the best available one on first launch.
     void start();
+    // Start-up (loading window): the saved interface couldn't be opened (unplugged...). Its name ("iD14 (ASIO)") and
+    // why; empty when it opened. retrySaved: try it again ("" = open now). closeDevice: "Open without audio".
+    juce::String savedDeviceLabel() const { return savedLabel; }
+    juce::String savedDeviceProblem() const { return savedProblem; }
+    juce::String retrySaved();
+    void closeDevice();
+    // "iD14 · ASIO · 48 kHz · 128" for the open device, or "" if none.
+    juce::String deviceSummary();
 
     // ---- audio setup ----
     // {drivers:[{name, devices:[...]}], current:{driver, device, rate, buffer, rates, buffers, outputs, ...}, error}
@@ -92,6 +100,7 @@ private:
     MidiOuts midiOuts; // declared before the engine: its MIDI thread sends through it until the engine is gone
     Engine eng;
     juce::String error;
+    juce::String savedLabel, savedProblem;
     juce::String lastDeviceKey;
     bool opening = false;
 

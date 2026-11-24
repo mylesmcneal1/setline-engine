@@ -200,6 +200,37 @@ Bridge::Options Bridge::addRest(Options o)
     // Tests: where the last cue came from (show / memory / cache / render).
     o = add(o, "cueSource", [this](const juce::var&) { auto* r = new juce::DynamicObject(); r->setProperty("from", cues.lastSource()); return juce::var(r); });
     o = add(o, "closeSession", [this](const juce::var&) { session.close(); syncShow(); auto* r = new juce::DynamicObject(); r->setProperty("ok", true); return juce::var(r); });
+    // ---- start-up (the loading window) ----
+    o = add(o, "loadingStep", [this](const juce::var& a) { if (onLoadingStep) onLoadingStep(a); auto* r = new juce::DynamicObject(); r->setProperty("ok", true); return juce::var(r); });
+    o = add(o, "loadingDone", [this](const juce::var&) { loading = false; if (onLoadingDone) onLoadingDone(); auto* r = new juce::DynamicObject(); r->setProperty("ok", true); return juce::var(r); });
+    // {refs, session, prepare} -> {ready, total}: waveforms whose cache is there (prepare: start computing the rest)
+    o = add(o, "peaksReady", [this](const juce::var& a) {
+        const juce::File sessionFile(a["session"].toString());
+        int ready = 0, total = 0;
+        juce::Array<juce::File> todo;
+        if (auto* refs = a["refs"].getArray())
+            for (auto& r : *refs) {
+                const auto f = Media::resolve(r.toString(), sessionFile);
+                ++total;
+                if (! f.existsAsFile()) { ++ready; continue; } // missing stems don't block loading
+                const auto c = Peaks::cacheFileFor(f, sessionFile);
+                if (c.existsAsFile() && c.getLastModificationTime() >= f.getLastModificationTime()) ++ready; else todo.add(f);
+            }
+        if ((bool) a["prepare"] && ! todo.isEmpty()) peaks.prepare(todo, sessionFile);
+        auto* o2 = new juce::DynamicObject(); o2->setProperty("ready", ready); o2->setProperty("total", total); return juce::var(o2);
+    });
+    // {cues: [{text, voice, name, speed, pron, rec}]} -> {ready, total}: cues already rendered (or stored in the show)
+    o = add(o, "cuesReady", [this](const juce::var& a) {
+        const double rate = audio.sampleRate();
+        int ready = 0, total = 0;
+        if (auto* l = a["cues"].getArray())
+            for (auto& x : *l) {
+                ++total;
+                bool fb = false;
+                if (rate <= 0 || cues.cached(x["text"].toString().trim(), choiceOf(x), rate, fb) != nullptr) ++ready;
+            }
+        auto* o2 = new juce::DynamicObject(); o2->setProperty("ready", ready); o2->setProperty("total", total); return juce::var(o2);
+    });
     o = add(o, "quitAnswered", [this](const juce::var&) { if (onQuitAnswered) onQuitAnswered(); auto* r = new juce::DynamicObject(); r->setProperty("ok", true); return juce::var(r); });
     o = add(o, "quitNow", [this](const juce::var&) {
         dirty = false;
@@ -350,6 +381,7 @@ void Bridge::preparePeaks(const juce::var& refs, const juce::File& sessionFile)
 
 void Bridge::fileDrag(const juce::String& state, juce::Point<int> at, const juce::StringArray& paths)
 {
+    if (loading) return; // nothing is dropped until loading has finished
     auto* o = new juce::DynamicObject();
     o->setProperty("state", state);
     o->setProperty("x", at.x);

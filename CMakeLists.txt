@@ -3,7 +3,9 @@ cmake_minimum_required(VERSION 3.22)
 # A 2015 MacBook Pro runs up to macOS 12, so target 10.15+ (needed for std::filesystem).
 set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE STRING "Oldest macOS supported")
 
-project(SetLineEngineSpike VERSION 0.1.0 LANGUAGES C CXX)
+# Every CI build is 0.1.<run number> (shown as "Beta 0.1.<n>"); a local build is 0.1.0 ("dev build").
+set(SETLINE_BUILD_NUMBER "0" CACHE STRING "Build number (CI: github.run_number)")
+project(SetLineEngineSpike VERSION 0.1.${SETLINE_BUILD_NUMBER} LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -98,13 +100,49 @@ if(SETLINE_WITH_JUCE)
       COMMENT "Building the web UI (Vite)"
       VERBATIM)
     juce_add_binary_data(setline_ui NAMESPACE SetLineUi HEADER_NAME SetLineUi.h SOURCES "${SETLINE_UI_ZIP}")
+    # The approved brand files the loading window draws, as they are (assets/brand).
+    juce_add_binary_data(setline_brand NAMESPACE SetLineBrand HEADER_NAME SetLineBrand.h SOURCES
+      "${CMAKE_CURRENT_SOURCE_DIR}/assets/brand/setline-icon.svg"
+      "${CMAKE_CURRENT_SOURCE_DIR}/assets/brand/setline-wordmark-text-only.svg")
+
+    # App icons, from the approved files (docs/branding-and-loading.md):
+    # - Windows: assets/brand/setline.ico (all sizes, 16-256) as the .exe's icon resource; the window, taskbar,
+    #   Start menu and Explorer all take it from there.
+    # - macOS: setline.icns built with iconutil from png/mac-*.png (the committed .icns lacks the 16 and 32 px
+    #   sizes), copied into the bundle's Resources and named in Info.plist.
+    set(SETLINE_PLIST_EXTRA "")
+    if(APPLE)
+      set(_iconset "${CMAKE_CURRENT_BINARY_DIR}/setline.iconset")
+      set(SETLINE_ICNS "${CMAKE_CURRENT_BINARY_DIR}/setline.icns")
+      file(MAKE_DIRECTORY "${_iconset}")
+      set(_b "${CMAKE_CURRENT_SOURCE_DIR}/assets/brand/png")
+      foreach(_pair "16;icon_16x16" "32;icon_16x16@2x" "32;icon_32x32" "64;icon_32x32@2x" "128;icon_128x128"
+                    "256;icon_128x128@2x" "256;icon_256x256" "512;icon_256x256@2x" "512;icon_512x512" "1024;icon_512x512@2x")
+        list(GET _pair 0 _size)
+        list(GET _pair 1 _name)
+        configure_file("${_b}/mac-${_size}.png" "${_iconset}/${_name}.png" COPYONLY)
+      endforeach()
+      execute_process(COMMAND iconutil -c icns "${_iconset}" -o "${SETLINE_ICNS}" RESULT_VARIABLE _iconutil)
+      if(NOT _iconutil EQUAL 0)
+        message(WARNING "set.Line: iconutil failed; using the committed setline.icns")
+        set(SETLINE_ICNS "${CMAKE_CURRENT_SOURCE_DIR}/assets/brand/setline.icns")
+      endif()
+      set(SETLINE_PLIST_EXTRA "<plist><dict><key>CFBundleIconFile</key><string>setline</string></dict></plist>")
+    endif()
 
     juce_add_gui_app(setline
       PRODUCT_NAME "set.Line"
       COMPANY_NAME "set.Line"
       BUNDLE_ID "app.setline.desktop"
       VERSION ${PROJECT_VERSION}
+      PLIST_TO_MERGE "${SETLINE_PLIST_EXTRA}"
       NEEDS_WEBVIEW2 TRUE)
+    if(WIN32)
+      target_sources(setline PRIVATE app-gui/setline.rc)
+    elseif(APPLE)
+      target_sources(setline PRIVATE "${SETLINE_ICNS}")
+      set_source_files_properties("${SETLINE_ICNS}" PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+    endif()
     target_sources(setline PRIVATE
       app-gui/Main.cpp
       app-gui/AudioHost.cpp
@@ -114,6 +152,7 @@ if(SETLINE_WITH_JUCE)
       app-gui/Media.cpp
       app-gui/Peaks.cpp
       app-gui/Cues.cpp
+      app-gui/Splash.cpp
       app-gui/Kokoro.cpp
       app-gui/Ort.cpp
       app-gui/SpeechWin.cpp
@@ -133,7 +172,7 @@ if(SETLINE_WITH_JUCE)
       JUCE_APPLICATION_NAME_STRING="$<TARGET_PROPERTY:setline,JUCE_PRODUCT_NAME>"
       JUCE_APPLICATION_VERSION_STRING="$<TARGET_PROPERTY:setline,JUCE_VERSION>")
     target_link_libraries(setline
-      PRIVATE setline_core setline_ui
+      PRIVATE setline_core setline_ui setline_brand
               juce::juce_gui_extra juce::juce_audio_devices juce::juce_audio_formats juce::juce_cryptography
       PUBLIC  juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
     setline_enable_asio(setline)

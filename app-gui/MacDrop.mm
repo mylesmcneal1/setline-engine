@@ -19,4 +19,11 @@ void stopWebViewFileDrops(juce::Component& browser)
         if (auto* view = (NSView*) peer->getNativeHandle()) stopDrops(view);
 }
 
+
+// The loading window honours System Settings > Accessibility > Display > Reduce motion (Splash.cpp).
+bool setlineReduceMotionMac()
+{
+    return [[NSWorkspace sharedWorkspace] accessibilityDisplayShouldReduceMotion];
+}
+
 } // namespace setline::gui

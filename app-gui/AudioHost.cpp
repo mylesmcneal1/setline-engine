@@ -55,6 +55,8 @@ void AudioHost::start()
     if (saved.isObject()) {
         const auto err = open(saved["driver"].toString(), saved["device"].toString(), (double) saved["rate"], (int) saved["buffer"]);
         if (err.isEmpty()) return;
+        savedLabel = saved["device"].toString() + " (" + saved["driver"].toString() + ")";
+        savedProblem = err;
         note = "Couldn't open the saved device (" + saved["driver"].toString() + " / " + saved["device"].toString() + "): " + err;
     }
 
@@ -69,6 +71,27 @@ void AudioHost::start()
         if (open(t->getTypeName(), names[0], 48000, 128).isEmpty()) { error = note; return; }
     }
     if (error.isEmpty()) error = note.isNotEmpty() ? note : juce::String("No audio output device found.");
+}
+
+juce::String AudioHost::retrySaved()
+{
+    const auto saved = juce::JSON::parse(settings.getValue("audio"));
+    if (! saved.isObject()) return "No saved device.";
+    const auto err = open(saved["driver"].toString(), saved["device"].toString(), (double) saved["rate"], (int) saved["buffer"]);
+    if (err.isEmpty()) { savedProblem = {}; error = {}; }
+    return err;
+}
+
+void AudioHost::closeDevice() { dm.closeAudioDevice(); }
+
+juce::String AudioHost::deviceSummary()
+{
+    auto* d = dm.getCurrentAudioDevice();
+    if (d == nullptr) return {};
+    const double r = d->getCurrentSampleRate();
+    const juce::String khz = std::fmod(r, 1000.0) == 0 ? juce::String((int) (r / 1000)) : juce::String(r / 1000.0, 1);
+    const juce::String dot = juce::String::fromUTF8(" \xc2\xb7 ");
+    return d->getName() + dot + dm.getCurrentAudioDeviceType() + dot + khz + " kHz" + dot + juce::String(d->getCurrentBufferSizeSamples());
 }
 
 juce::String AudioHost::open(const juce::String& driver, const juce::String& device, double rate, int buffer)

@@ -1,0 +1,3 @@
+// set.Line: the app icon (assets/brand/setline.ico, every size from 16 to 256). Icon 1 is what Windows shows for
+// the .exe, its windows, the taskbar and Start menu shortcuts.
+1 ICON "../assets/brand/setline.ico"

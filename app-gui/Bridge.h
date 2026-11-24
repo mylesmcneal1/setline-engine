@@ -36,6 +36,11 @@ public:
     // Quitting with unsaved changes: the page asks Save / Don't save / Cancel ("menu" {cmd: "quit"}) and calls
     // quitNow when it's done; onQuitAnswered tells the app the page is handling it.
     std::function<void()> onQuitAnswered;
+    // Start-up (the loading window, Splash.h): the page reports its steps ({id: show | waveforms | cues, state:
+    // running | done | failed, detail, fraction}) and when it's ready. File drops are ignored until then.
+    std::function<void(const juce::var&)> onLoadingStep;
+    std::function<void()> onLoadingDone;
+    bool loading = true;
 
     // Files dragged onto the window (the web view hands the page no paths, so the window takes the drop).
     // state: "over" | "leave" | "drop"; x, y in page pixels.

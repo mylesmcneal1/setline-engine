@@ -122,6 +122,9 @@ async function main() {
   if (!SL.native) return;
   try { sessionRows(); } catch (e) { console.warn("set.Line: routing rows", e); }
   render(await SL.call<Setup>("getAudioSetup"));
+  // Opened from the loading window ("Choose another output…"): it can fade now.
+  SL.call("loadingStep", { id: "show", state: "done", detail: "Outputs & MIDI" }).catch(() => {});
+  SL.call("loadingDone").catch(() => {});
   $("rescanBtn").onclick = async () => render(await SL.call<Setup>("getAudioSetup", { rescan: true }));
   SL.on("audioSetupChanged", (s: Setup) => { if (!busy) render(s); });
   // Output level row: the engine's peak per output (same scale as the Edit page meters).

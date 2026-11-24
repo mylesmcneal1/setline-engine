@@ -764,6 +764,47 @@ function installDrop() {
 }
 
 // ---------------------------------------------------------------- start
+// ---------------------------------------------------------------- loading window (start-up)
+// Reports the real start-up steps to the app's loading window (Splash.h): the show (name · songs), the waveforms
+// (n of total, computed in the background), the cues (n ready). Each waits at most a while; what's left carries on
+// in the background. Then "loadingDone": the loading window fades and this window shows.
+async function reportLoading(showProblem: string, quick: boolean) {
+  const step = (id: string, state: string, detail = "", fraction = 0) => SL.call("loadingStep", { id, state, detail, fraction }).catch(() => {});
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  try {
+    const n = page().songs.length;
+    if (showProblem) await step("show", "failed", `It couldn't be read (${showProblem}).`);
+    else await step("show", "done", `${doc.name || "Untitled session"} · ${n} song${n === 1 ? "" : "s"}`);
+    // waveforms
+    const cur = await SL.call<FileResult>("getSessionFile");
+    const refs = [...new Set(audioFiles().map((x) => x.f.path))];
+    if (!refs.length) await step("waveforms", "done", "none");
+    else {
+      let r = await SL.call<{ ready: number; total: number }>("peaksReady", { refs, session: cur.path || "", prepare: true });
+      for (let t = 0; !quick && r.ready < r.total && t < 150; t++) { // up to 30 s
+        await step("waveforms", "running", `${r.ready} of ${r.total}`, r.ready / r.total);
+        await wait(200);
+        r = await SL.call("peaksReady", { refs, session: cur.path || "" });
+      }
+      await step("waveforms", "done", r.ready < r.total ? `${r.ready} of ${r.total} (the rest in the background)` : `${r.total} of ${r.total}`);
+    }
+    // cues
+    prepareCues();
+    const list = cueList();
+    if (!list.length) await step("cues", "done", "none");
+    else {
+      let r = await SL.call<{ ready: number; total: number }>("cuesReady", { cues: list });
+      for (let t = 0; !quick && r.ready < r.total && t < 150; t++) {
+        await step("cues", "running", `${r.ready} of ${r.total} ready`, r.ready / r.total);
+        await wait(200);
+        r = await SL.call("cuesReady", { cues: list });
+      }
+      await step("cues", "done", r.ready < r.total ? `${r.ready} ready (the rest in the background)` : `${r.total} cue${r.total === 1 ? "" : "s"} ready`);
+    }
+  } catch (e) { console.warn("set.Line: loading", e); }
+  await SL.call("loadingDone").catch(() => {});
+}
+
 async function main() {
   if (!SL.native) return;
   window.SLE = SLE;
@@ -797,11 +838,16 @@ async function main() {
   });
 
   // Session: carry on with the one from before a page switch, else this is a new, unsaved session.
+  let showProblem = "";
   try {
     const kept = JSON.parse(sessionStorage.getItem("setline.session") || "null");
     if (kept && kept.text) { doc = kept.doc; applySession(kept.text); }
     else { loadRouting(oldLocalRouting()); doc = { name: "", savedText: sessionText() }; }
-  } catch (e) { console.warn("set.Line: session", e); loadRouting(null); doc = { name: "", savedText: sessionText() }; }
+  } catch (e) {
+    console.warn("set.Line: session", e);
+    showProblem = String((e as Error)?.message || e);
+    loadRouting(null); doc = { name: "", savedText: sessionText() };
+  }
   page().rerender();
   addEventListener("pagehide", () => remember()); // switching pages: keep the very latest
   page().setSessionName(doc.name);
@@ -841,6 +887,8 @@ async function main() {
     const real = outs.map((o) => o.name);
     p.PORTS.splice(0, p.PORTS.length, ...real, ...[...used].filter((u) => !real.includes(u)));
   } catch (e) { console.warn("set.Line: MIDI outputs", e); }
+  // The loading window (app start): show, waveforms, cues; then the main window appears. Tests don't wait for it.
+  await reportLoading(showProblem, !!info.testScript);
   // Test hook (--test-script): run an async script with the page and this module's functions; write its result.
   if (info.testScript) {
     let out: unknown;

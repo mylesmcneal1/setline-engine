@@ -7,6 +7,7 @@
 #include "Bridge.h"
 #include "WebUi.h"
 #include "Ort.h"
+#include "Splash.h"
 
 namespace setline::gui {
 
@@ -23,7 +24,8 @@ static juce::PropertiesFile::Options settingsOptions()
 
 class MainWindow : public juce::DocumentWindow {
 public:
-    MainWindow(juce::PropertiesFile& s, Bridge& bridge, bool dev, const juce::String& page)
+    // visible = false: created behind the loading window (the page loads meanwhile) and shown when it's done.
+    MainWindow(juce::PropertiesFile& s, Bridge& bridge, bool dev, const juce::String& page, bool visible = true)
         : DocumentWindow("set.Line", juce::Colour(0xff0b0c0e), DocumentWindow::allButtons), settings(s)
     {
         setUsingNativeTitleBar(true);
@@ -37,7 +39,7 @@ public:
 
         const auto saved = settings.getValue("windowState");
         if (saved.isEmpty() || ! restoreWindowStateFromString(saved)) centreWithSize(1440, 900);
-        setVisible(true);
+        setVisible(visible);
         ui->loadStartPage(page);
     }
 
@@ -77,8 +79,69 @@ public:
             return;
         }
         settings = std::make_unique<juce::PropertiesFile>(settingsOptions());
+        // The loading window first (not in test runs unless asked: --with-splash); the rest starts once it has
+        // painted, so set.Line shows up at once.
+        const bool testRun = args.indexOf("--test-script") >= 0 || args.indexOf("--session-roundtrip") >= 0;
+        if (! testRun || args.contains("--with-splash")) {
+            splash = std::make_unique<Splash>(versionText());
+            splash->setStep(Splash::audio, Splash::State::running);
+        }
+        startArgs = args;
+        startDev = dev;
+        startPage = page;
+        juce::Timer::callAfterDelay(splash ? 60 : 0, [this] { startAudio(); });
+    }
+
+    // "0.1.<CI run>" ("0.1 (dev build)" for a local build).
+    static juce::String versionText()
+    {
+        const juce::String v = JUCE_APPLICATION_VERSION_STRING;
+        return v.endsWith(".0") ? v.dropLastCharacters(2) + " (dev build)" : v;
+    }
+
+    // Step 1: the audio interface. The saved one missing (unplugged): the loading window asks what to do.
+    void startAudio()
+    {
         audio = std::make_unique<AudioHost>(*settings);
         audio->start();
+        const auto summary = audio->deviceSummary();
+        // --loading-error audio | show: show that error screen (to check how it looks without unplugging anything)
+        const auto forced = startArgs.indexOf("--loading-error") >= 0 ? startArgs[startArgs.indexOf("--loading-error") + 1] : juce::String();
+        if (splash && forced == "show") { splash->setStep(Splash::audio, Splash::State::done, summary); juce::Timer::callAfterDelay(400, [this] { splash->setStep(Splash::show, Splash::State::failed); askShow("The file is damaged (it isn't valid JSON)."); }); return; }
+        if (splash && (forced == "audio" || audio->savedDeviceProblem().isNotEmpty() || summary.isEmpty())) { askAudio(); return; }
+        if (splash) splash->setStep(Splash::audio, Splash::State::done, summary);
+        openMain(startPage);
+    }
+    void askAudio()
+    {
+        const auto label = audio->savedDeviceLabel();
+        splash->setStep(Splash::audio, Splash::State::failed);
+        splash->showError(label.isNotEmpty() ? "Your audio interface isn't connected" : "No audio output found",
+            (label.isNotEmpty() ? "set.Line couldn't find \"" + label + "\". " : juce::String("set.Line couldn't open an audio output. "))
+                + "Plug it in and press Try again, or open the show without audio to keep working.",
+            { { "Try again", [this] {
+                  const auto err = audio->retrySaved();
+                  if (err.isNotEmpty() && audio->deviceSummary().isEmpty()) { askAudio(); return; }
+                  if (err.isNotEmpty()) { askAudio(); return; }
+                  splash->setStep(Splash::audio, Splash::State::done, audio->deviceSummary());
+                  openMain(startPage);
+              } },
+              { juce::String::fromUTF8("Choose another output\xe2\x80\xa6"), [this] { // the Outputs & MIDI page, which lists every device
+                  splash->setStep(Splash::audio, Splash::State::done, audio->deviceSummary().isNotEmpty() ? audio->deviceSummary() : juce::String("choose on Outputs & MIDI"));
+                  openMain("2-routing.html");
+              } },
+              { "Open without audio", [this] {
+                  audio->closeDevice();
+                  splash->setStep(Splash::audio, Splash::State::done, "no audio");
+                  openMain(startPage);
+              } } });
+    }
+
+    // Step 2: the main window, hidden behind the loading window while its page loads the show, waveforms and cues.
+    void openMain(const juce::String& page)
+    {
+        const auto& args = startArgs;
+        const bool dev = startDev;
         bridge = std::make_unique<Bridge>(*audio, *settings);
         bridge->devMode = dev;
         if (const int rt = args.indexOf("--session-roundtrip"); rt >= 0 && rt + 2 < args.size()) {
@@ -89,7 +152,24 @@ public:
             bridge->testScript = juce::File::getCurrentWorkingDirectory().getChildFile(args[ts + 1].unquoted());
             bridge->testOut = juce::File::getCurrentWorkingDirectory().getChildFile(args[ts + 2].unquoted());
         }
-        window = std::make_unique<MainWindow>(*settings, *bridge, dev, page);
+        bridge->onLoadingStep = [this](const juce::var& a) {
+            if (! splash) return;
+            const auto id = a["id"].toString();
+            const auto step = id == "show" ? Splash::show : id == "waveforms" ? Splash::waveforms : id == "cues" ? Splash::cues : Splash::numSteps;
+            if (step == Splash::numSteps) return;
+            const auto st = a["state"].toString();
+            splash->setStep(step, st == "done" ? Splash::State::done : st == "failed" ? Splash::State::failed : Splash::State::running,
+                            a["detail"].toString(), (float) (double) a["fraction"]);
+            if (step == Splash::show && st == "failed") askShow(a["detail"].toString());
+        };
+        bridge->onLoadingDone = [this] { pageReady = true; finishLoading(); };
+        window = std::make_unique<MainWindow>(*settings, *bridge, dev, page, splash == nullptr);
+        if (! splash) bridge->loading = false;
+        else {
+            splash->setStep(Splash::show, Splash::State::running);
+            // Never stuck behind the loading window: after 45 s the main window shows anyway.
+            juce::Timer::callAfterDelay(45000, [this] { if (splash && ! splash->finished()) { pageReady = true; showError = false; finishLoading(); } });
+        }
         // Window title: "<session> — set.Line", with a dot while there are unsaved changes.
         bridge->onDocument = [this](const juce::String& name, bool dirty) {
             static const juce::String dot = juce::CharPointer_UTF8("\xe2\x80\xa2 "), dash = juce::CharPointer_UTF8(" \xe2\x80\x94 set.Line");
@@ -101,8 +181,29 @@ public:
        #endif
     }
 
+    // The show couldn't be opened: the page has started an empty session; the user picks what's next.
+    void askShow(const juce::String& why)
+    {
+        showError = true;
+        splash->showError("This show couldn't be opened", why + " Open another show, or start a new one.",
+            { { juce::String::fromUTF8("Open another show\xe2\x80\xa6"), [this] { showError = false; if (! bridge) openMain(startPage); sendMenu("open"); finishLoading(); } },
+              { "Start a new show", [this] { showError = false; if (! bridge) openMain(startPage); sendMenu("new"); finishLoading(); } } });
+    }
+    void sendMenu(const char* cmd)
+    {
+        if (! bridge) return;
+        auto* o = new juce::DynamicObject(); o->setProperty("cmd", cmd);
+        bridge->emit("menu", juce::var(o));
+    }
+    void finishLoading()
+    {
+        if (! splash || ! pageReady || showError || splash->finished()) return;
+        splash->finish([this] { if (window) { window->setVisible(true); window->toFront(true); } if (bridge) bridge->loading = false; });
+    }
+
     void shutdown() override
     {
+        splash.reset();
         if (testThread.joinable()) testThread.join();
         testCues.reset();
        #if JUCE_MAC
@@ -135,7 +236,11 @@ public:
                                            "The session has unsaved changes. Quit without saving?", "Quit", "Cancel", nullptr,
                                            juce::ModalCallbackFunction::create([](int ok) { if (ok) juce::JUCEApplication::quit(); }));
     }
-    void anotherInstanceStarted(const juce::String&) override { if (window) window->toFront(true); }
+    void anotherInstanceStarted(const juce::String&) override
+    {
+        if (window && window->isVisible()) window->toFront(true);
+        else if (splash) splash->toFront(true);
+    }
 
 private:
    #if JUCE_MAC
@@ -341,6 +446,10 @@ private:
     std::unique_ptr<Cues> testCues;
     std::thread testThread;
 
+    std::unique_ptr<Splash> splash;
+    juce::StringArray startArgs;
+    bool startDev = false, pageReady = false, showError = false;
+    juce::String startPage;
     std::unique_ptr<juce::PropertiesFile> settings;
     std::unique_ptr<AudioHost> audio;
     std::unique_ptr<Bridge> bridge;
