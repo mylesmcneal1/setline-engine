@@ -119,6 +119,8 @@
   .tl svg{width:14px;height:14px}
   .tl:hover{color:var(--text)} .tl.on{background:var(--s3);color:var(--text)}
   .zoom{display:flex;align-items:center;gap:4px;color:var(--muted);margin-left:6px}
+  .gridc{align-items:center;margin-left:6px} .gridc select{height:24px;background:transparent;border:0;color:var(--muted);font:inherit;font-size:12px;padding:0 4px;border-radius:6px;cursor:pointer}
+  .gridc select:hover{background:#1d2126;color:var(--text)} .gridc .ib2.on{color:var(--cyan)}
   .zoom button{width:22px;height:22px;border-radius:4px;color:var(--muted)} .zoom button:hover{background:var(--s2);color:var(--text)}
   .zoom input{-webkit-appearance:none;appearance:none;width:90px;height:14px;background:transparent;border:0;padding:0}
   .zoom input::-webkit-slider-runnable-track{height:3px;border-radius:2px;background:#2a2f37}
@@ -815,7 +817,8 @@
       <nav class="crumb" id="crumb"><button id="crumbAll">Untitled session</button><span id="crumbSong"></span></nav><span class="muted" id="sessCount"></span>
       <div class="tools"><button class="tl on" data-tool="pointer" title="Pointer  V"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M3.5 1.8v11.4l3-2.9 2 4.2 1.8-.8-2-4.2h4.2z"/></svg></button><button class="tl" data-tool="split" title="Split tool: click an audio clip or a section to split it  B"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="4.5" cy="12" r="2"/><circle cx="11.5" cy="12" r="2"/><path d="M5.8 10.4 12 2M10.2 10.4 4 2"/></svg></button></div>
       <div class="igrp"><button class="ib2" id="undoB" title="Undo  ⌘Z">↶</button><button class="ib2" id="redoB" title="Redo  ⇧⌘Z">↷</button><button class="ib2" id="cutB" title="Cut  ⌘X">✂</button><button class="ib2" id="copyB" title="Copy  ⌘C">⧉</button><button class="ib2" id="pasteB" title="Paste at the playhead  ⌘V">⎘</button><button class="ib2" id="dupB" title="Duplicate  ⌘D">⊕</button></div>
-      <div class="zoom" title="Zoom  − / =  (or Ctrl + scroll)"><button id="zOut">−</button><input type="range" id="zoom" min="2" max="28" step="1" value="5"><button id="zIn">+</button></div>
+      <div class="igrp gridc" title="Grid: what clips, splits, fades, the playhead and MIDI events snap to"><button class="ib2 on" id="snapB" title="Snap to the grid (on). Hold Alt while dragging to place freely."><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 5h12M2 11h12M5 2v12M11 2v12"/></svg></button><select id="gridSel" title="Grid size"></select></div>
+      <div class="zoom" title="Zoom  − / =  (or Ctrl + scroll)"><button id="zOut">−</button><input type="range" id="zoom" min="0" max="1000" step="1" value="0"><button id="zIn">+</button></div>
       <div class="sp">
         <div class="igrp"><button class="ib2" id="expandAll" title="Open all songs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"/></svg></button><button class="ib2" id="collapseAll" title="Close all songs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4-4 4 4"/></svg></button><button class="ib2" id="thBtn" title="Track height"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h10M3 8h10M3 12h10"/></svg></button></div>
         <span class="vsep"></span>
@@ -1001,7 +1004,8 @@ function switchVer(s,id){ if(id===s.ver) return; const from=curVer(s), to=versOf
 function newVer(s,name){ const st=snapVer(s); curVer(s).state=st; const v={id:'v'+verSeq++,name:name||'Version '+(versOf(s).length+1),state:JSON.parse(JSON.stringify(st))}; s.versions.push(v); s.ver=v.id; return v; }
 function delVer(s,id){ const list=versOf(s); if(list.length<2) return; if(s.ver===id) switchVer(s,list.find(v=>v.id!==id).id); s.versions=list.filter(v=>v.id!==id); }
 
-const evTime=(s,e)=>{ const b=s.bars[Math.min(e.bar,s.total)-1]; return b.beatT[Math.min(e.beat,b.sig[0])-1]; };
+// An event's time; beats may be fractional (2.5 = an 8th after beat 2), placed on the grid.
+const evTime=(s,e)=>{ const b=s.bars[Math.min(e.bar,s.total)-1], u=Math.max(0,Math.min(b.sig[0]-1e-9,(e.beat||1)-1)), k=Math.floor(u), f=u-k, t0=b.beatT[k], t1=k+1<b.beatT.length?b.beatT[k+1]:b.t+b.dur; return t0+f*(t1-t0); };
 const secOfBar=(s,bar)=>s.secPos.find(p=>bar>=p.start&&bar<p.start+p.bars);
 
 // ======================= SETLIST =======================
@@ -1341,7 +1345,7 @@ function renderFolders(){
       if(ev && prev && X-prev.x<prev.w && prev.ev){ prev.extra+=` → ${b.bar} ${b.sig.join('/')}`; prev.w=(String(prev.bar).length+prev.extra.length+1)*6.2+10; return; }
       if(((b.bar-1)%4===0||ev) && (!prev || X-prev.x>=prev.w)){ const extra=ev?b.sig.join('/'):''; labs.push({x:X,bar:b.bar,ev:!!ev,extra,w:(String(b.bar).length+extra.length+(extra?1:0))*6.2+10}); } });
     const r=labs.map(l=>`<span style="left:${l.x}px">${l.bar}${l.extra?`<em>${l.extra}</em>`:''}</span>`).join('');
-    const cy=loopRange(s); h+=`<div class="row ruler"><div class="lh">Bar · ${s.tmap[0].sig.join('/')}</div><div class="lane" data-song="${id}" style="width:${W}px"><canvas class="rcv" data-song="${id}" width="${W}" height="24"></canvas>${r}${cy?`<i class="cyc" style="left:${cy[0]*PXS}px;width:${(cy[1]-cy[0])*PXS}px"></i>`:''}<i class="rph" data-ph="${id}"></i></div></div>`;
+    const cy=loopRange(s); h+=`<div class="row ruler"><div class="lh">Bar · ${s.tmap[0].sig.join('/')}</div><div class="lane" data-song="${id}" style="width:${W}px"><canvas class="rcv" data-song="${id}" data-w="${W}" width="1" height="24"></canvas>${r}${cy?`<i class="cyc" style="left:${cy[0]*PXS}px;width:${(cy[1]-cy[0])*PXS}px"></i>`:''}<i class="rph" data-ph="${id}"></i></div></div>`;
     // tempo lane
     const samp=[]; s.bars.slice(0,s.total).forEach(b=>b.beatT.forEach((bt,k)=>samp.push([bt*PXS,bpmAt(s,b.bar+k/b.sig[0])]))); samp.push([s.len*PXS,bpmAt(s,s.total+.999)]);
     const TL=TEMPO_H, vals=samp.map(v=>v[1]), mn=Math.min(...vals)-6, mxv=Math.max(...vals)+6, yy=v=>TL-8-(v-mn)/(mxv-mn)*(TL-22); s._yy={mn,mxv,TL};
@@ -1359,13 +1363,13 @@ function renderFolders(){
         ${role==='click'?`<button class="cgear" data-song="${id}" title="Click sound">⚙</button>`:''}${role==='cues'?`<button class="cgear" data-song="${id}" data-kind="cues" title="Cue voice">⚙</button>`:''}
         ${!mid&&!routeOf(s,t)?'<span class="newr" data-tip="Not routed yet: plays nowhere. Route this track name once on the Outputs page"></span>':''}
         ${mid?`<button class="edm" data-song="${id}" data-track="${esc(t)}">Edit MIDI</button>`:`<span class="ms"><button class="mb ${(s.mute||{})[t]?'on':''}" data-song="${id}" data-track="${esc(t)}" title="Mute">M</button><button class="sb ${solo?'on':''}" data-song="${id}" data-track="${esc(t)}" title="Solo (Alt-click: solo only this)">S</button></span>${volCtl(s,t,false).replace(/<button class="mb[^>]*>M<\/button>/,'')}<span class="hm"><b data-m="${id}|${esc(t)}"></b></span>`}</div>
-        <div class="lane" style="width:${W}px"><canvas data-song="${id}" data-t="${ti}" width="${W}" height="${TH}" style="width:${W}px;height:${TH}px"></canvas></div></div>`;
+        <div class="lane" style="width:${W}px"><canvas data-song="${id}" data-t="${ti}" data-w="${W}" width="1" height="${TH}" style="width:1px;height:${TH}px"></canvas></div></div>`;
     });
     h+=`<div class="add"><button class="btn addTrk" data-song="${id}">＋ Track</button><button class="btn addTempo" data-song="${id}">＋ Tempo change</button></div>`;
     h+=`</div><div class="ph"></div></div>`;
     sc.insertAdjacentHTML('beforeend',h);
   });
-  sc.scrollTop=keepT; sc.scrollLeft=keepL;
+  sc.scrollTop=keepT; sc.scrollLeft=keepL; viewM=null;
   wireVerSelects(sc); wireAltSelects(sc);
   sc.querySelectorAll('.cgear').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const so=songs.find(x=>x.id===b.dataset.song); b.dataset.kind==='cues'?openCuePanel(so):openClickPanel(so); });
   sc.querySelectorAll('.fh').forEach(hd=>hd.oncontextmenu=e=>{ e.preventDefault(); songMenu(e,hd.closest('.folder').dataset.id,'list'); });
@@ -1391,13 +1395,13 @@ function renderFolders(){
   sc.querySelectorAll('canvas.rcv').forEach(drawRuler);
   sc.querySelectorAll('canvas.fgrid').forEach(drawGrid);
   wireVol(sc);
-  const scrub=(el,s)=>{ el.onpointerdown=e=>{ if(e.button!==0) return; const r=()=>el.getBoundingClientRect(); locate(s,(e.clientX-r().left)/PXS); el.setPointerCapture(e.pointerId); el.onpointermove=m=>locate(s,(m.clientX-r().left)/PXS); el.onpointerup=()=>el.onpointermove=null; }; };
+  const scrub=(el,s)=>{ el.onpointerdown=e=>{ if(e.button!==0) return; const r=()=>el.getBoundingClientRect(); locate(s,snapT(s,(e.clientX-r().left)/PXS,e.altKey)); el.setPointerCapture(e.pointerId); el.onpointermove=m=>locate(s,snapT(s,(m.clientX-r().left)/PXS,m.altKey)); el.onpointerup=()=>el.onpointermove=null; }; };
   sc.querySelectorAll('.ruler .lane').forEach(l=>scrub(l,songs.find(x=>x.id===l.dataset.song)));
-  sc.querySelectorAll('.trk canvas').forEach(c=>{ if(wireRegLane(c)) return; if(wireClipLane(c)) return; c.onclick=e=>{ const s=songs.find(x=>x.id===c.dataset.song); locate(s,(e.clientX-c.getBoundingClientRect().left)/PXS); }; });
+  sc.querySelectorAll('.trk canvas').forEach(c=>{ if(wireRegLane(c)) return; if(wireClipLane(c)) return; c.onclick=e=>{ const s=songs.find(x=>x.id===c.dataset.song); locate(s,snapT(s,lx(c,e)/PXS,e.altKey)); }; });
   sc.querySelectorAll('.freg').forEach(f=>f.onclick=e=>{ const s=songs.find(x=>x.id===f.dataset.song); locate(s,(e.clientX-f.getBoundingClientRect().left)/PXS); });
   sc.querySelectorAll('.secs .lane').forEach(wireSecLane);
   sc.querySelectorAll('.lhadd').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const s=songs.find(x=>x.id===b.dataset.song); addSecAt(s,playId===s.id?barAtTime(s,pos):1); });
-  lcd(); renderMixer();
+  updateGridSel(); lcd(); renderMixer();
 }
 let seed=11; const rnd=()=>{seed=(seed*16807)%2147483647;return seed/2147483647;};
 const energy={intro:.35,verse:.55,pre:.7,chorus:1,bridge:.5,outro:.3,turn:.8};
@@ -1407,9 +1411,23 @@ function clip(g,x,w,H,col,label,off){ const top=3,h=H-6,r=6; g.fillStyle=off?'rg
   g.strokeStyle=off?'rgba(255,255,255,.08)':hexA(col,.5); g.lineWidth=1; g.stroke();
   if(H>=40&&label){ g.save(); g.beginPath(); g.roundRect(x+1,top+.5,w-2,h-1,r); g.clip(); g.fillStyle=off?'rgba(255,255,255,.06)':hexA(col,.42); g.fillRect(x,top,w,15); g.restore();
     g.fillStyle=off?'rgba(235,235,245,.45)':'rgba(255,255,255,.95)'; g.font='600 10.5px -apple-system, "SF Pro Text", Inter, sans-serif'; g.save(); g.beginPath(); g.rect(x,top,Math.max(0,w-6),15); g.clip(); g.fillText(label,x+8,top+11); g.restore(); return top+16; } return top+2; }
+// Lanes draw only what's on screen: each canvas is as wide as the visible part of its lane and moves with the
+// scroll (translateX), drawing in lane coordinates. A canvas can't be wider than 32,767 px, which a long song
+// passes at deep zoom. lx(): an event's x in lane coordinates.
+// The scroll position and visible width, read once per task (reading them after resizing a canvas would
+// force a layout per lane).
+let viewM=null; function viewMetrics(){ if(!viewM){ const sc=$('scroller'); viewM={sl:sc.scrollLeft,w:sc.clientWidth-headW()+2}; Promise.resolve().then(()=>{ viewM=null; }); } return viewM; }
+function laneView(cv){ const full=+cv.dataset.w||1, vm=viewMetrics(), vw=Math.max(1,Math.min(full,vm.w)), vx=Math.max(0,Math.min(full-vw,vm.sl));
+  if(cv.width!==vw){ cv.width=vw; cv.style.width=vw+'px'; } cv.dataset.vx=vx; cv.style.transform=`translateX(${vx}px)`; const g=cv.getContext('2d'); g.setTransform(1,0,0,1,-vx,0); return {g,vx,vw}; }
+const lx=(cv,e)=>e.offsetX+(+cv.dataset.vx||0);
+let viewRaf=0;
+function redrawView(force){ const sc=$('scroller'), r=sc.getBoundingClientRect(); viewM=null; const vm=viewMetrics(), todo=[];
+  sc.querySelectorAll('canvas[data-t],canvas.rcv,canvas.fgrid').forEach(cv=>{ const full=+cv.dataset.w||1, want=Math.max(0,Math.min(full-Math.min(full,vm.w),vm.sl));
+    if(!force&&+cv.dataset.vx===want) return; const b=cv.getBoundingClientRect(); if(b.bottom<r.top-40||b.top>r.bottom+40){ cv.dataset.vx=-1; return; } todo.push(cv); });
+  todo.forEach(cv=>(cv.classList.contains('rcv')?drawRuler:cv.classList.contains('fgrid')?drawGrid:drawLane)(cv)); } // all reads first, then draw
 function drawLane(cv){
   const s=songs.find(x=>x.id===cv.dataset.song), t=s.tracks[+cv.dataset.t], role=isMidiTrack(s,t)?'midi':ROLE[t];
-  const g=cv.getContext('2d'), H=cv.height, W=cv.width; g.clearRect(0,0,W,H);
+  const {g,vx,vw}=laneView(cv), H=cv.height, W=+cv.dataset.w; g.clearRect(vx,0,vw,H);
   const off=role!=='midi'&&isOff(s,t), AW=s.audio*PXS, c=role==='midi'?'#5aa9ff':(TCOL[t]||'#9aa0aa');
   const y0=clip(g,0,AW,H,role==='click'||role==='cues'?'#7d8696':c,role==='midi'?t:role==='click'?'Click (generated)':role==='cues'?'Cues (generated)':t,off), y1=H-4, mid=(y0+y1)/2, half=(y1-y0)/2-1;
   const secAtT=sec=>{ for(const p of s.secPos){ const a=s.bars[p.start-1].t,b=s.bars[p.start-1+p.bars].t; if(sec>=a&&sec<b) return p; } return null; };
@@ -1440,7 +1458,7 @@ function drawLane(cv){
       // waveform: a smooth peak envelope with an RMS core, drawn as one mirrored shape (Logic / Ableton style)
       // In the app, a stem's real peaks (window.SLW: null while they load); the simulation is for the browser.
       const real=window.SLW&&(s.files||{})[t]?SLW.get(s,t,PXS):undefined;
-      const X0=Math.ceil(x0)+2, X1=Math.floor(x1)-2; if(X1>X0&&real!==undefined){
+      const X0=Math.max(Math.ceil(x0)+2,Math.floor(vx)-1), X1=Math.min(Math.floor(x1)-2,Math.ceil(vx+vw)+1); if(X1>X0&&real!==undefined){
         const pk=[]; if(real){ const d=real.data, ps=real.perSec, amp0=Math.min(1.6,base*linOf(cl.gain));
           for(let X=X0;X<=X1;X++){ const tt=X/PXS, src=tt-cl.start+cl.off; let i=Math.floor(src*ps), j=Math.max(i+1,Math.ceil((src+1/PXS)*ps)), m=0;
             if(i<0) i=0; if(j>d.length) j=d.length; for(;i<j;i++) if(d[i]>m) m=d[i];
@@ -1494,9 +1512,32 @@ function clipsOf(s,t){ s.clips=s.clips||{}; if(!s.clips[t]) s.clips[t]=[{id:clip
 function fadeCurve(u){ if(u<=0) return 0; if(u>=1) return 1; const s=(Math.sqrt(.16+2.4*u)-.4)/1.2; return s*(2-s); }
 function clipEnv(cl,tt){ let v=1; if(cl.fi>0&&tt<cl.start+cl.fi) v*=fadeCurve((tt-cl.start)/cl.fi); if(cl.fo>0&&tt>cl.end-cl.fo) v*=fadeCurve((cl.end-tt)/cl.fo); return v; }
 function clipAt(s,t,time){ return clipsOf(s,t).find(c=>time>=c.start&&time<c.end); }
-function gridStep(s){ const b=s.bars[0], beat=b.dur/b.sig[0]; return beat*PXS>=8?'beat':'bar'; }
-function snapT(s,time,free){ if(free) return Math.round(time*1000)/1000; const g=gridStep(s); let best=time,bd=1e9;
-  s.bars.slice(0,s.total+1).forEach(b=>{ (g==='beat'?b.beatT:[b.t]).forEach(x=>{ const d=Math.abs(x-time); if(d<bd){ bd=d; best=x; } }); }); if(Math.abs(s.audio-time)<bd) best=s.audio; return best; }
+// ---------- grid: bar, note values (in quarter notes, triplets = 2/3) or Auto (follows the zoom) ----------
+// Grid points follow the tempo map: within a bar, a position in quarter notes maps onto its beats (beatT), so
+// meter changes (7/8...) and tempo changes / ramps land exactly where the click and the engine put them.
+let GRID='auto', SNAP=true;
+const GRIDS=[['auto','Auto'],['bar','Bar'],['1/2','1/2'],['1/4','1/4'],['1/8','1/8'],['1/16','1/16'],['1/2T','1/2 triplet'],['1/4T','1/4 triplet'],['1/8T','1/8 triplet'],['1/16T','1/16 triplet']];
+const gridQOf=v=>{ if(v==='bar') return 'bar'; const m=v.match(/^1\/(\d+)(T?)$/); return 4/ +m[1]*(m[2]?2/3:1); };
+// Auto: the finest of 1/16, 1/8, 1/4, 1/2 that's at least 14 px wide at this zoom (else bars).
+function gridName(s){ if(GRID!=='auto') return GRID; const b=(s&&s.bars&&s.bars[0])||null; if(!b) return '1/4'; const qSec=b.dur/b.sig[0]*b.sig[1]/4;
+  for(const v of ['1/16','1/8','1/4','1/2']) if(qSec*gridQOf(v)*PXS>=14) return v; return 'bar'; }
+const gridQ=s=>gridQOf(gridName(s));
+const gridLabel=s=>{ const v=gridName(s); return v==='bar'?'bar':v.replace('T',' triplet')+' note'; };
+// The time of a position q (in quarter notes from the bar's start) within bar b.
+function qTime(b,q){ const u=q*b.sig[1]/4, k=Math.min(b.sig[0]-1,Math.floor(u+1e-9)), f=u-k, t0=b.beatT[k], t1=k+1<b.beatT.length?b.beatT[k+1]:b.t+b.dur; return t0+f*(t1-t0); }
+// Grid points inside bar b (its start first).
+function barGrid(s,b){ const g=gridQ(s); if(g==='bar') return [b.t]; const Q=b.sig[0]*4/b.sig[1], out=[]; for(let k=0;k*g<Q-1e-6;k++) out.push(qTime(b,k*g)); return out; }
+// Index of the bar containing time (binary search over s.bars).
+function barIdx(s,time){ let lo=0,hi=Math.min(s.bars.length,s.total+1)-1; while(lo<hi){ const m=(lo+hi+1)>>1; if(s.bars[m].t<=time+1e-9) lo=m; else hi=m-1; } return lo; }
+// Snapped time: the nearest grid point (or the song's end); free (Alt) or Snap off: as is, to the millisecond.
+function snapT(s,time,free){ if(free||!SNAP) return Math.round(time*1000)/1000; const i=barIdx(s,time); let best=time,bd=1e9;
+  for(const b of [s.bars[i-1],s.bars[i],s.bars[i+1]]) if(b) for(const x of barGrid(s,b)){ const d=Math.abs(x-time); if(d<bd){ bd=d; best=x; } }
+  if(Math.abs(s.audio-time)<bd) best=s.audio; return best; }
+// A time as bar + beat (1-based, fractional: 2.5 = halfway between beats 2 and 3).
+function barBeatAt(s,time){ const b=s.bars[barIdx(s,time)]; let k=0; b.beatT.forEach((x,i)=>{ if(time>=x-1e-9) k=i; }); const t1=k+1<b.beatT.length?b.beatT[k+1]:b.t+b.dur;
+  return {bar:b.bar,beat:Math.round((1+k+Math.max(0,Math.min(1,(time-b.beatT[k])/(t1-b.beatT[k]))))*1e6)/1e6}; }
+function updateGridSel(){ const sel=$('gridSel'); if(!sel) return; const s=songs.find(x=>x.id===selId)||songs[0];
+  sel.innerHTML=GRIDS.map(([v,n])=>`<option value="${v}" ${v===GRID?'selected':''}>${v==='auto'?`Auto (${(gridName(s)||'').replace('T',' T')})`:n}</option>`).join(''); }
 const posTxt=(s,time)=>{ const b=s.bars.find((bb,i)=>time>=bb.t-1e-6&&time<(s.bars[i+1]?.t??1e9)-1e-6)||s.bars[0]; let k=0; b.beatT.forEach((x,i)=>{ if(time>=x-1e-6) k=i; }); return `${b.bar}.${k+1}`; };
 function redrawTrack(s,t){ const i=s.tracks.indexOf(t); document.querySelectorAll(`canvas[data-song="${s.id}"][data-t="${i}"]`).forEach(drawLane); }
 function selectClip(s,t,cl){ if(cl){ clickOpen=false; cueOpen=false; if(pick){ const p=pick; pick=null; const so=songs.find(x=>x.id===p.song); if(so) redrawSong(so); } } const prev=selClip; selClip=cl?{song:s.id,track:t,id:cl.id}:null; if(cl) selSec=null;
@@ -1511,18 +1552,18 @@ function setPick(p){ const prev=pick; pick=p; if(p){ selClip=null; selSec=null; 
 function wireRegLane(cv){ const s=songs.find(x=>x.id===cv.dataset.song), t=s.tracks[+cv.dataset.t], k=laneMenuFor(s,t); if(!k) return false; cv.onclick=null;
   const xOf=bar=>s.bars[Math.min(bar,s.total+1)-1].t*PXS;
   if(k==='cue'){ const hit=x=>{ const g=cv.getContext('2d'); g.font='600 10.5px Inter, sans-serif'; return cuesOf(s).find(c=>x>=xOf(c.bar)-3&&x<=xOf(c.bar)+g.measureText(c.text).width+14); };
-    cv.onpointerdown=e=>{ if(e.button!==0) return; const c=hit(e.offsetX); if(!c){ setPick(null); locate(s,e.offsetX/PXS); return; } setPick({kind:'cue',song:s.id,track:t,id:c.id}); const sx=e.clientX, ob=c.bar, pre=ser(); let mv=false;
+    cv.onpointerdown=e=>{ if(e.button!==0) return; const c=hit(lx(cv,e)); if(!c){ setPick(null); locate(s,snapT(s,lx(cv,e)/PXS,e.altKey)); return; } setPick({kind:'cue',song:s.id,track:t,id:c.id}); const sx=e.clientX, ob=c.bar, pre=ser(); let mv=false;
       cv.setPointerCapture(e.pointerId); cv.onpointermove=m=>{ if(Math.abs(m.clientX-sx)<3&&!mv) return; mv=true; c.bar=Math.max(1,Math.min(s.total,nearestBoundary(s,(xOf(ob)+m.clientX-sx)/PXS))); drawLane(cv); showTip(`“${c.text}” at bar ${c.bar}`,m); };
       cv.onpointerup=()=>{ cv.onpointermove=null; hideTip(); if(mv){ undoS.push(pre); redoS=[]; } }; };
-    cv.ondblclick=e=>{ const c=hit(e.offsetX), r=cv.getBoundingClientRect(); if(c){ floatInput(r.left+xOf(c.bar),r.top+r.height/2-12,160,24,c.text,v=>{ if(v){ snap(); c.text=v; drawLane(cv); } }); return; }
-      const bar=barAtTime(s,e.offsetX/PXS); floatInput(r.left+xOf(bar),r.top+r.height/2-12,160,24,'',v=>{ if(!v) return; snap(); const n={id:'c'+regSeq++,bar,text:v}; cuesOf(s).push(n); sayCue(v); setPick({kind:'cue',song:s.id,track:t,id:n.id}); drawLane(cv); }); };
-    cv.oncontextmenu=e=>{ e.preventDefault(); const c=hit(e.offsetX); if(!c) return; setPick({kind:'cue',song:s.id,track:t,id:c.id}); ctxMenu(e,[{label:'Rename…',icon:'✎',act:()=>cv.ondblclick({offsetX:e.offsetX})},{label:'Delete cue',icon:'⌫',danger:true,act:()=>{ snap(); s.cues=cuesOf(s).filter(x=>x!==c); pick=null; drawLane(cv); }}]); };
+    cv.ondblclick=e=>{ const c=hit(lx(cv,e)), r=cv.getBoundingClientRect(); if(c){ floatInput(r.left-(+cv.dataset.vx||0)+xOf(c.bar),r.top+r.height/2-12,160,24,c.text,v=>{ if(v){ snap(); c.text=v; drawLane(cv); } }); return; }
+      const bar=barAtTime(s,lx(cv,e)/PXS); floatInput(r.left-(+cv.dataset.vx||0)+xOf(bar),r.top+r.height/2-12,160,24,'',v=>{ if(!v) return; snap(); const n={id:'c'+regSeq++,bar,text:v}; cuesOf(s).push(n); sayCue(v); setPick({kind:'cue',song:s.id,track:t,id:n.id}); drawLane(cv); }); };
+    cv.oncontextmenu=e=>{ e.preventDefault(); const c=hit(lx(cv,e)); if(!c) return; setPick({kind:'cue',song:s.id,track:t,id:c.id}); ctxMenu(e,[{label:'Rename…',icon:'✎',act:()=>cv.ondblclick({offsetX:lx(cv,e)})},{label:'Delete cue',icon:'⌫',danger:true,act:()=>{ snap(); s.cues=cuesOf(s).filter(x=>x!==c); pick=null; drawLane(cv); }}]); };
     return true; }
   const list=()=>regList(s,t,k), at=x=>list().find(r=>x>=xOf(r.bar)&&x<xOf(r.bar+r.bars));
-  cv.onmousemove=e=>{ if(e.buttons) return; const r=at(e.offsetX); if(!r){ cv.style.cursor='text'; return; } const x0=xOf(r.bar),x1=xOf(r.bar+r.bars); cv.style.cursor=tool==='split'?'crosshair':(x1-e.offsetX<7||e.offsetX-x0<7)?'col-resize':'grab'; };
-  cv.onpointerdown=e=>{ if(e.button!==0) return; const r=at(e.offsetX); if(!r){ setPick(null); locate(s,e.offsetX/PXS); return; }
-    if(tool==='split'){ const b=nearestBoundary(s,e.offsetX/PXS); if(b>r.bar&&b<r.bar+r.bars){ snap(); const nr={...JSON.parse(JSON.stringify(r)),id:'r'+regSeq++,bar:b,bars:r.bar+r.bars-b}; if(k==='ck'){ nr.notes=r.notes.filter(n=>n.b>=b-r.bar).map(n=>({...n,b:n.b-(b-r.bar)})); r.notes=r.notes.filter(n=>n.b<b-r.bar); } r.bars=b-r.bar; list().push(nr); list().sort((a,b)=>a.bar-b.bar); redrawSong(s); } return; }
-    setPick({kind:k,song:s.id,track:t,id:r.id}); const x0=xOf(r.bar),x1=xOf(r.bar+r.bars), mode=x1-e.offsetX<7?'r':e.offsetX-x0<7?'l':'m', o={bar:r.bar,bars:r.bars}, sx=e.clientX, pre=ser(); let mv=false;
+  cv.onmousemove=e=>{ if(e.buttons) return; const r=at(lx(cv,e)); if(!r){ cv.style.cursor='text'; return; } const x0=xOf(r.bar),x1=xOf(r.bar+r.bars); cv.style.cursor=tool==='split'?'crosshair':(x1-lx(cv,e)<7||lx(cv,e)-x0<7)?'col-resize':'grab'; };
+  cv.onpointerdown=e=>{ if(e.button!==0) return; const r=at(lx(cv,e)); if(!r){ setPick(null); locate(s,snapT(s,lx(cv,e)/PXS,e.altKey)); return; }
+    if(tool==='split'){ const b=nearestBoundary(s,lx(cv,e)/PXS); if(b>r.bar&&b<r.bar+r.bars){ snap(); const nr={...JSON.parse(JSON.stringify(r)),id:'r'+regSeq++,bar:b,bars:r.bar+r.bars-b}; if(k==='ck'){ nr.notes=r.notes.filter(n=>n.b>=b-r.bar).map(n=>({...n,b:n.b-(b-r.bar)})); r.notes=r.notes.filter(n=>n.b<b-r.bar); } r.bars=b-r.bar; list().push(nr); list().sort((a,b)=>a.bar-b.bar); redrawSong(s); } return; }
+    setPick({kind:k,song:s.id,track:t,id:r.id}); const x0=xOf(r.bar),x1=xOf(r.bar+r.bars), mode=x1-lx(cv,e)<7?'r':lx(cv,e)-x0<7?'l':'m', o={bar:r.bar,bars:r.bars}, sx=e.clientX, pre=ser(); let mv=false;
     const others=list().filter(q=>q!==r), lo=Math.max(1,...others.filter(q=>q.bar<r.bar).map(q=>q.bar+q.bars)), hi=Math.min(s.total+1,...others.filter(q=>q.bar>r.bar).map(q=>q.bar));
     const evs=k==='mreg'?evIn(s.midi[t],r).map(ev=>[ev,ev.bar]):[];
     cv.setPointerCapture(e.pointerId);
@@ -1532,10 +1573,10 @@ function wireRegLane(cv){ const s=songs.find(x=>x.id===cv.dataset.song), t=s.tra
       else { const nb=Math.max(lo,Math.min(o.bar+o.bars-1,nearestBoundary(s,(x0+dx)/PXS))); if(k==='ck'){ const d=nb-r.bar; r.notes=r.notes.map(n=>({...n,b:n.b-d})).filter(n=>n.b>=0); } r.bar=nb; r.bars=o.bar+o.bars-nb; }
       drawLane(cv); showTip(`bars ${r.bar}–${r.bar+r.bars-1} (${r.bars})`,m); };
     cv.onpointerup=()=>{ cv.onpointermove=null; hideTip(); if(mv){ undoS.push(pre); redoS=[]; if(k==='ck'&&mode==='r'&&r.bars>o.bars){ const extra={...r,notes:[]}; fillCk(s,extra,1); r.notes=[...r.notes,...extra.notes.filter(n=>n.b>=o.bars)]; drawLane(cv); } } }; };
-  cv.ondblclick=e=>{ const r=at(e.offsetX); if(r){ if(k==='mreg') openMidi(s.id,t); else openCkEd(s,r); return; }
-    const b=barAtTime(s,e.offsetX/PXS), others=list(), nx=Math.min(s.total+1,...others.filter(q=>q.bar>b).map(q=>q.bar)); if(others.some(q=>b>=q.bar&&b<q.bar+q.bars)) return; snap();
+  cv.ondblclick=e=>{ const r=at(lx(cv,e)); if(r){ if(k==='mreg') openMidi(s.id,t); else openCkEd(s,r); return; }
+    const b=barAtTime(s,lx(cv,e)/PXS), others=list(), nx=Math.min(s.total+1,...others.filter(q=>q.bar>b).map(q=>q.bar)); if(others.some(q=>b>=q.bar&&b<q.bar+q.bars)) return; snap();
     const r2={id:'r'+regSeq++,bar:b,bars:Math.max(1,Math.min(k==='ck'?s.total+1-b:4,nx-b))}; if(k==='ck') fillCk(s,r2,1); list().push(r2); list().sort((a,b)=>a.bar-b.bar); setPick({kind:k,song:s.id,track:t,id:r2.id}); };
-  cv.oncontextmenu=e=>{ e.preventDefault(); const r=at(e.offsetX); if(!r) return; setPick({kind:k,song:s.id,track:t,id:r.id});
+  cv.oncontextmenu=e=>{ e.preventDefault(); const r=at(lx(cv,e)); if(!r) return; setPick({kind:k,song:s.id,track:t,id:r.id});
     ctxMenu(e,[...(k==='ck'?[{label:'Edit beats…',icon:'▦',act:()=>openCkEd(s,r)},{label:'Fill with quarter notes',icon:'♩',act:()=>{ snap(); fillCk(s,r,1); drawLane(cv); }},{label:'Fill with 8ths',icon:'♫',act:()=>{ snap(); fillCk(s,r,2); drawLane(cv); }},{label:'Fill with 16ths',icon:'♬',act:()=>{ snap(); fillCk(s,r,4); drawLane(cv); }},{label:'Clear beats',icon:'○',act:()=>{ snap(); r.notes=[]; drawLane(cv); }},'-']:[{label:'Edit MIDI…',icon:'✎',act:()=>openMidi(s.id,t)},'-']),
       {label:'Copy',icon:'⧉',act:()=>doCopy()},{label:'Duplicate',icon:'⊕',act:()=>doDup()},{label:'Delete',icon:'⌫',danger:true,act:()=>doDelete()}]); };
   return true; }
@@ -1581,10 +1622,10 @@ function doDup(){ const it=curItem(); if(!it){ toast('Select something to duplic
   pasteAt(s,it.t,end); }
 function wireClipLane(cv){ const s=songs.find(x=>x.id===cv.dataset.song), t=s.tracks[+cv.dataset.t]; if(!isAudio(s,t)) return false;
   cv.onclick=null;
-  cv.onmousemove=e=>{ if(e.buttons) return; const x=e.offsetX, cl=clipAt(s,t,x/PXS); if(!cl){ cv.style.cursor='text'; return; } const x0=cl.start*PXS,x1=cl.end*PXS;
+  cv.onmousemove=e=>{ if(e.buttons) return; const x=lx(cv,e), cl=clipAt(s,t,x/PXS); if(!cl){ cv.style.cursor='text'; return; } const x0=cl.start*PXS,x1=cl.end*PXS;
     cv.style.cursor=tool==='split'?'crosshair':(e.offsetY<20&&(Math.abs(x-(x0+cl.fi*PXS))<7||Math.abs(x-(x1-cl.fo*PXS))<7))?'ew-resize':(x-x0<7||x1-x<7)?'col-resize':'grab'; };
-  cv.onpointerdown=e=>{ if(e.button!==0) return; const x=e.offsetX, time=x/PXS, cl=clipAt(s,t,time);
-    if(!cl){ selectClip(s,t,null); locate(s,time); return; }
+  cv.onpointerdown=e=>{ if(e.button!==0) return; const x=lx(cv,e), time=x/PXS, cl=clipAt(s,t,time);
+    if(!cl){ selectClip(s,t,null); locate(s,snapT(s,time,e.altKey)); return; }
     if(tool==='split'){ splitClip(s,t,cl,snapT(s,time,e.altKey)); return; }
     const x0=cl.start*PXS, x1=cl.end*PXS; let mode='move';
     if(e.offsetY<20&&Math.abs(x-(x0+cl.fi*PXS))<7) mode='fi'; else if(e.offsetY<20&&Math.abs(x-(x1-cl.fo*PXS))<7) mode='fo'; else if(x-x0<7) mode='l'; else if(x1-x<7) mode='r';
@@ -1594,8 +1635,8 @@ function wireClipLane(cv){ const s=songs.find(x=>x.id===cv.dataset.song), t=s.tr
       if(mode==='move'){ let ns=snapT(s,o.start+dx,free); const len=o.end-o.start; ns=Math.max(prevEnd,Math.min(nextStart===1e9?s.len+60:nextStart-len,ns)); cl.start=ns; cl.end=ns+len; showTip(`${t} · starts ${posTxt(s,cl.start)} (${fmtMs(cl.start)})${free?' · free':''}`,m); }
       else if(mode==='l'){ let ns=snapT(s,o.start+dx,free); ns=Math.max(prevEnd,o.start-o.off,Math.min(o.end-0.1,ns)); cl.off=o.off+(ns-o.start); cl.start=ns; cl.fi=Math.min(cl.fi,(cl.end-cl.start)/2); showTip(`Trim start · ${posTxt(s,cl.start)} · ${fmtMs(cl.end-cl.start)} long`,m); }
       else if(mode==='r'){ let ne=snapT(s,o.end+dx,free); ne=Math.min(nextStart,o.start+(fileLen(s,t)-o.off),Math.max(o.start+0.1,ne)); cl.end=ne; cl.fo=Math.min(cl.fo,(cl.end-cl.start)/2); showTip(`Trim end · ${posTxt(s,cl.end)} · ${fmtMs(cl.end-cl.start)} long`,m); }
-      else if(mode==='fi'){ cl.fi=Math.max(0,Math.min((cl.end-cl.start)/2,o.fi+dx)); showTip(`Fade in · ${Math.round(cl.fi*1000)} ms`,m); }
-      else if(mode==='fo'){ cl.fo=Math.max(0,Math.min((cl.end-cl.start)/2,o.fo-dx)); showTip(`Fade out · ${Math.round(cl.fo*1000)} ms`,m); }
+      else if(mode==='fi'){ cl.fi=Math.max(0,Math.min((cl.end-cl.start)/2,snapT(s,o.start+o.fi+dx,free)-cl.start)); showTip(`Fade in · ${Math.round(cl.fi*1000)} ms${free?' · free':''}`,m); }
+      else if(mode==='fo'){ cl.fo=Math.max(0,Math.min((cl.end-cl.start)/2,cl.end-snapT(s,o.end-o.fo+dx,free))); showTip(`Fade out · ${Math.round(cl.fo*1000)} ms${free?' · free':''}`,m); }
       drawLane(cv); };
     cv.onpointerup=()=>{ cv.onpointermove=null; hideTip(); if(moved){ undoS.push(pre); redoS=[]; renderInsp(); } }; };
   return true; }
@@ -1608,7 +1649,7 @@ function clipPanel(s){ if(!selClip||selClip.song!==s.id) return ''; const t=selC
     <div class="kv"><label>Fade out</label><div style="display:flex;gap:6px;align-items:center"><input id="cFo" type="number" min="0" step="10" value="${Math.round(cl.fo*1000)}" style="width:80px"><span class="faint" style="font-size:11px">ms</span></div></div>
     <div class="kv"><label>Clip</label><div class="seg3" id="cMute"><button data-m="0" class="${cl.mute?'':'on'}">Plays</button><button data-m="1" class="${cl.mute?'on':''}">Muted</button></div></div>
     <div class="acts"><button class="btn line" id="cSplit" title="S">Split at playhead</button><button class="btn" id="cReset">Reset track</button><button class="btn danger" id="cDel" title="Delete">Delete</button></div>
-    <p class="faint" style="font-size:11px;margin-top:10px;line-height:1.5">Drag the clip to move it, its edges to trim, the small squares at the top corners to fade. Snaps to the ${gridStep(s)}; hold Alt to place freely. Arrow keys nudge by a ${gridStep(s)} (Alt: 10 ms). Audio is never stretched.</p>
+    <p class="faint" style="font-size:11px;margin-top:10px;line-height:1.5">Drag the clip to move it, its edges to trim, the small squares at the top corners to fade. Snaps to the grid (${gridLabel(s)}${SNAP?'':', snap is off'}); hold Alt to place freely. Arrow keys nudge by one grid step (Alt: 10 ms). Audio is never stretched.</p>
   </div>`; }
 function wireClipPanel(s){ if(!$('cClose')) return; const t=selClip.track, cl=clipsOf(s,t).find(c=>c.id===selClip.id);
   $('cClose').onclick=()=>selectClip(s,t,null);
@@ -1621,19 +1662,25 @@ function wireClipPanel(s){ if(!$('cClose')) return; const t=selClip.track, cl=cl
   $('cDel').onclick=()=>delClip(s,t,cl);
   $('cReset').onclick=()=>{ s.clips[t]=null; selClip=null; clipsOf(s,t); redrawTrack(s,t); renderInsp(); }; }
 function nudgeClip(s,t,cl,dir,free){ snap(); const list=clipsOf(s,t), i=list.indexOf(cl), len=cl.end-cl.start, prevEnd=i>0?list[i-1].end:0, nextStart=i<list.length-1?list[i+1].start:1e9;
-  let ns; if(free) ns=cl.start+dir*0.01; else { const pts=[]; s.bars.slice(0,s.total+1).forEach(b=>(gridStep(s)==='beat'?b.beatT:[b.t]).forEach(x=>pts.push(x)));
+  let ns; if(free) ns=cl.start+dir*0.01; else { const i=barIdx(s,cl.start), pts=[]; for(const b of [s.bars[i-1],s.bars[i],s.bars[i+1],s.bars[i+2]]) if(b) pts.push(...barGrid(s,b));
     ns=dir>0?(pts.find(x=>x>cl.start+1e-4)??cl.start):([...pts].reverse().find(x=>x<cl.start-1e-4)??0); }
   ns=Math.max(prevEnd,Math.min(nextStart===1e9?s.len+60:nextStart-len,ns)); cl.start=ns; cl.end=ns+len; redrawTrack(s,t); renderInsp(); }
 
+// The bars on screen (from bar index a to b), for drawing.
+function barsIn(s,vx,vw){ const a=Math.max(0,barIdx(s,vx/PXS)-1), b=Math.min(s.total,barIdx(s,(vx+vw)/PXS)+1); return s.bars.slice(a,b+1); }
+// Grid lines: bars (every 4th stronger), beats, then the grid's subdivisions (only where they're 4+ px apart).
 function drawGrid(cv){ const s=songs.find(x=>x.id===cv.dataset.song), fb=cv.parentElement, W=Math.ceil(Math.max(s.len,s.audio)*PXS)+40, H=fb.offsetHeight;
-  cv.width=W; cv.height=H; cv.style.width=W+'px'; cv.style.height=H+'px'; const g=cv.getContext('2d');
-  s.bars.slice(0,s.total+1).forEach(b=>{ const X=Math.round(b.t*PXS); g.fillStyle=(b.bar-1)%4===0?'#23272e':'#181b20'; g.fillRect(X,0,1,H);
-    if(b.dur/b.sig[0]*PXS>12) b.beatT.slice(1).forEach(bt=>{ g.fillStyle='#131619'; g.fillRect(Math.round(bt*PXS),0,1,H); }); });
+  cv.dataset.w=W; cv.height=H; cv.style.height=H+'px'; const {g,vx,vw}=laneView(cv); g.clearRect(vx,0,vw,H);
+  barsIn(s,vx,vw).forEach(b=>{ const grid=barGrid(s,b), sub=grid.length>1&&(grid[1]-grid[0])*PXS>=4;
+    if(sub) grid.slice(1).forEach(x=>{ if(!b.beatT.some(bt=>Math.abs(bt-x)<1e-6)){ g.fillStyle='#111317'; g.fillRect(Math.round(x*PXS),0,1,H); } });
+    if(b.dur/b.sig[0]*PXS>8) b.beatT.slice(1).forEach(bt=>{ g.fillStyle='#15181c'; g.fillRect(Math.round(bt*PXS),0,1,H); });
+    g.fillStyle=(b.bar-1)%4===0?'#23272e':'#1b1e23'; g.fillRect(Math.round(b.t*PXS),0,1,H); });
   g.fillStyle='rgba(0,0,0,.35)'; g.fillRect(s.audio*PXS,0,W,H); }
-function drawRuler(cv){ const s=songs.find(x=>x.id===cv.dataset.song), g=cv.getContext('2d'), H=cv.height; g.clearRect(0,0,cv.width,H);
-  s.bars.slice(0,s.total+1).forEach(b=>{ const X=Math.round(b.t*PXS); g.fillStyle=(b.bar-1)%4===0?'#6b7280':'#3a3f48'; g.fillRect(X,(b.bar-1)%4===0?H-13:H-8,1,H);
-    if(b.dur/b.sig[0]*PXS>5) b.beatT.slice(1).forEach(bt=>{ g.fillStyle='#2a2f37'; g.fillRect(Math.round(bt*PXS),H-4,1,4); }); });
-  g.fillStyle='#050607'; g.fillRect(0,H-1,cv.width,1); }
+function drawRuler(cv){ const s=songs.find(x=>x.id===cv.dataset.song), H=cv.height, {g,vx,vw}=laneView(cv); g.clearRect(vx,0,vw,H);
+  barsIn(s,vx,vw).forEach(b=>{ const X=Math.round(b.t*PXS); g.fillStyle=(b.bar-1)%4===0?'#6b7280':'#3a3f48'; g.fillRect(X,(b.bar-1)%4===0?H-13:H-8,1,H);
+    if(b.dur/b.sig[0]*PXS>5) b.beatT.slice(1).forEach(bt=>{ g.fillStyle='#2a2f37'; g.fillRect(Math.round(bt*PXS),H-5,1,5); });
+    const grid=barGrid(s,b); if(grid.length>1&&(grid[1]-grid[0])*PXS>=4) grid.slice(1).forEach(x=>{ if(!b.beatT.some(bt=>Math.abs(bt-x)<1e-6)){ g.fillStyle='#22262d'; g.fillRect(Math.round(x*PXS),H-3,1,3); } }); });
+  g.fillStyle='#050607'; g.fillRect(vx,H-1,vw,1); }
 
 // ======================= INSPECTOR =======================
 // ---------- tempo editing on the timeline ----------
@@ -1824,7 +1871,8 @@ const changed=()=>{ const s=curSong(); if(s&&ed.track&&isMidiTrack(s,ed.track)){
 function blankEvent(kind,bar,beat){ const e={id:evId++,bar,beat,anchor:'free',kind};
   if(kind==='qcPreset') Object.assign(e,{bank:1,slot:'A',setlist:1}); if(kind==='qcScene') e.scene='A'; if(kind==='axPreset') e.preset=0; if(kind==='axScene') e.scene=1;
   if(kind==='pc') e.pc=0; if(kind==='cc') Object.assign(e,{cc:1,val:127}); if(kind==='note') Object.assign(e,{note:36,vel:100,len:1}); return e; }
-function nearestBeat(s,t){ let best={bar:1,beat:1,d:1e9}; s.bars.slice(0,s.total).forEach(b=>b.beatT.forEach((bt,k)=>{ const d=Math.abs(bt-t); if(d<best.d) best={bar:b.bar,beat:k+1,d}; })); return best; }
+// Where a MIDI event lands: the nearest grid point (Snap on), as bar + (fractional) beat.
+function nearestBeat(s,t){ const x=barBeatAt(s,Math.max(0,Math.min(s.bars[s.total-1].t+s.bars[s.total-1].dur-1e-6,snapT(s,t,false)))); return {bar:Math.min(x.bar,s.total),beat:x.beat}; }
 const opt=(arr,v)=>arr.map(o=>{const [val,lab]=Array.isArray(o)?o:[o,o]; return `<option value="${esc(val)}" ${String(val)===String(v)?'selected':''}>${esc(lab)}</option>`}).join('');
 const profPresets=prof=>presets.filter(p=>p.profile===prof);
 function fieldsFor(o){ // value fields for an event or a preset payload
@@ -2096,6 +2144,8 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
   setSessionName(n){ $('crumbAll').textContent=n||'Untitled session'; },
   confirm(title,body,ok,fn){ confirmBox(title,body,ok,fn); },
   // step 2: stems
+  // phase 6b: the grid (tests)
+  grid:{ snapT:(s,t,f)=>snapT(s,t,f), barGrid:(s,b)=>barGrid(s,b), name:s=>gridName(s), barBeatAt:(s,t)=>barBeatAt(s,t), evTime:(s,e)=>evTime(s,e), nearestBeat:(s,t)=>nearestBeat(s,t), set:v=>{ GRID=v; renderFolders(); }, snap:b=>{ SNAP=b; $("snapB").classList.toggle("on",b); }, zoom:z=>setZoom(z), get pxs(){ return PXS; } },
   cueCfg:s=>cueCfg(s), cueVoiceAll:()=>CUEV, pron:()=>PRON, setVoiceModel:st=>{ const was=VMODEL.state; VMODEL={...VMODEL,...st};
     if(VMODEL.state==='ready'&&cuevFresh&&!(CUEV.voice||CUEV.name)){ CUEV={...KOKORO_DEFAULT,speed:CUEV.speed||1}; cuevFresh=false; renderFolders(); }
     if(!cueOpen) return; if(was==='downloading'&&VMODEL.state==='downloading'&&$('cvDlBar')){ const pct=VMODEL.total?Math.floor(100*VMODEL.done/VMODEL.total):0; $('cvDlBar').style.width=pct+'%'; $('cvDlText').textContent=`Downloading better voices… ${pct}% (${Math.round(VMODEL.done/1e6)} of ${KOKORO_MB()} MB)`; return; }
@@ -2151,8 +2201,14 @@ $('clickBtn').onclick=()=>setClick(!$('clickBtn').classList.contains('on'));
 function setTool(t){ tool=t; document.querySelectorAll('.tl').forEach(b=>b.classList.toggle('on',b.dataset.tool===t)); document.body.classList.toggle('t-split',t==='split'); }
 document.querySelectorAll('.tl').forEach(b=>b.onclick=()=>setTool(b.dataset.tool));
 const headW=()=>parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--head'));
-function setZoom(z,ax){ const sc=$('scroller'); z=Math.max(2,Math.min(28,z)); if(z===PXS) return; if(ax==null) ax=(sc.clientWidth-headW())/2; const tAt=(sc.scrollLeft+ax)/PXS; PXS=z; $('zoom').value=z; renderFolders(); sc.scrollLeft=Math.max(0,tAt*PXS-ax); }
-$('zoom').oninput=e=>setZoom(+e.target.value); $('zIn').onclick=()=>setZoom(Math.max(PXS+1,Math.round(PXS*1.4))); $('zOut').onclick=()=>setZoom(Math.min(PXS-1,Math.round(PXS/1.4)));
+const ZMIN=2, ZMAX=480, zToSlider=z=>Math.round(1000*Math.log(z/ZMIN)/Math.log(ZMAX/ZMIN)), sliderToZ=v=>Math.round(ZMIN*Math.pow(ZMAX/ZMIN,v/1000)*100)/100;
+function setZoom(z,ax){ const sc=$('scroller'); z=Math.max(ZMIN,Math.min(ZMAX,z)); if(z===PXS) return; if(ax==null) ax=(sc.clientWidth-headW())/2; const tAt=(sc.scrollLeft+ax)/PXS; PXS=z; $('zoom').value=zToSlider(z); renderFolders(); sc.scrollLeft=Math.max(0,tAt*PXS-ax); redrawView(true); }
+$('zoom').value=zToSlider(PXS); $('zoom').oninput=e=>setZoom(sliderToZ(+e.target.value)); $('zIn').onclick=()=>setZoom(Math.max(PXS+1,Math.round(PXS*1.4))); $('zOut').onclick=()=>setZoom(Math.min(PXS-1,Math.round(PXS/1.4)));
+$('scroller').addEventListener('scroll',()=>{ if(viewRaf) return; viewRaf=requestAnimationFrame(()=>{ viewRaf=0; redrawView(false); }); },{passive:true});
+addEventListener('resize',()=>redrawView(true));
+// Grid size + Snap toggle (edit toolbar)
+$('gridSel').onchange=e=>{ GRID=e.target.value; renderFolders(); renderInsp(); };
+$('snapB').onclick=()=>{ SNAP=!SNAP; $('snapB').classList.toggle('on',SNAP); $('snapB').title=SNAP?'Snap to the grid (on). Hold Alt while dragging to place freely.':'Snap to the grid (off)'; renderInsp(); };
 $('scroller').addEventListener('wheel',e=>{ if(!(e.ctrlKey||e.metaKey)) return; e.preventDefault(); setZoom(e.deltaY<0?Math.max(PXS+1,Math.round(PXS*1.15)):Math.min(PXS-1,Math.round(PXS/1.15)),e.clientX-$('scroller').getBoundingClientRect().left-headW()); },{passive:false});
 const THS=[36,48,72]; $('thBtn').onclick=()=>{ TH=THS[(THS.indexOf(TH)+1)%THS.length]; document.documentElement.style.setProperty('--th',TH+'px'); renderFolders(); };
 let mixOpen=false;
