@@ -27,6 +27,7 @@ interface Page {
   addWords(s: Song, list: { name: string; ref: string }[], only: boolean): void;
   menu(e: { clientX: number; clientY: number }, items: (MenuItem | "-")[]): void;
   saveBox(title: string, body: string, choice: (c: "save" | "discard") => void): void;
+  about(info: { version?: string; platform?: string }): void;
   pron(): Record<string, string>; setVoiceModel(st: VoiceModel): void; setUnknownWords(list: string[]): void;
 }
 // Cue voice choice as saved (voice id + name: ids differ between computers) and an installed voice.
@@ -586,6 +587,7 @@ async function openPath(path: string) {
   remember();
   if (r.path) await checkAudio(r.path);
 }
+async function showAbout() { page().about(await SL.call("getAppInfo")); }
 async function fileMenu(at: { clientX: number; clientY: number }) {
   const mod = navigator.platform.startsWith("Mac") ? "⌘" : "Ctrl+";
   let recent: { name: string; path: string; exists: boolean }[] = [];
@@ -603,6 +605,8 @@ async function fileMenu(at: { clientX: number; clientY: number }) {
     { label: "Save As…", icon: "", key: (mod === "⌘" ? "⇧⌘" : "Ctrl+Shift+") + "S", act: () => { saveSession(true); } },
     "-",
     { label: "Close", icon: "✕", act: () => newSession("Closing the session.") },
+    "-",
+    { label: "About set.Line", icon: "ⓘ", act: () => { showAbout(); } },
   ];
   page().menu(at, items);
 }
@@ -833,6 +837,7 @@ async function main() {
   });
   SL.on("menu", (m: { cmd: string }) => {
     if (m.cmd === "open") openSession(); else if (m.cmd === "save") saveSession(false); else if (m.cmd === "saveAs") saveSession(true);
+    else if (m.cmd === "about") showAbout();
     else if (m.cmd === "new") newSession(); else if (m.cmd === "close") newSession("Closing the session.");
     else if (m.cmd === "quit") { SL.call("quitAnswered").catch(() => {}); askSave("Quitting set.Line.", () => { SL.call("quitNow").catch(() => {}); }); }
   });

@@ -52,7 +52,8 @@ jobs:
           key: voices-ort-1.19.2-kokoro-v1.0-1939ad2a-misaki-fba12365-${{ runner.os }}
 
       - name: Configure
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DSETLINE_DOWNLOADS_DIR="${{ github.workspace }}/dl" ${{ matrix.cmake_args }}
+        # Every build is version 0.1.<run number> ("Beta 0.1.<n>" on the loading window and in About).
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DSETLINE_BUILD_NUMBER=${{ github.run_number }} -DSETLINE_DOWNLOADS_DIR="${{ github.workspace }}/dl" ${{ matrix.cmake_args }}
 
       - name: Build
         run: cmake --build build --config Release --parallel
@@ -157,3 +158,82 @@ jobs:
         with:
           name: set.Line-${{ matrix.name }}
           path: set.Line-${{ matrix.name }}.zip
+
+  # After every green build on main: the "latest" prerelease, replaced, with the Mac and Windows builds, the Mac
+  # update scripts, a SHA-256 checksum file and the commits since the previous "latest" (docs/remote-mac-testing.md).
+  release:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: release-latest
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          pattern: set*
+          merge-multiple: true
+
+      - name: Publish "latest" (0.1.${{ github.run_number }})
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          V="0.1.${{ github.run_number }}"
+          cp scripts/setline-update.sh scripts/install-update-command.sh dist/
+          cd dist
+          files="set.Line-macos.zip setline-spike-macos.tar.gz set.Line-windows.zip setline-spike-windows.zip setline-update.sh install-update-command.sh"
+          ls -la $files
+          sha256sum $files > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          prev="$(git rev-list -n 1 latest 2>/dev/null || true)" # the commit the previous "latest" was built from
+          {
+            echo "set.Line $V (beta), built from ${GITHUB_SHA:0:7} on $(date -u +%Y-%m-%d)."
+            echo
+            if [ -n "$prev" ] && [ "$prev" != "$GITHUB_SHA" ]; then
+              echo "Changes since the previous \"latest\":"
+              git log --no-merges --format='- %s (%h)' "$prev..$GITHUB_SHA"
+            else
+              echo "Recent changes:"
+              git log --no-merges --format='- %s (%h)' -n 15 "$GITHUB_SHA"
+            fi
+            echo
+            echo "Mac: run setline-update. Checksums: SHA256SUMS.txt."
+          } > notes.md
+          cat notes.md
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest --prerelease --target "$GITHUB_SHA" --title "set.Line $V" --notes-file notes.md $files SHA256SUMS.txt
+
+  # The Mac update command against the release just published, installing into a temp folder (no questions).
+  mac-update:
+    needs: release
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: setline-update (install, spike, second install, rollback)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          D="$RUNNER_TEMP/Applications"; S="$RUNNER_TEMP/setline-spike"
+          bash scripts/setline-update.sh --check --repo "$GITHUB_REPOSITORY"
+          bash scripts/setline-update.sh --yes --dest "$D" --spike --spike-dest "$S" --repo "$GITHUB_REPOSITORY"
+          v="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$D/set.Line.app/Contents/Info.plist")"
+          echo "installed $v"
+          test "$v" = "0.1.${{ github.run_number }}"
+          test -f "$D/set.Line.app/Contents/Resources/setline.icns"
+          test -z "$(xattr -p com.apple.quarantine "$D/set.Line.app" 2>/dev/null || true)"
+          "$S/setline-spike" --selftest | tail -n 1
+          bash scripts/setline-update.sh --yes --dest "$D" --repo "$GITHUB_REPOSITORY"
+          test -d "$D/set.Line (previous).app"
+          bash scripts/setline-update.sh --rollback --yes --dest "$D"
+          test -d "$D/set.Line.app" && test -d "$D/set.Line (previous).app"
+          echo "MAC UPDATE OK"

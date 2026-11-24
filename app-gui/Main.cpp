@@ -177,7 +177,11 @@ public:
         };
        #if JUCE_MAC
         menu = std::make_unique<MacMenu>(*bridge);
-        juce::MenuBarModel::setMacMainMenu(menu.get());
+        {
+            juce::PopupMenu apple; // set.Line > About set.Line (the page shows the build)
+            apple.addItem(juce::PopupMenu::Item("About set.Line").setID(9).setAction([this] { sendMenu("about"); }));
+            juce::MenuBarModel::setMacMainMenu(menu.get(), &apple);
+        }
        #endif
     }
 

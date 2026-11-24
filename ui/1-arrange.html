@@ -1084,6 +1084,11 @@ function saveBox(title,body,choice){ const bg=document.createElement('div'); bg.
   const key=e=>{ if(e.key==='Escape'){ e.stopPropagation(); close(); } if(e.key==='Enter'){ e.stopPropagation(); e.preventDefault(); close(); choice('save'); } };
   document.addEventListener('keydown',key,true); bg.onclick=e=>{ if(e.target===bg) close(); }; bg.querySelector('[data-a=no]').onclick=close;
   bg.querySelector('[data-a=discard]').onclick=()=>{ close(); choice('discard'); }; bg.querySelector('[data-a=save]').onclick=()=>{ close(); choice('save'); }; bg.querySelector('[data-a=save]').focus(); }
+// About set.Line: the wordmark, the build ("Beta 0.1.<n>"), where it runs.
+function aboutBox(info){ const bg=document.createElement('div'); bg.className='cfbg'; const v=String(info.version||''), beta=/\.0$/.test(v)?v.replace(/\.0$/,'')+' (dev build)':v;
+  bg.innerHTML=`<div class="cfbox" style="text-align:center"><img src="brand/setline-wordmark-dark-bg.svg" alt="set.Line" style="height:46px;width:auto;display:block;margin:6px auto 14px" draggable="false"><b id="aboutVer">Beta ${esc(beta)}</b><p>${esc(info.platform||'')}<br>Third-party licences: THIRD_PARTY.md and the licenses folder next to the app.</p><div class="cfa"><button class="btn pri" data-a="ok">OK</button></div></div>`;
+  document.body.appendChild(bg); const close=()=>{ bg.remove(); document.removeEventListener('keydown',key,true); }; const key=e=>{ if(e.key==='Escape'||e.key==='Enter'){ e.stopPropagation(); close(); } };
+  document.addEventListener('keydown',key,true); bg.onclick=e=>{ if(e.target===bg) close(); }; bg.querySelector('[data-a=ok]').onclick=close; }
 function toast(msg,undo){ let t=$('toastE'); if(!t){ t=document.createElement('div'); t.id='toastE'; t.className='toastE'; document.body.appendChild(t); }
   t.innerHTML=`<span></span>${undo?'<button>Undo</button>':''}`; t.firstChild.textContent=msg; t.classList.add('show'); clearTimeout(toast.h);
   if(undo) t.querySelector('button').onclick=()=>{ t.classList.remove('show'); undo(); }; toast.h=setTimeout(()=>t.classList.remove('show'),undo?7000:2600); }
@@ -2260,7 +2265,7 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
     undoS=[]; redoS=[]; if(!songs.find(x=>x.id===selId)) selId=songs[0]&&songs[0].id; open.clear(); if(selId) open.add(selId); refresh(); },
   setSessionName(n){ $('crumbAll').textContent=n||'Untitled session'; },
   setDirty(d){ const m=$('dirtyMk'); if(m) m.hidden=!d; },
-  menu:(e,items)=>ctxMenu(e,items), saveBox:(t,b,c)=>saveBox(t,b,c),
+  menu:(e,items)=>ctxMenu(e,items), saveBox:(t,b,c)=>saveBox(t,b,c), about:info=>aboutBox(info),
   // a new show: the set's cue voice starts fresh (Kokoro Heart once downloaded, else the computer's)
   freshShow(){ CUEV={voice:'',name:'',speed:1}; cuevFresh=true; CLICKT={}; PRON={}; UNKNOWN=[]; CUEWORDS=[]; if(VMODEL.state==='ready'){ CUEV={...KOKORO_DEFAULT}; cuevFresh=false; } },
   confirm(title,body,ok,fn){ confirmBox(title,body,ok,fn); },
