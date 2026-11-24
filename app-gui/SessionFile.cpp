@@ -132,8 +132,41 @@ void SessionFile::chooseLocation(Done done)
     });
 }
 
+namespace {
+juce::File backupFolder(const juce::File& show) { return show.getParentDirectory().getChildFile("Backups"); }
+juce::Array<juce::File> backupsOf(const juce::File& show)
+{
+    auto list = backupFolder(show).findChildFiles(juce::File::findFiles, false, show.getFileNameWithoutExtension() + " ????-??-?? ??-??-??*" + SessionFile::extension);
+    list.sort(); // the timestamp sorts oldest first
+    return list;
+}
+} // namespace
+
+juce::var SessionFile::backups() const
+{
+    juce::Array<juce::var> out;
+    if (current == juce::File()) return out;
+    auto list = backupsOf(current);
+    for (int i = list.size(); --i >= 0;) {
+        const auto& b = list.getReference(i);
+        out.add(result({ { "name", b.getFileNameWithoutExtension() }, { "path", b.getFullPathName() },
+                         { "time", (double) b.getLastModificationTime().toMilliseconds() }, { "size", (double) b.getSize() } }));
+    }
+    return out;
+}
+
 juce::var SessionFile::write(const juce::File& f, const juce::String& text)
 {
+    // Automatic backup: the show file as it was, if this save changes it (Backups/, the last 10).
+    if (f.existsAsFile() && f.loadFileAsString() != text) {
+        const auto dir = backupFolder(f);
+        if (dir.createDirectory()) {
+            const auto b = dir.getChildFile(f.getFileNameWithoutExtension() + " " + juce::Time::getCurrentTime().formatted("%Y-%m-%d %H-%M-%S") + extension).getNonexistentSibling();
+            f.copyFileTo(b);
+            auto list = backupsOf(f);
+            for (int i = 0; i < list.size() - keepBackups; ++i) list.getReference(i).deleteFile();
+        }
+    }
     // Write next to the file, then replace it: a crash mid-save never leaves a half-written session.
     juce::TemporaryFile tmp(f);
     if (! tmp.getFile().replaceWithText(text, false, false, "\n") || ! tmp.overwriteTargetFileWithTemporary())

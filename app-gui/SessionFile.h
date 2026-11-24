@@ -26,6 +26,10 @@ public:
     // Save into the Shows folder by name: <Shows>/<name>/<name>.setline (portable name). create: makes the folder.
     // -> {path, name, folder, exists}
     juce::var inShows(const juce::String& name, bool create);
+    // Automatic backups: before a save replaces the show file, the previous one goes to <show>/Backups as
+    // "<name> YYYY-MM-DD HH-MM-SS.setline"; the last 10 are kept. -> [{name, path, time (ms), size}] newest first
+    juce::var backups() const;
+    static constexpr int keepBackups = 10;
     // Writes text to path (atomically) and makes it the current session. -> {name, path} | {error}
     juce::var writeTo(const juce::File& f, const juce::String& text) { return write(f, text); }
 

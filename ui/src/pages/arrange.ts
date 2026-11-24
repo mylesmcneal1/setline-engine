@@ -281,6 +281,7 @@ const SLE = {
   listen: (req: Partial<ListenState>) => setListen(req),
   diagnostics: (how: "copy" | "save") => diagnostics(how),
   preferences: () => preferences(),
+  openBackup: () => openBackup(),
   listenMenu: (at: { clientX: number; clientY: number }) => listenMenu(at),
   fileMenu: (at: { clientX: number; clientY: number }) => fileMenu(at),
   // ---- step 2: stems ----
@@ -644,6 +645,27 @@ async function askShowName(as: boolean): Promise<string> {
   if (made.error || !made.path) { page().toast(made.error || "Couldn't save"); return ""; }
   return made.path;
 }
+// File > Open Backup… (6c item 4): the show's automatic backups, newest first. Opening one replaces what's on
+// screen (after the usual Save question) and leaves it unsaved: Save makes it the show again, nothing is
+// overwritten before that.
+async function openBackup(at?: { clientX: number; clientY: number }) {
+  const list = await SL.call<{ name: string; path: string; time: number; size: number }[]>("listBackups");
+  if (!list.length) { page().toast(doc.name ? "No backups yet: one is made each time a save changes the show" : "Save the show first: backups are kept next to it"); return; }
+  const when = (t: number) => new Date(t).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  page().menu(at || { clientX: 80, clientY: 60 }, [
+    { label: `Backups of “${doc.name}” (newest first)`, icon: "", dis: true, act: () => {} },
+    ...list.map((b) => ({ label: when(b.time), icon: "🕘", act: () => askSave("Opening a backup replaces what’s on screen.", async () => {
+      const r = await SL.call<{ text?: string; error?: string }>("readBackup", { path: b.path });
+      if (r.error || !r.text) { page().toast(r.error || "Couldn't read that backup"); return; }
+      applySession(r.text);
+      doc = { name: doc.name, savedText: "" }; // unsaved until you save it
+      page().rerender();
+      remember();
+      loadedKey = null;
+      page().toast(`Opened the backup from ${when(b.time)}. Save to make it the show again.`);
+    }) })),
+  ]);
+}
 // Preferences (6c item 3): where new shows go, the Library, the logs.
 async function preferences() {
   const f = await SL.call<Folders>("folders");
@@ -738,6 +760,7 @@ async function fileMenu(at: { clientX: number; clientY: number }) {
     { label: "Save", icon: "💾", key: mod + "S", act: () => { saveSession(false); } },
     { label: "Save As…", icon: "", key: (mod === "⌘" ? "⇧⌘" : "Ctrl+Shift+") + "S", act: () => { saveSession(true); } },
     "-",
+    { label: "Open Backup…", icon: "🕘", dis: !doc.name, act: () => { openBackup(at); } },
     { label: "Close", icon: "✕", act: () => newSession("Closing the session.") },
     "-",
     { label: "Preferences…", icon: "⚙", key: mod + ",", act: () => { preferences(); } },
@@ -982,6 +1005,7 @@ async function main() {
     else if (m.cmd === "about") showAbout();
     else if (m.cmd === "retryShow") retryStartShow();
     else if (m.cmd === "prefs") preferences();
+    else if (m.cmd === "openBackup") openBackup();
     else if (m.cmd === "copyDiagnostics") diagnostics("copy"); else if (m.cmd === "saveDiagnostics") diagnostics("save");
     else if (m.cmd === "new") newSession(); else if (m.cmd === "close") newSession("Closing the session.");
     else if (m.cmd === "quit") { SL.call("quitAnswered").catch(() => {}); askSave("Quitting set.Line.", () => { SL.call("quitNow").catch(() => {}); }); }

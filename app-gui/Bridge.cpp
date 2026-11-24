@@ -200,6 +200,17 @@ Bridge::Options Bridge::addTo(Options o)
         f.startAsProcess(); // opens it in Explorer / Finder
         auto* r = new juce::DynamicObject(); r->setProperty("path", f.getFullPathName()); return juce::var(r);
     });
+    // Automatic backups (SessionFile.h): the list, and one backup's text (opened as the show, unsaved).
+    o = add(o, "listBackups", [this](const juce::var&) { return session.backups(); });
+    o = add(o, "readBackup", [this](const juce::var& a) {
+        const juce::File f(a["path"].toString());
+        auto* r = new juce::DynamicObject();
+        // only a file in this show's Backups folder
+        if (session.file() == juce::File() || f.getParentDirectory() != session.file().getParentDirectory().getChildFile("Backups") || ! f.existsAsFile())
+            r->setProperty("error", "That backup isn't there any more.");
+        else { r->setProperty("text", f.loadFileAsString()); applog::line("Opened backup " + f.getFullPathName()); }
+        return juce::var(r);
+    });
     o = add(o, "forgetLastShow", [this](const juce::var&) { session.forgetLast(); return juce::var(true); });
     o = add(o, "getAudioSetup", [this](const juce::var& a) { return audio.getSetup(a.isObject() && (bool) a["rescan"]); });
     o = add(o, "setAudioSetup", [this](const juce::var& a) {

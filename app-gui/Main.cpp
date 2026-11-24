@@ -287,6 +287,7 @@ private:
             m.addItem(juce::PopupMenu::Item("Save").setID(2).setAction([this] { send("save"); }));
             m.addItem(juce::PopupMenu::Item("Save As...").setID(3).setAction([this] { send("saveAs"); }));
             m.addSeparator();
+            m.addItem(juce::PopupMenu::Item("Open Backup...").setID(6).setAction([this] { send("openBackup"); }));
             m.addItem(juce::PopupMenu::Item("Close").setID(5).setAction([this] { send("close"); }));
             return m;
         }
