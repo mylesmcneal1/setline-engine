@@ -150,15 +150,20 @@ private:
         testCues = std::make_unique<Cues>();
         testThread = std::thread([this, dir] {
             juce::StringArray report;
+            auto progress = [](const juce::String& m) { std::fprintf(stderr, "speech-test: %s\n", m.toRawUTF8()); std::fflush(stderr); };
+            progress("listing voices");
             const auto list = testCues->voices();
+            progress(juce::String(list.size()) + " voices");
             report.add("voices: " + juce::String(list.size()));
             int spoken = 0;
             auto speak = [&](const Cues::Choice& c, const juce::String& label) {
+                progress("speaking with " + label);
                 juce::String err;
                 bool fellBack = false;
                 const auto t0 = juce::Time::getMillisecondCounterHiRes();
                 auto a = testCues->get("Verse one", c, 48000, err, fellBack);
                 const auto ms = juce::Time::getMillisecondCounterHiRes() - t0;
+                progress(a ? "spoken" : "failed: " + err);
                 if (! a) { report.add("FAIL " + label + ": " + err); return; }
                 float peak = 0;
                 for (float x : *a) peak = juce::jmax(peak, std::abs(x));

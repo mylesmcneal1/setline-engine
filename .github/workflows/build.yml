@@ -80,7 +80,12 @@ jobs:
         shell: bash
         run: |
           if [ -d "$APP/Contents/MacOS" ]; then EXE="$APP/Contents/MacOS/set.Line"; else EXE="$APP"; fi
-          "$EXE" --speech-test speech-test || status=$?
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            # under lldb: a crash prints every thread's backtrace
+            SETLINE_SPEECH_DEBUG=1 lldb --batch -o run -k "thread backtrace all" -k "quit 1" -- "$EXE" --speech-test speech-test || status=$?
+          else
+            "$EXE" --speech-test speech-test || status=$?
+          fi
           cat speech-test/speech-test.txt || true
           grep -q "SPEECH OK" speech-test/speech-test.txt
 
