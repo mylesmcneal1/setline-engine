@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>11 Loading: animated</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#8a909b}a:hover{color:#e9ebef}
+@keyframes p0{0%,0%{opacity:1}0%,100%{opacity:0}}
+@keyframes w0{0%,0%{opacity:0}0%,11%{opacity:1}12%,100%{opacity:0}}
+@keyframes k0{0%,11%{opacity:0}12%,93%{opacity:1}100%{opacity:0}}
+@keyframes l0{0%,0%{color:#8a909b}0%,93%{color:#e9ebef}100%{color:#8a909b}}
+.p0{animation:p0 6.5s linear infinite} .w0{animation:w0 6.5s linear infinite} .k0{animation:k0 6.5s linear infinite} .l0{animation:l0 6.5s linear infinite}
+@keyframes p1{0%,11%{opacity:1}12%,100%{opacity:0}}
+@keyframes w1{0%,11%{opacity:0}12%,27%{opacity:1}28%,100%{opacity:0}}
+@keyframes k1{0%,27%{opacity:0}28%,93%{opacity:1}100%{opacity:0}}
+@keyframes l1{0%,11%{color:#8a909b}12%,93%{color:#e9ebef}100%{color:#8a909b}}
+.p1{animation:p1 6.5s linear infinite} .w1{animation:w1 6.5s linear infinite} .k1{animation:k1 6.5s linear infinite} .l1{animation:l1 6.5s linear infinite}
+@keyframes p2{0%,27%{opacity:1}28%,100%{opacity:0}}
+@keyframes w2{0%,27%{opacity:0}28%,61%{opacity:1}62%,100%{opacity:0}}
+@keyframes k2{0%,61%{opacity:0}62%,93%{opacity:1}100%{opacity:0}}
+@keyframes l2{0%,27%{color:#8a909b}28%,93%{color:#e9ebef}100%{color:#8a909b}}
+.p2{animation:p2 6.5s linear infinite} .w2{animation:w2 6.5s linear infinite} .k2{animation:k2 6.5s linear infinite} .l2{animation:l2 6.5s linear infinite}
+@keyframes p3{0%,61%{opacity:1}62%,100%{opacity:0}}
+@keyframes w3{0%,61%{opacity:0}62%,73%{opacity:1}74%,100%{opacity:0}}
+@keyframes k3{0%,73%{opacity:0}74%,93%{opacity:1}100%{opacity:0}}
+@keyframes l3{0%,61%{color:#8a909b}62%,93%{color:#e9ebef}100%{color:#8a909b}}
+.p3{animation:p3 6.5s linear infinite} .w3{animation:w3 6.5s linear infinite} .k3{animation:k3 6.5s linear infinite} .l3{animation:l3 6.5s linear infinite}
+@keyframes ph{0%{left:0%}74%{left:100%}93%{left:100%}100%{left:0%}} .ph{animation:ph 6.5s cubic-bezier(.4,0,.6,1) infinite}
+@keyframes ip{0%{transform:translateX(-22px)}74%{transform:translateX(26px)}93%{transform:translateX(26px)}100%{transform:translateX(-22px)}} .ip{animation:ip 6.5s cubic-bezier(.4,0,.6,1) infinite}
+@keyframes spin{to{transform:rotate(360deg)}} .spin{animation:spin .8s linear infinite;transform-origin:8px 8px}
+@keyframes rd{0%,76%{opacity:0}80%,93%{opacity:1}100%{opacity:0}} .rd{animation:rd 6.5s linear infinite}
+@keyframes fade{0%,95%{opacity:1}98%{opacity:0}100%{opacity:1}} .wrap{animation:fade 6.5s linear infinite}
+@keyframes clip{0%{width:0px}74%{width:608px}93%{width:608px}100%{width:0px}} .clip{animation:clip 6.5s cubic-bezier(.4,0,.6,1) infinite}
+@media (prefers-reduced-motion: reduce){.spin,.ph,.ip{animation:none}}
+</style>
+</helmet>
+<div style="width: 720px; height: 440px; box-sizing: border-box; background: #0b0c0e; color: #e9ebef; font-family: Inter, system-ui, sans-serif; display: flex; flex-direction: column; border-radius: 14px; box-shadow: inset 0 0 0 1px #22262d; overflow: hidden">
+<div class="wrap" style="flex: 1; display: flex; flex-direction: column">
+<div style="flex: 1; display: flex; align-items: center; padding: 0 56px"><div style="display: flex; align-items: flex-start; gap: 40px; flex: 1">
+<svg width="132" height="132" viewBox="0 0 100 100" role="img" aria-label="set.Line app icon"><rect width="100" height="100" rx="23" fill="#16191e"/><rect x="22" y="27" width="56" height="9" rx="3.5" fill="#6b7cff"/><rect x="22" y="40" width="40" height="9" rx="3.5" fill="#22c3a6"/><rect x="22" y="53" width="50" height="9" rx="3.5" fill="#f5a524"/><rect x="22" y="66" width="28" height="9" rx="3.5" fill="#ff5fa2"/><g class="ip"><rect x="44" y="18" width="4.5" height="66" rx="2.25" fill="#ffffff"/><path d="M41 16h10.5l-5.25 6z" fill="#ffffff"/></g></svg>
+<div style="display: flex; flex-direction: column; gap: 22px; flex: 1; margin-top: -5px">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<span style="font-weight: 700; font-size: 44px; letter-spacing: -0.045em; line-height: 1">set<span style="color: #f5a524">.</span>Line</span>
+<span style="font-size: 13px; color: #8a909b">Beta 0.1 <span class="rd" style="color: #2fbf71; font-weight: 600">· Ready</span></span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px; font-size: 14px">
+<div style="display: flex; align-items: center; gap: 10px">
+<span style="position: relative; width: 16px; height: 16px; flex: none"><span class="p0" style="position: absolute; inset: 0"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" stroke="#3a3f48" stroke-width="1.5" fill="none"/></svg></span><span class="w0" style="position: absolute; inset: 0"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><g class="spin"><circle cx="8" cy="8" r="6.5" stroke="#3a3f48" stroke-width="1.5" fill="none"/><path d="M8 1.5a6.5 6.5 0 0 1 6.5 6.5" stroke="#f5a524" stroke-width="2.5" fill="none" stroke-linecap="round"/></g></svg></span><span class="k0" style="position: absolute; inset: 0"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="#1f6f4d"/><path d="M4.8 8.3l2.1 2.1 4.3-4.6" stroke="#ffffff" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span>
+<span class="l0">Audio</span><span class="k0" style="color: #8a909b">USB Audio Interface · ASIO · 48 kHz · 128</span>
+</div>
+<div style="display: flex; align-items: center; gap: 10px">
+<span style="position: relative; width: 16px; height: 16px; flex: none"><span class="p1" style="position: absolute; inset: 0"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" stroke="#3a3f48" stroke-width="1.5" fill="none"/></svg></span><span class="w1" style="position: absolute; inset: 0"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><g class="spin"><circle cx="8" cy="8" r="6.5" stroke="#3a3f48" stroke-width="1.5" fill="none"/><path d="M8 1.5a6.5 6.5 0 0 1 6.5 6.5" stroke="#f5a524" stroke-width="2.5" fill="none" stroke-linecap="round"/></g></svg></span><span class="k1" style="position: absolute; inset: 0"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="#1f6f4d"/><path d="M4.8 8.3l2.1 2.1 4.3-4.6" stroke="#ffffff" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span>
+<span class="l1">Show</span><span class="k1" style="color: #8a909b">Rialto Tour 2026 · 8 songs</span>
+</div>
+<div style="display: flex; align-items: center; gap: 10px">
+<span style="position: relative; width: 16px; height: 16px; flex: none"><span class="p2" style="position: absolute; inset: 0"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" stroke="#3a3f48" stroke-width="1.5" fill="none"/></svg></span><span class="w2" style="position: absolute; inset: 0"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><g class="spin"><circle cx="8" cy="8" r="6.5" stroke="#3a3f48" stroke-width="1.5" fill="none"/><path d="M8 1.5a6.5 6.5 0 0 1 6.5 6.5" stroke="#f5a524" stroke-width="2.5" fill="none" stroke-linecap="round"/></g></svg></span><span class="k2" style="position: absolute; inset: 0"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="#1f6f4d"/><path d="M4.8 8.3l2.1 2.1 4.3-4.6" stroke="#ffffff" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span>
+<span class="l2">Waveforms</span><span class="k2" style="color: #8a909b">16 of 16</span>
+</div>
+<div style="display: flex; align-items: center; gap: 10px">
+<span style="position: relative; width: 16px; height: 16px; flex: none"><span class="p3" style="position: absolute; inset: 0"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" stroke="#3a3f48" stroke-width="1.5" fill="none"/></svg></span><span class="w3" style="position: absolute; inset: 0"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><g class="spin"><circle cx="8" cy="8" r="6.5" stroke="#3a3f48" stroke-width="1.5" fill="none"/><path d="M8 1.5a6.5 6.5 0 0 1 6.5 6.5" stroke="#f5a524" stroke-width="2.5" fill="none" stroke-linecap="round"/></g></svg></span><span class="k3" style="position: absolute; inset: 0"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="#1f6f4d"/><path d="M4.8 8.3l2.1 2.1 4.3-4.6" stroke="#ffffff" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span>
+<span class="l3">Cues</span><span class="k3" style="color: #8a909b">24 cues ready</span>
+</div>
+</div>
+</div>
+</div></div>
+<div style="padding: 0 56px 36px">
+<span style="position: relative; display: block; height: 6px">
+<span style="position: absolute; inset: 0; display: flex; gap: 3px"><span style="flex: 8; height: 6px; border-radius: 3px; background: #2a2f37"></span><span style="flex: 16; height: 6px; border-radius: 3px; background: #2a2f37"></span><span style="flex: 8; height: 6px; border-radius: 3px; background: #2a2f37"></span><span style="flex: 16; height: 6px; border-radius: 3px; background: #2a2f37"></span><span style="flex: 8; height: 6px; border-radius: 3px; background: #2a2f37"></span><span style="flex: 6; height: 6px; border-radius: 3px; background: #2a2f37"></span></span>
+<span class="clip" style="position: absolute; left: 0; top: 0; height: 6px; overflow: hidden"><span style="display: flex; gap: 3px; width: 608px"><span style="flex: 8; height: 6px; border-radius: 3px; background: #6b7cff"></span><span style="flex: 16; height: 6px; border-radius: 3px; background: #22c3a6"></span><span style="flex: 8; height: 6px; border-radius: 3px; background: #a46bff"></span><span style="flex: 16; height: 6px; border-radius: 3px; background: #f5a524"></span><span style="flex: 8; height: 6px; border-radius: 3px; background: #ff5fa2"></span><span style="flex: 6; height: 6px; border-radius: 3px; background: #7d8696"></span></span></span>
+<span class="ph" style="position: absolute; top: -6px; width: 2px; height: 18px; background: #ffffff; border-radius: 2px; margin-left: -1px"></span>
+</span>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":720,"height":440}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>10 Loading: something's wrong</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#8a909b}a:hover{color:#e9ebef}
+</style>
+</helmet>
+<div style="width: 720px; height: 440px; box-sizing: border-box; padding: 28px 32px; background: #0b0c0e; color: #e9ebef; font-family: Inter, system-ui, sans-serif; display: flex; flex-direction: column; justify-content: space-between; border-radius: 14px; box-shadow: inset 0 0 0 1px #22262d">
+<div style="display: flex; justify-content: flex-end; font-size: 12px; color: #8a909b">Loading</div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 26px">
+<span style="display: inline-flex; flex-direction: column; gap: 12px; width: 230px">
+<span style="font-weight: 700; font-size: 54px; letter-spacing: -0.045em; line-height: 1; white-space: nowrap; text-align: center">set<span style="color: #f5a524">.</span>Line</span>
+<span style="position: relative; display: flex; gap: 3px">
+<span style="flex: 8; height: 6px; background: #6b7cff; border-radius: 2px"></span>
+<span style="flex: 16; height: 6px; background: #ff6b5e; border-radius: 2px"></span>
+<span style="flex: 8; height: 6px; background: #2a2f37; border-radius: 2px"></span>
+<span style="flex: 16; height: 6px; background: #2a2f37; border-radius: 2px"></span>
+<span style="flex: 8; height: 6px; background: #2a2f37; border-radius: 2px"></span>
+<span style="flex: 6; height: 6px; background: #2a2f37; border-radius: 2px"></span>
+</span>
+</span>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center">
+<div style="font-size: 18px; font-weight: 600">Your audio interface isn't connected</div>
+<div style="font-size: 14px; color: #b4b9c2; line-height: 1.5; max-width: 480px">set.Line couldn't find "USB Audio Interface (ASIO)". Plug it in and press Try again, or open the show without audio to keep working.</div>
+</div>
+<div style="display: flex; gap: 10px">
+<button type="button" style="height: 40px; padding: 0 18px; border: 0; border-radius: 8px; background: #f5a524; color: #1a1000; font: 600 14px Inter, system-ui, sans-serif">Try again</button>
+<button type="button" style="height: 40px; padding: 0 18px; border: 0; border-radius: 8px; background: #22262d; color: #e9ebef; font: 500 14px Inter, system-ui, sans-serif">Choose another output…</button>
+<button type="button" style="height: 40px; padding: 0 18px; border: 0; border-radius: 8px; background: transparent; color: #b4b9c2; font: 500 14px Inter, system-ui, sans-serif; box-shadow: inset 0 0 0 1px #2a2f37">Open without audio</button>
+</div>
+</div>
+<div style="display: flex; justify-content: space-between; font-size: 12px; color: #8a909b">
+<span>Beta 0.1</span>
+<span>Same look whichever loading style you pick</span>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":720,"height":440}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
