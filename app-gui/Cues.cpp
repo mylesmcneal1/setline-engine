@@ -42,7 +42,44 @@ void trim(std::vector<float>& a, double rate)
     for (size_t i = 0; i < fade; ++i) b[b.size() - 1 - i] *= (float) i / (float) fade;
     a.swap(b);
 }
+// The show's pronunciations that matter for this text, as "word=sounds like;..." (part of the cache key, so
+// changing how a word sounds re-renders only the cues that use it).
+juce::String pronKey(const juce::String& text, const kokoro::Pronunciations& pron)
+{
+    if (pron.empty()) return {};
+    juce::StringArray words;
+    words.addTokens(text.toLowerCase(), " ,.!?;:/&", "\"");
+    juce::String k;
+    for (auto& [w, v] : pron) if (words.contains(w) || text.toLowerCase().contains(w + "-") || text.toLowerCase().contains("-" + w)) k << w << "=" << v << ";";
+    return k;
+}
+
+// The computer's voices can't take phonemes, but they can take a respelling: "Djentworth" -> "jent worth".
+juce::String respell(const juce::String& text, const kokoro::Pronunciations& pron)
+{
+    if (pron.empty()) return text;
+    juce::String out, word;
+    auto flush = [&] {
+        if (word.isEmpty()) return;
+        auto it = pron.find(word.toLowerCase());
+        const bool phon = it != pron.end() && it->second.trim().startsWith("/");
+        out << (it != pron.end() && ! phon ? it->second : word);
+        word.clear();
+    };
+    for (auto c : text) { if (juce::CharacterFunctions::isLetterOrDigit(c) || c == '\'') word += c; else { flush(); out += c; } }
+    flush();
+    return out;
+}
 } // namespace
+
+Cues::Choice Cues::choiceFrom(const juce::var& v)
+{
+    Choice c { v["voice"].toString(), v["name"].toString(), v["speed"].isVoid() ? 1.0 : (double) v["speed"], {} };
+    if (auto* o = v["pron"].getDynamicObject())
+        for (auto& p : o->getProperties())
+            if (auto w = p.name.toString().trim().toLowerCase(); w.isNotEmpty() && p.value.toString().trim().isNotEmpty()) c.pron[w] = p.value.toString().trim();
+    return c;
+}
 
 Cues::Cues() { worker = std::thread([this] { run(); }); }
 
@@ -54,7 +91,8 @@ Cues::~Cues()
     if (worker.joinable()) worker.join();
 }
 
-juce::File Cues::cacheFolder() { return Peaks::appCacheFolder().getParentDirectory().getChildFile("Cues"); }
+juce::File Cues::cacheOverride;
+juce::File Cues::cacheFolder() { return cacheOverride != juce::File() ? cacheOverride : Peaks::appCacheFolder().getParentDirectory().getChildFile("Cues"); }
 
 void Cues::post(std::function<void()> fn, bool urgent)
 {
@@ -68,7 +106,11 @@ void Cues::run()
         std::function<void()> fn;
         {
             std::unique_lock<std::mutex> g(lock);
-            wake.wait(g, [this] { return quit || ! queue.empty(); });
+            if (! wake.wait_for(g, std::chrono::seconds(60), [this] { return quit || ! queue.empty(); })) {
+                g.unlock();
+                kokoro::unload(); // a minute idle: give the model's memory back (it reloads in about a second)
+                continue;
+            }
             if (quit) return;
             fn = std::move(queue.front());
             queue.pop_front();
@@ -81,7 +123,8 @@ void Cues::ensureVoices()
 {
     { std::lock_guard<std::mutex> g(dataLock); if (listed) return; }
     juce::String def;
-    auto list = speech::listVoices(def);
+    auto list = kokoro::voices();
+    for (auto& v : speech::listVoices(def)) list.push_back(v);
     std::lock_guard<std::mutex> g(dataLock);
     installed = std::move(list);
     defaultId = def;
@@ -106,6 +149,8 @@ juce::var Cues::voices()
         o->setProperty("name", v.name);
         o->setProperty("lang", v.lang);
         o->setProperty("quality", v.quality);
+        o->setProperty("engine", v.engine);
+        if (v.engine == "kokoro") { o->setProperty("gender", v.gender); o->setProperty("grade", v.grade); o->setProperty("rank", v.rank); }
         o->setProperty("isDefault", v.id == defaultId);
         a.add(juce::var(o));
     }
@@ -131,20 +176,48 @@ juce::String Cues::resolveLocked(const Choice& c, bool& fellBack) const
 {
     fellBack = false;
     if (c.voice.isEmpty() && c.name.isEmpty()) return {};
-    for (auto& v : installed) if (v.id == c.voice) return v.id;
-    for (auto& v : installed) if (c.name.isNotEmpty() && v.name.equalsIgnoreCase(c.name)) return v.id;
-    fellBack = true;
-    return {};
+    juce::String id;
+    for (auto& v : installed) if (v.id == c.voice) { id = v.id; break; }
+    if (id.isEmpty() && ! kokoro::isKokoro(c.voice)) // ids differ between computers; Kokoro's never do
+        for (auto& v : installed) if (c.name.isNotEmpty() && v.engine == "system" && v.name.equalsIgnoreCase(c.name)) { id = v.id; break; }
+    if (id.isNotEmpty() && kokoro::isKokoro(id) && kokoro::status().state != kokoro::State::ready)
+        id = {}; // not downloaded (yet): the computer's default voice stands in
+    fellBack = id.isEmpty();
+    return id;
 }
 
-juce::String Cues::keyOf(const juce::String& text, const juce::String& voiceId, double speed, double rate) const
+juce::String Cues::fallbackReason(const Choice& c)
 {
-    return text + "|" + voiceId + "|" + juce::String(speed, 2) + "|" + juce::String((int) rate);
+    bool fb = false;
+    resolve(c, fb);
+    if (! fb) return {};
+    if (kokoro::find(c.voice) != nullptr) return "notDownloaded";
+    return "missing";
 }
 
-Cues::Audio Cues::renderNow(const juce::String& text, const juce::String& voiceId, double speed, double rate, juce::String& error)
+void Cues::checkWords(juce::StringArray texts, Choice c, std::function<void(juce::StringArray, juce::String)> done)
 {
-    const auto key = keyOf(text, voiceId, speed, rate);
+    auto alive_ = alive;
+    post([texts, c, done, alive_] {
+        juce::StringArray unknown;
+        juce::String ph;
+        const auto* v = kokoro::find(c.voice);
+        if (kokoro::status().state == kokoro::State::ready)
+            for (auto& t : texts) ph << kokoro::phonemes(t, v != nullptr && juce::String(v->lang) == "en-GB", c.pron, &unknown) << "\n";
+        juce::MessageManager::callAsync([alive_, done, unknown, ph] { if (*alive_) done(unknown, ph.trimEnd()); });
+    }, true);
+}
+
+juce::String Cues::keyOf(const juce::String& text, const juce::String& voiceId, const Choice& c, double rate) const
+{
+    // Kokoro renders carry the model's name, so a future model never reuses them.
+    return text + "|" + voiceId + "|" + juce::String(c.speed, 2) + "|" + juce::String((int) rate)
+         + (kokoro::isKokoro(voiceId) ? "|kokoro-v1.0" : "") + (pronKey(text, c.pron).isNotEmpty() ? "|" + pronKey(text, c.pron) : juce::String());
+}
+
+Cues::Audio Cues::renderNow(const juce::String& text, const juce::String& voiceId, const Choice& c, double rate, juce::String& error)
+{
+    const auto key = keyOf(text, voiceId, c, rate);
     { std::lock_guard<std::mutex> g(dataLock); if (auto it = memo.find(key); it != memo.end()) return it->second; }
 
     const auto file = cacheFolder().getChildFile(juce::String::toHexString(key.hashCode64()) + ".cue");
@@ -165,7 +238,9 @@ Cues::Audio Cues::renderNow(const juce::String& text, const juce::String& voiceI
 
     std::vector<float> raw;
     double rawRate = 0;
-    if (! speech::render(text, voiceId, speed, rate, raw, rawRate, error)) return nullptr;
+    if (kokoro::isKokoro(voiceId) ? ! kokoro::render(text, voiceId, c.speed, c.pron, raw, rawRate, error)
+                                  : ! speech::render(respell(text, c.pron), voiceId, c.speed, rate, raw, rawRate, error))
+        return nullptr;
     auto a = std::make_shared<std::vector<float>>(resample(raw, rawRate, rate));
     trim(*a, rate);
     if (a->empty()) { error = "The voice produced only silence."; return nullptr; }
@@ -197,7 +272,7 @@ Cues::Audio Cues::get(const juce::String& text, const Choice& c, double rate, ju
     post([this, text, c, rate, result, fb, p] {
         ensureVoices();
         const auto id = resolve(c, *fb);
-        result->first = renderNow(text, id, c.speed, rate, result->second);
+        result->first = renderNow(text, id, c, rate, result->second);
         p->set_value();
     }, true);
     if (f.wait_for(std::chrono::seconds(20)) != std::future_status::ready) { error = "Speech took too long."; return nullptr; }
@@ -212,7 +287,7 @@ Cues::Audio Cues::cached(const juce::String& text, const Choice& c, double rate,
     fellBack = false;
     if (! listed) return nullptr;
     const auto id = resolveLocked(c, fellBack);
-    auto it = memo.find(keyOf(text, id, c.speed, rate));
+    auto it = memo.find(keyOf(text, id, c, rate));
     return it != memo.end() ? it->second : nullptr;
 }
 
@@ -225,7 +300,7 @@ void Cues::ensure(std::vector<std::pair<juce::String, Choice>> list, double rate
         for (auto& [text, c] : list) {
             bool fb = false;
             juce::String err;
-            if (! renderNow(text, resolve(c, fb), c.speed, rate, err)) errors[text] = err;
+            if (! renderNow(text, resolve(c, fb), c, rate, err)) errors[text] = err;
         }
         juce::MessageManager::callAsync([alive_, done, errors] { if (*alive_) done(errors); });
     }, true);
@@ -237,12 +312,12 @@ void Cues::prepare(const juce::var& list, double rate)
         for (auto& x : *a) {
             const auto text = x["text"].toString().trim();
             if (text.isEmpty()) continue;
-            Choice c { x["voice"].toString(), x["name"].toString(), x["speed"].isVoid() ? 1.0 : (double) x["speed"] };
+            const auto c = choiceFrom(x);
             post([this, text, c, rate] {
                 ensureVoices();
                 bool fb = false;
                 juce::String err;
-                renderNow(text, resolve(c, fb), c.speed, rate, err);
+                renderNow(text, resolve(c, fb), c, rate, err);
             }, false);
         }
 }
@@ -254,7 +329,7 @@ void Cues::render(const juce::String& text, const Choice& c, double rate, std::f
         ensureVoices();
         bool fb = false;
         juce::String err;
-        auto a = renderNow(text, resolve(c, fb), c.speed, rate, err);
+        auto a = renderNow(text, resolve(c, fb), c, rate, err);
         juce::MessageManager::callAsync([alive_, done, a, err] { if (*alive_) done(a, err); });
     }, true);
 }

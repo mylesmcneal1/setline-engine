@@ -41,8 +41,18 @@ jobs:
           Expand-Archive webview2.zip -DestinationPath $dir -Force
           Get-ChildItem "$dir\build\native\x64" | Select-Object Name
 
+      # Pinned downloads, kept between runs: the ONNX Runtime package (CMake checks nuget.org's SHA-512 on every
+      # configure) and the Kokoro model, voices and dictionaries (the app checks each file's SHA-256).
+      - name: Cache pinned downloads
+        uses: actions/cache@v6
+        with:
+          path: |
+            dl
+            models
+          key: voices-ort-1.19.2-kokoro-v1.0-1939ad2a-misaki-fba12365-${{ runner.os }}
+
       - name: Configure
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release ${{ matrix.cmake_args }}
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DSETLINE_DOWNLOADS_DIR="${{ github.workspace }}/dl" ${{ matrix.cmake_args }}
 
       - name: Build
         run: cmake --build build --config Release --parallel
@@ -60,6 +70,8 @@ jobs:
           lipo -info "$BIN"
           otool -l "$BIN" | grep -A3 -E "LC_BUILD_VERSION|LC_VERSION_MIN_MACOSX" | head -n 8
           lipo -info "$APP/Contents/MacOS/set.Line"
+          lipo -info "$APP/Contents/Frameworks/libonnxruntime.1.19.2.dylib"
+          otool -l "$APP/Contents/Frameworks/libonnxruntime.1.19.2.dylib" | grep -A3 -E "LC_BUILD_VERSION|LC_VERSION_MIN_MACOSX" | head -n 8
           otool -l "$APP/Contents/MacOS/set.Line" | grep -A3 -E "LC_BUILD_VERSION|LC_VERSION_MIN_MACOSX" | head -n 4
 
       - name: Find binaries (Windows)
@@ -89,6 +101,26 @@ jobs:
           cat speech-test/speech-test.txt || true
           grep -q "SPEECH OK" speech-test/speech-test.txt
 
+      # Built-in Kokoro voices: ONNX Runtime 1.19.2 loaded from the app, the pinned model downloaded (or taken
+      # from the cache) and verified, every English voice saying the common cue words, cache behaviour, timing.
+      - name: Kokoro voices test
+        shell: bash
+        env:
+          SETLINE_MODELS_DIR: ${{ github.workspace }}/models
+        run: |
+          if [ -d "$APP/Contents/MacOS" ]; then EXE="$APP/Contents/MacOS/set.Line"; else EXE="$APP"; fi
+          "$EXE" --kokoro-test kokoro-test || status=$?
+          cat kokoro-test/kokoro-test.txt || true
+          grep -q "KOKORO OK" kokoro-test/kokoro-test.txt
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: kokoro-samples-${{ matrix.name }}
+          path: |
+            kokoro-test/*.wav
+            kokoro-test/kokoro-test.txt
+
       - name: Package (macOS)
         if: matrix.name == 'macos'
         run: |
@@ -110,6 +142,9 @@ jobs:
           7z a setline-spike-windows.zip ./dist/*
           mkdir -p dist-app
           cp "$APP" dist-app/
+          cp "$(dirname "$APP")/onnxruntime.dll" dist-app/
+          cp -r "$(dirname "$APP")/licenses" dist-app/
+          cp THIRD_PARTY.md dist-app/
           cp docs/building-the-app.md dist-app/
           7z a set.Line-windows.zip ./dist-app/*
 

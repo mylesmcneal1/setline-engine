@@ -56,6 +56,7 @@ private:
     Options addRest(Options o);
     void preparePeaks(const juce::var& refs, const juce::File& sessionFile);
     bool dirty = false;
+    std::shared_ptr<Bridge*> alive = std::make_shared<Bridge*>(this); // cleared on destruction (async callbacks)
 };
 
 } // namespace setline::gui

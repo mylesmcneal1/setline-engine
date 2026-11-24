@@ -1,6 +1,10 @@
 #include "Bridge.h"
 #include "AudioHost.h"
 
+#ifndef SETLINE_ORT_VERSION
+ #define SETLINE_ORT_VERSION "?"
+#endif
+
 namespace setline::gui {
 
 namespace {
@@ -17,20 +21,36 @@ Bridge::Bridge(AudioHost& host, juce::PropertiesFile& settings) : audio(host), s
     audio.onSetupChanged = [this] { emit("audioSetupChanged", audio.getSetup()); };
     audio.emit = [this](const juce::Identifier& id, const juce::var& v) { emit(id, v); };
     media.emit = [this](const juce::Identifier& id, const juce::var& v) { emit(id, v); };
+    // Kokoro voices download when the user asks: progress to the page ("voiceDownload": {state, done, total, error}).
+    kokoro::setListener([alive_ = alive](const kokoro::Status& st) {
+        juce::MessageManager::callAsync([alive_, st] {
+            if (*alive_ == nullptr) return;
+            auto* r = new juce::DynamicObject();
+            r->setProperty("state", kokoro::stateName(st.state));
+            r->setProperty("done", (double) st.done);
+            r->setProperty("total", (double) st.total);
+            r->setProperty("error", st.error);
+            (*alive_)->emit("voiceDownload", juce::var(r));
+        });
+    });
     audio.cueAudio = [this](const juce::String& text, const juce::var& v, double rate, std::vector<std::string>& w) {
-        const Cues::Choice c { v["voice"].toString(), v["name"].toString(), v["speed"].isVoid() ? 1.0 : (double) v["speed"] };
+        const auto c = Cues::choiceFrom(v);
         juce::String err;
         bool fellBack = false;
         auto a = cues.cached(text, c, rate, fellBack); // rendered before the load (loadSong below)
         if (! a) { auto it = cueErrors.find(text); err = it != cueErrors.end() && it->second.isNotEmpty() ? it->second : juce::String("not ready"); }
         const juce::String q = juce::String::fromUTF8("\xe2\x80\x9c"), qq = juce::String::fromUTF8("\xe2\x80\x9d");
-        if (fellBack) w.push_back((juce::String("The cue voice ") + q + c.name + qq + " isn't installed on this computer, so cues use the default voice.").toStdString());
+        if (fellBack) {
+            const bool kok = kokoro::find(c.voice) != nullptr;
+            w.push_back((juce::String("The cue voice ") + q + c.name + qq + (kok ? " isn't downloaded yet, so cues use the computer's voice for now."
+                                                                                       : " isn't installed on this computer, so cues use the default voice.")).toStdString());
+        }
         if (! a) w.push_back((juce::String("Cue ") + q + text + qq + " couldn't be spoken: " + err).toStdString());
         return a;
     };
 }
 
-Bridge::~Bridge() { audio.onSetupChanged = nullptr; audio.emit = nullptr; audio.cueAudio = nullptr; media.emit = nullptr; }
+Bridge::~Bridge() { kokoro::setListener(nullptr); *alive = nullptr; audio.onSetupChanged = nullptr; audio.emit = nullptr; audio.cueAudio = nullptr; media.emit = nullptr; }
 
 Bridge::Options Bridge::add(Options o, const char* name, Fn fn)
 {
@@ -107,7 +127,7 @@ void Bridge::withCues(const juce::var& a, std::function<void()> then)
     std::vector<std::pair<juce::String, Cues::Choice>> list;
     const auto s = a["song"];
     const juce::var v = s["cueVoice"].isObject() ? s["cueVoice"] : a["cueVoice"];
-    const Cues::Choice c { v["voice"].toString(), v["name"].toString(), v["speed"].isVoid() ? 1.0 : (double) v["speed"] };
+    const auto c = Cues::choiceFrom(v);
     if (auto* cs = s["cues"].getArray())
         for (auto& q : *cs) if (auto t = q["text"].toString().trim(); t.isNotEmpty()) list.push_back({ t, c });
     const double rate = audio.sampleRate();
@@ -199,7 +219,7 @@ Bridge::Options Bridge::addRest(Options o)
     o = addAsync(o, "previewCue", [this](const juce::var& a, auto done) {
         const double rate = audio.sampleRate();
         if (rate <= 0) { done(errorVar("No audio device is open.")); return; }
-        const Cues::Choice c { a["voice"].toString(), a["name"].toString(), a["speed"].isVoid() ? 1.0 : (double) a["speed"] };
+        const auto c = Cues::choiceFrom(a);
         std::vector<int> outs;
         if (auto* o2 = a["outs"].getArray()) for (auto& v : *o2) if ((int) v >= 1) outs.push_back((int) v - 1);
         const float gain = juce::Decibels::decibelsToGain((float) (double) a["db"], -60.0f);
@@ -212,6 +232,32 @@ Bridge::Options Bridge::addRest(Options o)
             r->setProperty("ok", true);
             r->setProperty("seconds", (double) au->size() / rate);
             r->setProperty("fellBack", fellBack);
+            done(juce::var(r));
+        });
+    });
+    // Kokoro voices (Kokoro.h): {state, done, total, error, folder, engine}; "downloadVoices" starts the download.
+    o = add(o, "voiceModel", [](const juce::var&) {
+        const auto st = kokoro::status();
+        auto* r = new juce::DynamicObject();
+        r->setProperty("state", kokoro::stateName(st.state));
+        r->setProperty("done", (double) st.done);
+        r->setProperty("total", (double) st.total);
+        r->setProperty("error", st.error);
+        r->setProperty("folder", kokoro::folder().getFullPathName());
+        r->setProperty("engine", juce::String("ONNX Runtime ") + SETLINE_ORT_VERSION);
+        return juce::var(r);
+    });
+    o = add(o, "downloadVoices", [](const juce::var&) { kokoro::startDownload(); auto* r = new juce::DynamicObject(); r->setProperty("ok", true); return juce::var(r); });
+    o = add(o, "cancelVoiceDownload", [](const juce::var&) { kokoro::cancelDownload(); auto* r = new juce::DynamicObject(); r->setProperty("ok", true); return juce::var(r); });
+    // {texts: [...], voice, name, speed, pron} -> {unknown: [words no dictionary knows], phonemes}
+    o = addAsync(o, "checkCueWords", [this](const juce::var& a, auto done) {
+        juce::StringArray texts;
+        if (auto* t = a["texts"].getArray()) for (auto& x : *t) texts.add(x.toString());
+        cues.checkWords(texts, Cues::choiceFrom(a), [done](juce::StringArray unknown, juce::String ph) {
+            auto* r = new juce::DynamicObject();
+            juce::Array<juce::var> u; for (auto& w : unknown) u.add(w);
+            r->setProperty("unknown", u);
+            r->setProperty("phonemes", ph);
             done(juce::var(r));
         });
     });

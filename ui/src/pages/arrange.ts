@@ -22,10 +22,13 @@ interface Page {
   colourOf(t: string): string; roleOf(t: string): string; rerender(): void; redrawTrack(s: Song, t: string): void;
   // step 2: spoken cues
   cueCfg(s: Song): CueVoice; cueVoiceAll(): CueVoice; setVoices(list: VoiceInfo[]): void;
+  pron(): Record<string, string>; setVoiceModel(st: VoiceModel): void; setUnknownWords(list: string[]): void;
 }
 // Cue voice choice as saved (voice id + name: ids differ between computers) and an installed voice.
 interface CueVoice { voice: string; name: string; speed: number }
-interface VoiceInfo { id: string; name: string; lang: string; isDefault: boolean }
+interface VoiceInfo { id: string; name: string; lang: string; isDefault: boolean; engine?: string; gender?: string; grade?: string; rank?: number }
+// The built-in Kokoro voices' download (Kokoro.h): missing | downloading | ready | failed.
+interface VoiceModel { state: string; done: number; total: number; error: string }
 // A file as the app read it (Media::probe). ok = false: error says why it can't be imported.
 interface AudioInfo { path: string; name: string; ok: boolean; channels?: number; rate?: number; frames?: number; seconds?: number; format?: string; bits?: number; error?: string }
 interface Progress { done: number; total: number; file: string; finished: boolean }
@@ -158,7 +161,10 @@ function payload(s: Song) {
   s.tracks.forEach((t) => (roles[t] = p.ROLE[t] || ""));
   const outs: Record<string, number[]> = {};
   s.tracks.forEach((t) => { if (!isMidiTrack(s, t)) outs[t] = outsOf(s, t); });
-  return { song, outs, roles, click: p.clickCfg(s), cueVoice: p.cueVoiceAll() };
+  // The show's pronunciations go with the cue voice (the song's own, or the set's), as the app keys cues by them.
+  const pron = p.pron();
+  if (song.cueVoice) song.cueVoice = { ...song.cueVoice, pron };
+  return { song, outs, roles, click: p.clickCfg(s), cueVoice: { ...p.cueVoiceAll(), pron } };
 }
 // What forces a reload: everything except the mixer levels, which change live (setTrackLevel).
 function loadKey(body: ReturnType<typeof payload>): string {
@@ -329,11 +335,12 @@ const cuesTrack = (s: Song) => s.tracks.find((t) => page().ROLE[t] === "cues");
 let preparedKey = "";
 function prepareCues() {
   if (!deviceRate) return;
-  const list: { text: string; voice: string; name: string; speed: number }[] = [];
+  const list: { text: string; voice: string; name: string; speed: number; pron: Record<string, string> }[] = [];
+  const pron = page().pron();
   for (const s of page().songs) {
     if (!cuesTrack(s)) continue;
     const c = page().cueCfg(s);
-    for (const q of (s.cues || []) as { text?: string }[]) if (q.text && q.text.trim()) list.push({ text: q.text.trim(), voice: c.voice || "", name: c.name || "", speed: c.speed || 1 });
+    for (const q of (s.cues || []) as { text?: string }[]) if (q.text && q.text.trim()) list.push({ text: q.text.trim(), voice: c.voice || "", name: c.name || "", speed: c.speed || 1, pron });
   }
   const key = deviceRate + JSON.stringify(list);
   if (key === preparedKey) return;
@@ -347,8 +354,19 @@ const SLC = {
     const outs = t ? outsOf(s, t) : [];
     if (!outs.length) { page().toast("The Cues track isn't routed (Outputs & MIDI page), so a preview can't be heard"); return; }
     const r = await SL.call<{ ok?: boolean; error?: string; fellBack?: boolean }>("previewCue",
-      { text, voice: c.voice || "", name: c.name || "", speed: c.speed || 1, outs, db: t ? page().gainOf(s, t) : 0 });
+      { text, voice: c.voice || "", name: c.name || "", speed: c.speed || 1, pron: page().pron(), outs, db: t ? page().gainOf(s, t) : 0 });
     if (r.error) page().toast(r.error);
+  },
+  downloadVoices() { SL.call("downloadVoices").catch(() => {}); },
+  cancelVoiceDownload() { SL.call("cancelVoiceDownload").catch(() => {}); },
+  // Words in the show's cues no dictionary knows (Kokoro voices): shown on the Cue voice panel.
+  async checkWords(s: Song) {
+    const c = page().cueCfg(s);
+    if (!/^kokoro:/.test(c.voice || "")) { page().setUnknownWords([]); return; }
+    const texts: string[] = [];
+    for (const x of page().songs) for (const q of (x.cues || []) as { text?: string }[]) if (q.text && q.text.trim()) texts.push(q.text.trim());
+    const r = await SL.call<{ unknown?: string[] }>("checkCueWords", { texts, voice: c.voice, name: c.name, speed: c.speed || 1, pron: page().pron() });
+    page().setUnknownWords(r.unknown || []);
   },
 };
 
@@ -665,6 +683,11 @@ async function main() {
     copyBox.checked = copyPref();
     copyBox.onchange = () => localStorage.setItem(COPY_PREF, copyBox.checked ? "1" : "0");
   }
+  // Kokoro voices: download progress; once they're in, the cues are rendered with them and the next Play reloads.
+  SL.on("voiceDownload", (st: VoiceModel) => {
+    page().setVoiceModel(st);
+    if (st.state === "ready") { preparedKey = ""; prepareCues(); loadedKey = null; }
+  });
   SL.on("menu", (m: { cmd: string }) => { if (m.cmd === "open") openSession(); else if (m.cmd === "save") saveSession(false); else if (m.cmd === "saveAs") saveSession(true); });
 
   // Session: carry on with the one from before a page switch, else this is a new, unsaved session.
@@ -692,6 +715,7 @@ async function main() {
 
   onSetup(await SL.call<Setup>("getAudioSetup"));
   try { page().setVoices(await SL.call<VoiceInfo[]>("getVoices")); } catch (e) { console.warn("set.Line: voices", e); }
+  try { page().setVoiceModel(await SL.call<VoiceModel>("voiceModel")); } catch (e) { console.warn("set.Line: voice model", e); }
   prepareCues();
   showStatus(await SL.call<Stats>("getEngineStats"));
 

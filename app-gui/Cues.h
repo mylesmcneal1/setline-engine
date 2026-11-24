@@ -20,6 +20,7 @@
 #include <mutex>
 #include <thread>
 #include <vector>
+#include "Kokoro.h"
 #include "Speech.h"
 
 namespace setline::gui {
@@ -27,12 +28,21 @@ namespace setline::gui {
 class Cues {
 public:
     using Audio = std::shared_ptr<const std::vector<float>>;
-    struct Choice { juce::String voice, name; double speed = 1; }; // voice id + display name as saved
+    // voice id + display name as saved, speed, and the show's pronunciations (Kokoro.h)
+    struct Choice { juce::String voice, name; double speed = 1; kokoro::Pronunciations pron; };
+    // From the page's {voice, name, speed, pron: {word: sounds like}}.
+    static Choice choiceFrom(const juce::var& v);
+    // Why a choice falls back to the default voice: "" (it doesn't), "missing" or "notDownloaded" (Kokoro).
+    juce::String fallbackReason(const Choice& c);
+    // Words in these texts the dictionaries don't know (Kokoro voices; sounded out from spelling until the show says how
+    // they sound). Calls back on the message thread.
+    void checkWords(juce::StringArray texts, Choice c, std::function<void(juce::StringArray unknown, juce::String phonemes)> done);
 
     Cues();
     ~Cues();
 
-    // [{id, name, lang, isDefault}] (listed once, then cached)
+    // [{id, name, lang, quality, engine, gender, grade, rank, isDefault}]: the built-in Kokoro voices, then the
+    // computer's (listed once, then cached)
     juce::var voices();
     // The same, without blocking: calls back on the message thread.
     void voicesAsync(std::function<void(juce::var)> done);
@@ -53,13 +63,14 @@ public:
     void render(const juce::String& text, const Choice& c, double rate, std::function<void(Audio, juce::String error)> done);
 
     static juce::File cacheFolder();
+    static juce::File cacheOverride; // tests: a fresh cache folder instead of the app's
 
 private:
     struct Task { std::function<void()> fn; };
     void post(std::function<void()> fn, bool urgent);
     void run();
-    Audio renderNow(const juce::String& text, const juce::String& voiceId, double speed, double rate, juce::String& error); // worker
-    juce::String keyOf(const juce::String& text, const juce::String& voiceId, double speed, double rate) const;
+    Audio renderNow(const juce::String& text, const juce::String& voiceId, const Choice& c, double rate, juce::String& error); // worker
+    juce::String keyOf(const juce::String& text, const juce::String& voiceId, const Choice& c, double rate) const;
     void ensureVoices(); // worker
     juce::String resolveLocked(const Choice& c, bool& fellBack) const; // dataLock held
 

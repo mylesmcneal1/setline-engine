@@ -13,6 +13,9 @@ struct Voice {
     juce::String name; // "Microsoft Zira", "Samantha"...
     juce::String lang; // "en-US"
     int quality = 1;   // 1 standard, 2 enhanced, 3 premium (macOS's rating; Windows: OneCore 2, desktop 1)
+    juce::String engine = "system"; // "system", or "kokoro" (built in, Kokoro.h)
+    juce::String gender, grade;     // Kokoro: "F"/"M", the model card's grade
+    int rank = 0;                   // Kokoro: grade as a number, higher = better
 };
 
 // Installed voices; defaultId = the system's default voice.

@@ -114,6 +114,8 @@ if(SETLINE_WITH_JUCE)
       app-gui/Media.cpp
       app-gui/Peaks.cpp
       app-gui/Cues.cpp
+      app-gui/Kokoro.cpp
+      app-gui/Ort.cpp
       app-gui/SpeechWin.cpp
       app-gui/WebUi.cpp)
     if(APPLE)
@@ -132,9 +134,15 @@ if(SETLINE_WITH_JUCE)
       JUCE_APPLICATION_VERSION_STRING="$<TARGET_PROPERTY:setline,JUCE_VERSION>")
     target_link_libraries(setline
       PRIVATE setline_core setline_ui
-              juce::juce_gui_extra juce::juce_audio_devices juce::juce_audio_formats
+              juce::juce_gui_extra juce::juce_audio_devices juce::juce_audio_formats juce::juce_cryptography
       PUBLIC  juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
     setline_enable_asio(setline)
+    # Built-in Kokoro cue voices: ONNX Runtime 1.19.2, verified and copied next to the app (cmake/OnnxRuntime.cmake).
+    include(cmake/OnnxRuntime.cmake)
+    setline_add_onnxruntime(setline)
+    if(MSVC) # Kokoro.cpp spells phonemes in UTF-8 (ˈ ɹ ə...); MSVC reads sources as the system code page otherwise
+      set_source_files_properties(app-gui/Kokoro.cpp PROPERTIES COMPILE_OPTIONS "/utf-8")
+    endif()
     # Spoken cues: the system's speech (SAPI on Windows, AVSpeechSynthesizer on macOS).
     if(WIN32)
       target_link_libraries(setline PRIVATE sapi ole32)
