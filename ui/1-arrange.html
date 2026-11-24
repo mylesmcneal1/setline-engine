@@ -127,6 +127,7 @@
   .listenc .seg button{padding:3px 9px;font-size:11.5px;border-radius:6px} .listenc .seg button.on{background:#22262d;color:var(--text)} .listenc .seg button.on[data-v="pc"]{background:#f5a524;color:#1a1000}
   .listenbar{position:fixed;left:50%;transform:translateX(-50%);top:46px;z-index:9000;display:flex;align-items:center;gap:12px;padding:5px 8px 5px 14px;border-radius:0 0 10px 10px;background:#f5a524;color:#1a1000;font-size:12px;font-weight:600;box-shadow:0 6px 20px rgba(0,0,0,.4)}
   .listenbar[hidden]{display:none} .listenbar button{background:rgba(0,0,0,.16);color:#1a1000;border-radius:6px;padding:3px 9px;font-weight:600}
+  .selbox{position:fixed;border:1px solid #f5a524;background:rgba(245,165,36,.08);pointer-events:none;z-index:9500;border-radius:2px}
   .xm .it kbd{margin-left:auto;padding-left:22px;color:var(--muted);font:inherit;font-size:11px;opacity:.8}
   .gridc{align-items:center;margin-left:6px;flex:none;width:max-content} .gridc select{flex:none;width:auto;min-width:96px;height:24px;background:transparent;border:0;color:var(--text);font:inherit;font-size:12px;padding:0 4px;border-radius:6px;cursor:pointer}
   .gridc select:hover{background:#1d2126;color:var(--text)} .gridc .ib2.on{color:var(--cyan)} .gridc .gbtn{height:24px;padding:0 8px;border-radius:6px;color:var(--text);font-size:12px;white-space:nowrap} .gridc .gbtn:hover{background:#1d2126} .gridc select[hidden]{display:none}
@@ -1538,7 +1539,7 @@ function drawLane(cv){
   const off=role!=='midi'&&isOff(s,t), AW=s.audio*PXS, c=role==='midi'?'#5aa9ff':(TCOL[t]||'#9aa0aa');
   const y0=clip(g,0,AW,H,role==='click'||role==='cues'?'#7d8696':c,role==='midi'?t:role==='click'?'Click (generated)':role==='cues'?'Cues (generated)':t,off), y1=H-4, mid=(y0+y1)/2, half=(y1-y0)/2-1;
   const secAtT=sec=>{ for(const p of s.secPos){ const a=s.bars[p.start-1].t,b=s.bars[p.start-1+p.bars].t; if(sec>=a&&sec<b) return p; } return null; };
-  const xOf=bar=>s.bars[Math.min(bar,s.total+1)-1].t*PXS, isPick=(k,id)=>pick&&pick.kind===k&&pick.song===s.id&&pick.track===t&&pick.id===id;
+  const xOf=bar=>s.bars[Math.min(bar,s.total+1)-1].t*PXS, isPick=(k,id)=>(pick&&pick.kind===k&&pick.song===s.id&&pick.track===t&&pick.id===id)||isMulti(k,s.id,t,id);
   if(role==='click'){ g.clearRect(0,0,W,H); const regs=ckOf(s,t);
     regs.forEach(r=>{ const x0=xOf(r.bar), x1=xOf(r.bar+r.bars); const y0=clip(g,x0,x1-x0,H,'#9aa0aa',r.notes.length?'':'Empty',off), y1=H-4, mid=(y0+y1)/2, half=(y1-y0)/2-1;
       r.notes.forEach(n=>{ const bb=s.bars[r.bar+n.b-1]; if(!bb) return; const X=(bb.t+bb.dur*n.st/ckSteps(bb.sig))*PXS; g.fillStyle=off?'#3a3f48':(n.acc?'#f0f2f5':'#8a909b'); const hh=n.acc?half:half*.55; g.fillRect(X,mid-hh,1.5,hh*2); });
@@ -1560,7 +1561,7 @@ function drawLane(cv){
   } else {
     const e=ROLE_E[role]||.5, base=linOf(gainOf(s,t)), sel=selClip&&selClip.song===s.id&&selClip.track===t;
     g.clearRect(0,0,W,H);
-    clipsOf(s,t).forEach((cl,ci)=>{ const x0=cl.start*PXS, x1=cl.end*PXS, cw=x1-x0, dim=off||cl.mute, isSel=sel&&selClip.id===cl.id;
+    clipsOf(s,t).forEach((cl,ci)=>{ const x0=cl.start*PXS, x1=cl.end*PXS, cw=x1-x0, dim=off||cl.mute, isSel=(sel&&selClip.id===cl.id)||isMulti('audio',s.id,t,cl.id);
       const y0=clip(g,x0,cw,H,c,[cl.gain?`${cl.gain>0?'+':''}${cl.gain} dB`:'',cl.mute?'Muted':''].filter(Boolean).join(' · '),dim), y1=H-4, mid=(y0+y1)/2, half=(y1-y0)/2-1;
       // waveform: a smooth peak envelope with an RMS core, drawn as one mirrored shape (Logic / Ableton style)
       // In the app, a stem's real peaks (window.SLW: null while they load); the simulation is for the browser.
@@ -1688,7 +1689,7 @@ function updateGridSel(){ const sel=$('gridSel'); if(!sel) return; const s=songs
   const b=$('gridBtn'); if(b) b.textContent=(GRID==='auto'?`Auto (${(gridName(s)||'').replace('T',' T')})`:(GRIDS.find(g=>g[0]===GRID)||['',''])[1])+' ▾'; }
 const posTxt=(s,time)=>{ const b=s.bars.find((bb,i)=>time>=bb.t-1e-6&&time<(s.bars[i+1]?.t??1e9)-1e-6)||s.bars[0]; let k=0; b.beatT.forEach((x,i)=>{ if(time>=x-1e-6) k=i; }); return `${b.bar}.${k+1}`; };
 function redrawTrack(s,t){ const i=s.tracks.indexOf(t); document.querySelectorAll(`canvas[data-song="${s.id}"][data-t="${i}"]`).forEach(drawLane); }
-function selectClip(s,t,cl){ if(cl){ clickOpen=false; cueOpen=false; if(pick){ const p=pick; pick=null; const so=songs.find(x=>x.id===p.song); if(so) redrawSong(so); } } const prev=selClip; selClip=cl?{song:s.id,track:t,id:cl.id}:null; if(cl) selSec=null;
+function selectClip(s,t,cl){ clearMulti(); if(cl){ clickOpen=false; cueOpen=false; if(pick){ const p=pick; pick=null; const so=songs.find(x=>x.id===p.song); if(so) redrawSong(so); } } const prev=selClip; selClip=cl?{song:s.id,track:t,id:cl.id}:null; if(cl) selSec=null;
   if(prev){ const ps=songs.find(x=>x.id===prev.song); if(ps) redrawTrack(ps,prev.track); } if(cl){ redrawTrack(s,t); if(selId!==s.id) select(s.id,false); } renderInsp(); }
 function splitClip(s,t,cl,time){ if(!(time>cl.start+0.05&&time<cl.end-0.05)) return false; snap(); const list=clipsOf(s,t), i=list.indexOf(cl);
   const nb={...cl,id:clipSeq++,start:time,off:cl.off+(time-cl.start),fi:0}; cl.end=time; cl.fo=0; list.splice(i+1,0,nb); selClip={song:s.id,track:t,id:nb.id}; redrawTrack(s,t); renderInsp(); return true; }
@@ -1696,11 +1697,14 @@ function delClip(s,t,cl){ snap(); const list=clipsOf(s,t); list.splice(list.inde
 function laneMenuFor(s,t){ return ROLE[t]==='click'?'ck':isMidiTrack(s,t)?'mreg':ROLE[t]==='cues'?'cue':null; }
 function regList(s,t,k){ return k==='ck'?ckOf(s,t):regsOf(s,t); }
 function redrawSong(s){ s.tracks.forEach((tt,i)=>document.querySelectorAll(`canvas[data-song="${s.id}"][data-t="${i}"]`).forEach(drawLane)); }
-function setPick(p){ const prev=pick; pick=p; if(p){ selClip=null; selSec=null; clickOpen=false; } [prev,p].forEach(q=>{ if(q){ const so=songs.find(x=>x.id===q.song); if(so) redrawSong(so); } }); if(p&&selId!==p.song) select(p.song,false); else renderInsp(); }
+function setPick(p){ clearMulti(); const prev=pick; pick=p; if(p){ selClip=null; selSec=null; clickOpen=false; } [prev,p].forEach(q=>{ if(q){ const so=songs.find(x=>x.id===q.song); if(so) redrawSong(so); } }); if(p&&selId!==p.song) select(p.song,false); else renderInsp(); }
 function wireRegLane(cv){ const s=songs.find(x=>x.id===cv.dataset.song), t=s.tracks[+cv.dataset.t], k=laneMenuFor(s,t); if(!k) return false; cv.onclick=null;
   const xOf=bar=>s.bars[Math.min(bar,s.total+1)-1].t*PXS;
   if(k==='cue'){ const hit=x=>{ const g=cv.getContext('2d'); g.font='600 10.5px Inter, sans-serif'; return cuesOf(s).find(c=>{ const X=cueT(s,c)*PXS; return x>=X-3&&x<=X+g.measureText(c.text).width+14; }); };
-    cv.onpointerdown=e=>{ if(e.button!==0) return; const c=hit(lx(cv,e)); if(!c){ setPick(null); locate(s,snapT(s,lx(cv,e)/PXS,e.altKey)); return; } setPick({kind:'cue',song:s.id,track:t,id:c.id}); const sx=e.clientX, ot=cueT(s,c), pre=ser(); let mv=false;
+    cv.onpointerdown=e=>{ if(e.button!==0) return; const c=hit(lx(cv,e)); if(!c){ const tt=lx(cv,e)/PXS, alt=e.altKey; boxOrClick(e,s,()=>{ setPick(null); locate(s,snapT(s,tt,alt)); }); return; }
+      if(e.shiftKey||e.ctrlKey||e.metaKey){ toggleSel('cue',s,t,c); return; }
+      if(multiOn()&&isMulti('cue',s.id,t,c.id)){ groupDrag(e,s,cv,{kind:'cue',t,o:c}); return; }
+      setPick({kind:'cue',song:s.id,track:t,id:c.id}); const sx=e.clientX, ot=cueT(s,c), pre=ser(); let mv=false;
       cv.setPointerCapture(e.pointerId); cv.onpointermove=m=>{ if(Math.abs(m.clientX-sx)<3&&!mv) return; mv=true; const p=cueAt(s,snapT(s,ot+(m.clientX-sx)/PXS,m.altKey)); c.bar=p.bar; c.beat=p.beat; drawLane(cv); showTip(`“${c.text}” at ${cuePos(c)}${m.altKey?' · free':''}`,m); };
       cv.onpointerup=()=>{ cv.onpointermove=null; hideTip(); if(mv){ undoS.push(pre); redoS=[]; } }; };
     cv.ondblclick=e=>{ const c=hit(lx(cv,e)), r=cv.getBoundingClientRect(); if(c){ floatInput(r.left-(+cv.dataset.vx||0)+cueT(s,c)*PXS,r.top+r.height/2-12,160,24,c.text,v=>{ if(v){ snap(); c.text=v; drawLane(cv); } }); return; }
@@ -1711,7 +1715,9 @@ function wireRegLane(cv){ const s=songs.find(x=>x.id===cv.dataset.song), t=s.tra
     return true; }
   const list=()=>regList(s,t,k), at=x=>list().find(r=>x>=xOf(r.bar)&&x<xOf(r.bar+r.bars));
   cv.onmousemove=e=>{ if(e.buttons) return; const r=at(lx(cv,e)); if(!r){ cv.style.cursor='text'; return; } const x0=xOf(r.bar),x1=xOf(r.bar+r.bars); cv.style.cursor=tool==='split'?'crosshair':(x1-lx(cv,e)<7||lx(cv,e)-x0<7)?'col-resize':'grab'; };
-  cv.onpointerdown=e=>{ if(e.button!==0) return; const r=at(lx(cv,e)); if(!r){ setPick(null); locate(s,snapT(s,lx(cv,e)/PXS,e.altKey)); return; }
+  cv.onpointerdown=e=>{ if(e.button!==0) return; const r=at(lx(cv,e)); if(!r){ const tt=lx(cv,e)/PXS, alt=e.altKey; boxOrClick(e,s,()=>{ setPick(null); locate(s,snapT(s,tt,alt)); }); return; }
+    if(e.shiftKey||e.ctrlKey||e.metaKey){ toggleSel(k,s,t,r); return; }
+    if(tool!=='split'&&multiOn()&&isMulti(k,s.id,t,r.id)){ groupDrag(e,s,cv,{kind:k,t,o:r}); return; }
     if(tool==='split'){ const b=nearestBoundary(s,lx(cv,e)/PXS); if(b>r.bar&&b<r.bar+r.bars){ snap(); const nr={...JSON.parse(JSON.stringify(r)),id:'r'+regSeq++,bar:b,bars:r.bar+r.bars-b}; if(k==='ck'){ nr.notes=r.notes.filter(n=>n.b>=b-r.bar).map(n=>({...n,b:n.b-(b-r.bar)})); r.notes=r.notes.filter(n=>n.b<b-r.bar); } r.bars=b-r.bar; list().push(nr); list().sort((a,b)=>a.bar-b.bar); redrawSong(s); } return; }
     setPick({kind:k,song:s.id,track:t,id:r.id}); const x0=xOf(r.bar),x1=xOf(r.bar+r.bars), mode=x1-lx(cv,e)<7?'r':lx(cv,e)-x0<7?'l':'m', o={bar:r.bar,bars:r.bars}, sx=e.clientX, pre=ser(); let mv=false;
     const others=list().filter(q=>q!==r), lo=Math.max(1,...others.filter(q=>q.bar<r.bar).map(q=>q.bar+q.bars)), hi=Math.min(s.total+1,...others.filter(q=>q.bar>r.bar).map(q=>q.bar));
@@ -1742,13 +1748,107 @@ function renderCkEd(){ const box=$('ckEd'); if(!ckEd){ box.classList.remove('ope
   box.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{ snap(); +b.dataset.f?fillCk(s,r,+b.dataset.f):(r.notes=[]); redrawSong(s); renderCkEd(); });
   box.querySelectorAll('.ckc i').forEach(c=>c.onpointerdown=()=>{ snap(); const b=+c.dataset.b, st=+c.dataset.st, nt=r.notes.find(q=>q.b===b&&q.st===st); if(!nt){ r.notes.push({b,st,acc:false}); } else if(!nt.acc) nt.acc=true; else r.notes=r.notes.filter(q=>q!==nt);
     const k=r.notes.find(q=>q.b===b&&q.st===st); c.className=(k?(k.acc?'acc':'on'):'')+(c.classList.contains('beat')?' beat':''); redrawSong(s); if(k) clickHit(clickCfg(s,ckEd.track),k.acc,false); }); }
+
+// ---------- multi-select (6c item 5): audio, MIDI and click clips plus cues, mixed, in one song ----------
+// msel holds the selection when it's more than one item (selClip / pick hold a single one, as before).
+// Shift / Ctrl / Cmd+click adds or removes; dragging on an empty part of the lanes draws a box; Ctrl/Cmd+A
+// selects everything in the song; Esc clears. The group moves together, copies / pastes keeping its tracks,
+// duplicates right after itself (Ctrl/Cmd+D) and deletes at once; the inspector shows "N items".
+let msel=new Map();
+const mkey=(kind,song,t,id)=>song+'|'+t+'|'+kind+'|'+id;
+function itemList(s,kind,t){ return kind==='audio'?clipsOf(s,t):kind==='cue'?cuesOf(s):regList(s,t,kind); }
+function selItems(){ const out=[], seen=new Set(); const add=(kind,s,t,o)=>{ if(!s||!o) return; const k=mkey(kind,s.id,t,o.id); if(seen.has(k)) return; seen.add(k); out.push({kind,s,t,o}); };
+  for(const m of msel.values()){ const s=songs.find(x=>x.id===m.song); if(s) add(m.kind,s,m.track,itemList(s,m.kind,m.track).find(x=>x.id===m.id)); }
+  const c=curItem(); if(c&&c.kind!=='sec') add(c.kind,c.s,c.t,c.o); return out; }
+const multiOn=()=>msel.size>1;
+function clearMulti(){ if(!msel.size) return; const ids=new Set([...msel.values()].map(m=>m.song)); msel.clear(); ids.forEach(id=>{ const so=songs.find(x=>x.id===id); if(so) redrawSong(so); }); }
+// the selection becomes exactly these items (one: the usual single selection)
+function setMulti(s,list){ clearMulti(); selClip=null; selSec=null; clickOpen=false; cueOpen=false; const p=pick; pick=null; if(p&&p.song!==s.id){ const so=songs.find(x=>x.id===p.song); so&&redrawSong(so); }
+  if(list.length===1){ const it=list[0]; if(it.kind==='audio') selectClip(s,it.t,it.o); else setPick({kind:it.kind,song:s.id,track:it.t,id:it.o.id}); return; }
+  list.forEach(it=>msel.set(mkey(it.kind,s.id,it.t,it.o.id),{kind:it.kind,song:s.id,track:it.t,id:it.o.id}));
+  if(selId!==s.id) select(s.id,false); redrawSong(s); renderInsp(); }
+function toggleSel(kind,s,t,o){ const now=selItems().filter(it=>it.s===s), k=mkey(kind,s.id,t,o.id), has=now.some(it=>mkey(it.kind,s.id,it.t,it.o.id)===k);
+  setMulti(s,has?now.filter(it=>mkey(it.kind,s.id,it.t,it.o.id)!==k):[...now,{kind,s,t,o}]); }
+const isMulti=(kind,song,t,id)=>msel.has(mkey(kind,song,t,id));
+function selectAllIn(s){ const list=[]; s.tracks.forEach(t=>{ if(isAudio(s,t)) clipsOf(s,t).forEach(o=>list.push({kind:'audio',s,t,o})); else { const k=laneMenuFor(s,t); if(k==='cue') cuesOf(s).forEach(o=>list.push({kind:'cue',s,t,o})); else if(k) regList(s,t,k).forEach(o=>list.push({kind:k,s,t,o})); } });
+  if(!list.length){ toast('Nothing to select in this song'); return; } setMulti(s,list); toast(list.length+' item'+(list.length>1?'s':'')+' selected'); }
+// times (seconds) an item spans
+function itemSpan(it){ const s=it.s, o=it.o, barT=b=>s.bars[Math.min(b,s.total+1)-1].t;
+  if(it.kind==='audio') return [o.start,o.end]; if(it.kind==='cue'){ const t=cueT(s,o); return [t,t+s.bars[Math.min(o.bar,s.total)-1].dur]; } return [barT(o.bar),barT(o.bar+o.bars)]; }
+// a drag on an empty part of the lanes: a box (selects what it touches); a plain click does click()
+function boxOrClick(e,s,click){ const sx=e.clientX, sy=e.clientY, add=e.shiftKey||e.ctrlKey||e.metaKey; let box=null;
+  const move=m=>{ if(!box&&Math.hypot(m.clientX-sx,m.clientY-sy)<5) return; if(!box){ box=document.createElement('div'); box.className='selbox'; document.body.appendChild(box); }
+    const r=[Math.min(sx,m.clientX),Math.min(sy,m.clientY),Math.max(sx,m.clientX),Math.max(sy,m.clientY)]; box._r=r; Object.assign(box.style,{left:r[0]+'px',top:r[1]+'px',width:(r[2]-r[0])+'px',height:(r[3]-r[1])+'px'}); };
+  const up=()=>{ document.removeEventListener('pointermove',move,true); document.removeEventListener('pointerup',up,true); if(!box){ click(); return; } const r=box._r; box.remove(); boxSelect(s,r,add); };
+  document.addEventListener('pointermove',move,true); document.addEventListener('pointerup',up,true); }
+function boxSelect(s,[x0,y0,x1,y1],add){ const found=add?selItems().filter(it=>it.s===s):[], seen=new Set(found.map(it=>mkey(it.kind,s.id,it.t,it.o.id)));
+  const push=(kind,t,o)=>{ const k=mkey(kind,s.id,t,o.id); if(!seen.has(k)){ seen.add(k); found.push({kind,s,t,o}); } };
+  document.querySelectorAll('canvas[data-song="'+s.id+'"][data-t]').forEach(cv=>{ const rc=cv.getBoundingClientRect(); if(rc.bottom<y0||rc.top>y1||rc.right<x0||rc.left>x1) return; const t=s.tracks[+cv.dataset.t]; if(t===undefined) return;
+    const vx=+cv.dataset.vx||0, tA=(Math.max(x0,rc.left)-rc.left+vx)/PXS, tB=(Math.min(x1,rc.right)-rc.left+vx)/PXS;
+    if(isAudio(s,t)){ clipsOf(s,t).forEach(o=>{ if(o.end>tA&&o.start<tB) push('audio',t,o); }); return; }
+    const k=laneMenuFor(s,t); if(k==='cue') cuesOf(s).forEach(o=>{ const ct=cueT(s,o); if(ct>=tA-0.05&&ct<=tB) push('cue',t,o); });
+    else if(k) regList(s,t,k).forEach(o=>{ const [a,b]=itemSpan({kind:k,s,t,o}); if(b>tA&&a<tB) push(k,t,o); }); });
+  if(!found.length){ clearMulti(); setPick(null); selectClip(s,null,null); return; } setMulti(s,found); }
+// the selected items move together (by the dragged one's snapped amount); a step that would overlap
+// something not selected, or leave the song, is skipped
+function groupDrag(e,s,cv,anchor){ const items=selItems().filter(it=>it.s===s), sx=e.clientX, pre=ser(); let moved=false;
+  const barT=b=>s.bars[Math.min(Math.max(1,b),s.total+1)-1].t;
+  const orig=items.map(it=>({it,start:it.o.start,end:it.o.end,bar:it.o.bar,beat:it.o.beat,t0:it.kind==='cue'?cueT(s,it.o):it.kind==='audio'?it.o.start:barT(it.o.bar),evs:it.kind==='mreg'?evIn(s.midi[it.t],it.o).map(ev=>[ev,ev.bar]):[]}));
+  const a0=orig.find(x=>x.it.o===anchor.o)||orig[0];
+  cv.setPointerCapture(e.pointerId);
+  cv.onpointermove=m=>{ if(Math.abs(m.clientX-sx)<3&&!moved) return; moved=true; const dt=(m.clientX-sx)/PXS, free=m.altKey;
+    let d; if(a0.it.kind==='audio'||a0.it.kind==='cue') d=snapT(s,a0.t0+dt,free)-a0.t0; else d=barT(nearestBoundary(s,a0.t0+dt))-a0.t0;
+    // click / MIDI clips move by whole bars: then the whole group does (it keeps its shape)
+    const r0=a0.it.kind==='ck'||a0.it.kind==='mreg'?a0:orig.find(x=>x.it.kind==='ck'||x.it.kind==='mreg'); if(r0) d=barT(nearestBoundary(s,r0.t0+dt))-r0.t0;
+    const next=orig.map(x=>{ const k=x.it.kind; if(k==='audio') return {start:x.start+d,end:x.end+d}; if(k==='cue'){ const p=cueAt(s,Math.max(0,x.t0+d)); return {bar:p.bar,beat:p.beat}; } return {bar:nearestBoundary(s,x.t0+d)}; });
+    const ok=orig.every((x,i)=>{ const k=x.it.kind, n=next[i];
+      if(k==='audio'){ if(n.start<0) return false; return clipsOf(s,x.it.t).every(c=>c===x.it.o||isSelObj(items,c)||c.end<=n.start+1e-6||c.start>=n.end-1e-6); }
+      if(k==='cue') return n.bar>=1&&n.bar<=s.total;
+      const nb=n.bar, ne=nb+x.it.o.bars; if(nb<1||ne>s.total+1) return false; return regList(s,x.it.t,k).every(q=>q===x.it.o||isSelObj(items,q)||q.bar+q.bars<=nb||q.bar>=ne); });
+    if(!ok) return;
+    orig.forEach((x,i)=>{ const o=x.it.o, n=next[i]; if(x.it.kind==='audio'){ o.start=n.start; o.end=n.end; } else if(x.it.kind==='cue'){ o.bar=n.bar; o.beat=n.beat; } else { o.bar=n.bar; x.evs.forEach(([ev,b0])=>{ ev.bar=b0+(n.bar-x.bar); ev.anchor='free'; }); } });
+    clipsSorted(s); redrawSong(s); showTip(items.length+' items · '+(d<0?'-':'+')+fmtMs(Math.abs(d)),m); };
+  cv.onpointerup=()=>{ cv.onpointermove=null; hideTip(); if(moved){ undoS.push(pre); redoS=[]; renderInsp(); } }; }
+const isSelObj=(items,o)=>items.some(it=>it.o===o);
+function clipsSorted(s){ s.tracks.forEach(t=>{ if(isAudio(s,t)) clipsOf(s,t).sort((a,b)=>a.start-b.start); else { const k=laneMenuFor(s,t); if(k&&k!=='cue') regList(s,t,k).sort((a,b)=>a.bar-b.bar); } }); }
+// copy / paste / duplicate / delete as a group (one undo step each)
+function groupCopy(){ const items=selItems(); if(items.length<2) return false; const t0=Math.min(...items.map(it=>itemSpan(it)[0])), t1=Math.max(...items.map(it=>itemSpan(it)[1]));
+  CB={kind:'group',span:t1-t0,items:items.map(it=>{ const o=JSON.parse(JSON.stringify(it.o)); if(it.kind==='mreg') o.events=evIn(it.s.midi[it.t],it.o).map(e=>({...e,rel:e.bar-it.o.bar})); return {kind:it.kind,track:it.t,o,rel:itemSpan(it)[0]-t0}; })};
+  toast('Copied '+items.length+' items'); return true; }
+function groupPaste(s,at){ if(!CB||CB.kind!=='group') return; const group=CB, u=undoS.length, made=[];
+  for(const g of [...group.items].sort((a,b)=>a.rel-b.rel)){ CB={kind:g.kind,track:g.track,o:g.o}; selClip=null; pick=null; pasteAt(s,g.track,at+g.rel);
+    if(selClip&&selClip.song===s.id){ const o=clipsOf(s,selClip.track).find(c=>c.id===selClip.id); if(o) made.push({kind:'audio',s,t:selClip.track,o}); }
+    else if(pick&&pick.song===s.id){ const o=itemList(s,pick.kind,pick.track).find(x=>x.id===pick.id); if(o) made.push({kind:pick.kind,s,t:pick.track,o}); } }
+  if(undoS.length>u+1) undoS.length=u+1; CB=group; selClip=null; pick=null; setMulti(s,made); locate(s,at+group.span); refresh(); }
+function groupDelete(){ const items=selItems(); if(items.length<2) return false; snap();
+  items.forEach(({kind,s,t,o})=>{ if(kind==='audio'){ const L=clipsOf(s,t); L.splice(L.indexOf(o),1); } else if(kind==='cue') s.cues=cuesOf(s).filter(x=>x!==o);
+    else { const L=regList(s,t,kind); L.splice(L.indexOf(o),1); if(kind==='mreg'){ const ev=evIn(s.midi[t],o); s.midi[t].splice(0,s.midi[t].length,...s.midi[t].filter(e=>!ev.includes(e))); } } });
+  clearMulti(); selClip=null; pick=null; refresh(); toast('Deleted '+items.length+' items'); return true; }
+function groupDup(){ const items=selItems(); if(items.length<2) return false; const s=items[0].s, t0=Math.min(...items.map(it=>itemSpan(it)[0])), t1=Math.max(...items.map(it=>itemSpan(it)[1]));
+  groupCopy(); groupPaste(s,t1); return true; }
+// the inspector for a group: what's in it, the settings they share
+function multiPanel(s){ const items=selItems().filter(it=>it.s===s); if(items.length<2) return ''; const n={audio:0,ck:0,mreg:0,cue:0}; items.forEach(it=>n[it.kind]++);
+  const parts=[[n.audio,'audio clip'],[n.mreg,'MIDI clip'],[n.ck,'click clip'],[n.cue,'cue']].filter(x=>x[0]).map(([c,w])=>c+' '+w+(c>1?'s':'')).join(' · ');
+  const aud=items.filter(it=>it.kind==='audio').map(it=>it.o), g=aud.length&&aud.every(c=>c.gain===aud[0].gain)?aud[0].gain:null, allMuted=aud.length&&aud.every(c=>c.mute);
+  const [a,b]=[Math.min(...items.map(it=>itemSpan(it)[0])),Math.max(...items.map(it=>itemSpan(it)[1]))];
+  return '<div class="secpanel"><div class="kicker">'+items.length+' ITEMS</div><div class="sph"><b style="font-size:16px;flex:1">'+items.length+' items</b><button class="ibtn" id="mClose" title="Clear the selection  Esc">✕</button></div>'
+    +'<div class="isub">'+parts+' · '+posTxt(s,a)+' to '+posTxt(s,b)+' on '+new Set(items.map(it=>it.t)).size+' track'+(new Set(items.map(it=>it.t)).size>1?'s':'')+'</div>'
+    +(aud.length?'<div class="kv"><label>Gain'+(aud.length<items.length?' (audio)':'')+'</label><div style="display:flex;align-items:center;gap:8px"><input type="range" class="fad wide" id="mGain" min="-24" max="6" step="0.5" value="'+(g??0)+'" style="--p:'+((((g??0)+24)/30)*100).toFixed(1)+'%"><span class="db" id="mGainV">'+(g===null?'mixed':(g>0?'+':'')+g.toFixed(1))+'</span></div></div>'
+      +'<div class="kv"><label>Mute</label><label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="mMute" '+(allMuted?'checked':'')+'> the '+aud.length+' audio clip'+(aud.length>1?'s':'')+'</label></div>':'')
+    +'<p class="faint" style="font-size:11px;margin-top:10px;line-height:1.5">Drag any of them to move them together. Shift / Ctrl+click adds or removes one; drag on an empty part of the lanes to draw a box.</p>'
+    +'<div class="acts"><button class="btn line" data-mk="copy">Copy</button><button class="btn line" data-mk="dup">Duplicate</button><button class="btn danger" data-mk="del">Delete</button></div></div>'; }
+function wireMultiPanel(s){ const c=$('mClose'); if(!c) return; c.onclick=()=>{ clearMulti(); renderInsp(); };
+  const items=()=>selItems().filter(it=>it.s===s), aud=()=>items().filter(it=>it.kind==='audio').map(it=>it.o);
+  const gr=$('mGain'); if(gr){ gr.onpointerdown=()=>snap(); gr.onkeydown=()=>snap(); gr.oninput=()=>{ const v=+gr.value; aud().forEach(c=>c.gain=v); gr.style.setProperty('--p',((v+24)/30*100).toFixed(1)+'%'); $('mGainV').textContent=(v>0?'+':'')+v.toFixed(1); redrawSong(s); }; }
+  const mm=$('mMute'); if(mm) mm.onchange=()=>{ snap(); aud().forEach(c=>c.mute=mm.checked); redrawSong(s); };
+  document.querySelectorAll('[data-mk]').forEach(b=>b.onclick=()=>{ const a=b.dataset.mk; if(a==='copy') groupCopy(); else if(a==='dup') groupDup(); else groupDelete(); }); }
 // ---------- clipboard: copy / cut / paste / duplicate / delete ----------
 function curItem(){ if(selClip){ const s=songs.find(x=>x.id===selClip.song), cl=s&&clipsOf(s,selClip.track).find(c=>c.id===selClip.id); return cl?{kind:'audio',s,t:selClip.track,o:cl}:null; }
   if(pick){ const s=songs.find(x=>x.id===pick.song); if(!s) return null; const L=pick.kind==='cue'?cuesOf(s):regList(s,pick.track,pick.kind), o=L.find(x=>x.id===pick.id); return o?{kind:pick.kind,s,t:pick.track,o}:null; }
   if(selSec){ const s=songs.find(x=>x.id===selSec.song), o=s&&secObj(s,selSec.id); return o?{kind:'sec',s,o}:null; } return null; }
-function doCopy(){ const it=curItem(); if(!it){ toast('Select a clip, section or cue first'); return false; } const o=JSON.parse(JSON.stringify(it.o));
+function doCopy(){ if(multiOn()) return groupCopy(); const it=curItem(); if(!it){ toast('Select a clip, section or cue first'); return false; } const o=JSON.parse(JSON.stringify(it.o));
   if(it.kind==='mreg') o.events=evIn(it.s.midi[it.t],it.o).map(e=>({...e,rel:e.bar-it.o.bar})); CB={kind:it.kind,track:it.t,o}; toast('Copied'); return true; }
-function doDelete(){ const it=curItem(); if(!it) return; const {s,t,o}=it; snap();
+function doDelete(){ if(multiOn()){ groupDelete(); return; } const it=curItem(); if(!it) return; const {s,t,o}=it; snap();
   if(it.kind==='audio'){ clipsOf(s,t).splice(clipsOf(s,t).indexOf(o),1); selClip=null; }
   else if(it.kind==='sec'){ s.secs=s.secs.filter(x=>x!==o); selSec=null; buildBars(s); }
   else if(it.kind==='cue'){ s.cues=cuesOf(s).filter(x=>x!==o); pick=null; }
@@ -1766,8 +1866,8 @@ function pasteAt(s,t,at){ if(!CB) return; const k=CB.kind, o=JSON.parse(JSON.str
     const n={id:'r'+regSeq++,bar,bars:o.bars}; if(k==='ck') n.notes=o.notes; else o.events.forEach(e=>{ const c={...e,id:evId++,bar:bar+e.rel,anchor:'free'}; delete c.rel; s.midi[tt].push(c); }); L.push(n); L.sort((a,b)=>a.bar-b.bar); buildBars(s);
     pick={kind:k,song:s.id,track:tt,id:n.id}; selClip=null; locate(s,s.bars[Math.min(n.bar+n.bars,s.total+1)-1].t); }
   refresh(); }
-function doPaste(){ if(!CB){ toast('Nothing copied yet'); return; } const s=songs.find(x=>x.id===(playId===selId?playId:selId)); if(!s) return; const at=playId===s.id?pos:0; pasteAt(s,CB.track,at); }
-function doDup(){ const it=curItem(); if(!it){ toast('Select something to duplicate'); return; } if(!doCopy()) return; const {s,o}=it; let end;
+function doPaste(){ if(!CB){ toast('Nothing copied yet'); return; } const s=songs.find(x=>x.id===(playId===selId?playId:selId)); if(!s) return; const at=playId===s.id?pos:0; if(CB.kind==='group'){ groupPaste(s,at); return; } pasteAt(s,CB.track,at); }
+function doDup(){ if(multiOn()){ groupDup(); return; } const it=curItem(); if(!it){ toast('Select something to duplicate'); return; } if(!doCopy()) return; const {s,o}=it; let end;
   if(it.kind==='audio') end=o.end; else if(it.kind==='sec') end=s.bars[Math.min(o.start+o.bars,s.total+1)-1].t; else if(it.kind==='cue') end=cueT(s,o)+s.bars[Math.min(o.bar,s.total)-1].dur; else end=s.bars[Math.min(o.bar+o.bars,s.total+1)-1].t;
   pasteAt(s,it.t,end); }
 function wireClipLane(cv){ const s=songs.find(x=>x.id===cv.dataset.song), t=s.tracks[+cv.dataset.t]; if(!isAudio(s,t)) return false;
@@ -1775,7 +1875,9 @@ function wireClipLane(cv){ const s=songs.find(x=>x.id===cv.dataset.song), t=s.tr
   cv.onmousemove=e=>{ if(e.buttons) return; const x=lx(cv,e), cl=clipAt(s,t,x/PXS); if(!cl){ cv.style.cursor='text'; return; } const x0=cl.start*PXS,x1=cl.end*PXS;
     cv.style.cursor=tool==='split'?'crosshair':(e.offsetY<20&&(Math.abs(x-(x0+cl.fi*PXS))<7||Math.abs(x-(x1-cl.fo*PXS))<7))?'ew-resize':(x-x0<7||x1-x<7)?'col-resize':'grab'; };
   cv.onpointerdown=e=>{ if(e.button!==0) return; const x=lx(cv,e), time=x/PXS, cl=clipAt(s,t,time);
-    if(!cl){ selectClip(s,t,null); locate(s,snapT(s,time,e.altKey)); return; }
+    if(!cl){ const alt=e.altKey; boxOrClick(e,s,()=>{ selectClip(s,t,null); locate(s,snapT(s,time,alt)); }); return; }
+    if(e.shiftKey||e.ctrlKey||e.metaKey){ toggleSel('audio',s,t,cl); return; }
+    if(tool!=='split'&&multiOn()&&isMulti('audio',s.id,t,cl.id)){ groupDrag(e,s,cv,{kind:'audio',t,o:cl}); return; }
     if(tool==='split'){ splitClip(s,t,cl,snapT(s,time,e.altKey)); return; }
     const x0=cl.start*PXS, x1=cl.end*PXS; let mode='move';
     if(e.offsetY<20&&Math.abs(x-(x0+cl.fi*PXS))<7) mode='fi'; else if(e.offsetY<20&&Math.abs(x-(x1-cl.fo*PXS))<7) mode='fo'; else if(x-x0<7) mode='l'; else if(x1-x<7) mode='r';
@@ -1961,8 +2063,8 @@ function renderInsp(){
   const roles=[...new Set(s.tracks.filter(t=>!isMidiTrack(s,t)).map(t=>ROLE[t]).filter(Boolean))];
   const midiT=s.tracks.filter(t=>isMidiTrack(s,t));
   $('inspTitle').textContent=(selSec&&selSec.song===s.id)?'Section':'Song';
-  const ctxHTML=clickPanel(s)||cuePanel(s)||clipPanel(s)||secPanel(s)||pickPanel(s);
-  if(ctxHTML){ $('inspTitle').innerHTML=`<button class="iback" id="iBack">‹ ${esc(s.name)}</button>`; $('insp').innerHTML=ctxHTML; $('iBack').onclick=()=>{ clickOpen=false; cueOpen=false; selClip=null; selSec=null; const p=pick; pick=null; if(p){ const so=songs.find(x=>x.id===p.song); so&&redrawSong(so); } refresh(); };
+  const ctxHTML=multiPanel(s)||clickPanel(s)||cuePanel(s)||clipPanel(s)||secPanel(s)||pickPanel(s);
+  if(ctxHTML){ $('inspTitle').innerHTML=`<button class="iback" id="iBack">‹ ${esc(s.name)}</button>`; $('insp').innerHTML=ctxHTML; wireMultiPanel(s); $('iBack').onclick=()=>{ clearMulti(); clickOpen=false; cueOpen=false; selClip=null; selSec=null; const p=pick; pick=null; if(p){ const so=songs.find(x=>x.id===p.song); so&&redrawSong(so); } refresh(); };
     wireSecPanel(s); wireClipPanel(s); wireClickPanel(s); wireCuePanel(s); wirePickPanel(s); return; }
   $('inspTitle').textContent='Song';
   $('insp').innerHTML=`
@@ -2428,7 +2530,10 @@ $('closeL').onclick=()=>setPanel('L',false); $('closeR').onclick=()=>setPanel('R
 try{ if(localStorage.getItem('setline.panelL')==='0') setPanel('L',false); if(localStorage.getItem('setline.panelR')==='0') setPanel('R',false); }catch(e){}
 document.addEventListener('keydown',e=>{ if(/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
   if(e.metaKey||e.ctrlKey){ const k=e.key.toLowerCase(); if(k===','){ e.preventDefault(); if(window.SLE) SLE.preferences(); return; } if(k==='s'){ e.preventDefault(); if(window.SLE) SLE.save(e.shiftKey); return; } if(k==='o'){ e.preventDefault(); if(window.SLE) SLE.open(); return; } if(k==='n'){ e.preventDefault(); if(window.SLE) SLE.newSession(); return; } if(k==='z'){ e.preventDefault(); e.shiftKey?redo():undo(); return; } if(k==='y'){ e.preventDefault(); redo(); return; }
+    if(k==='a'&&selId&&!ed.song){ e.preventDefault(); const s=songs.find(x=>x.id===selId); if(s) selectAllIn(s); return; }
     if(k==='c'){ e.preventDefault(); doCopy(); return; } if(k==='x'){ e.preventDefault(); doCut(); return; } if(k==='v'){ e.preventDefault(); doPaste(); return; } if(k==='d'){ e.preventDefault(); doDup(); return; } }
+  if(multiOn()&&(e.key==='Delete'||e.key==='Backspace')){ e.preventDefault(); groupDelete(); return; }
+  if(multiOn()&&e.key==='Escape'){ clearMulti(); renderInsp(); return; }
   if(pick&&(e.key==='Delete'||e.key==='Backspace')){ e.preventDefault(); doDelete(); return; }
   if(pick&&e.key==='Escape'){ setPick(null); return; }
   if(ckEd&&e.key==='Escape'){ ckEd=null; renderCkEd(); return; }
