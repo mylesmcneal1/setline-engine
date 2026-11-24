@@ -93,6 +93,8 @@ public:
     struct MidiAt { int64_t sample; int port; uint8_t d[3]; int len; };
     const std::vector<ClickHit>& clickList() const { return clicks; }
     const std::vector<MidiAt>& midiList() const { return midiEvents; }
+    struct CueAt { int64_t sample; std::shared_ptr<const std::vector<float>> audio; };
+    const std::vector<CueAt>& cueList() const { return cues; }
 
 private:
     void diskLoop();
@@ -108,6 +110,9 @@ private:
     std::vector<ClickHit> clicks;
     std::vector<MidiAt> midiEvents;
     std::vector<int> clickOuts;
+    std::vector<CueAt> cues;   // sorted by sample; audio preloaded (never rendered during playback)
+    std::vector<int> cueOuts;
+    int64_t longestCue = 0;
     float clickGain = 0.5f;
     std::unique_ptr<LiveGain[]> stemGains; // one per stem (allocated in load)
     LiveGain clickLive, cueLive;

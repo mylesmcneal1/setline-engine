@@ -6,6 +6,7 @@
 #include "SessionFile.h"
 #include "Media.h"
 #include "Peaks.h"
+#include "Cues.h"
 
 namespace setline::gui {
 
@@ -49,6 +50,7 @@ private:
     SessionFile session;
     Media media;
     Peaks peaks;
+    Cues cues;
     void preparePeaks(const juce::var& refs, const juce::File& sessionFile);
     bool dirty = false;
 };

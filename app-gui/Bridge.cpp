@@ -17,9 +17,19 @@ Bridge::Bridge(AudioHost& host, juce::PropertiesFile& settings) : audio(host), s
     audio.onSetupChanged = [this] { emit("audioSetupChanged", audio.getSetup()); };
     audio.emit = [this](const juce::Identifier& id, const juce::var& v) { emit(id, v); };
     media.emit = [this](const juce::Identifier& id, const juce::var& v) { emit(id, v); };
+    audio.cueAudio = [this](const juce::String& text, const juce::var& v, double rate, std::vector<std::string>& w) {
+        const Cues::Choice c { v["voice"].toString(), v["name"].toString(), v["speed"].isVoid() ? 1.0 : (double) v["speed"] };
+        juce::String err;
+        bool fellBack = false;
+        auto a = cues.get(text, c, rate, err, fellBack);
+        const juce::String q = juce::String::fromUTF8("\xe2\x80\x9c"), qq = juce::String::fromUTF8("\xe2\x80\x9d");
+        if (fellBack) w.push_back((juce::String("The cue voice ") + q + c.name + qq + " isn't installed on this computer, so cues use the default voice.").toStdString());
+        if (! a) w.push_back((juce::String("Cue ") + q + text + qq + " couldn't be spoken: " + err).toStdString());
+        return a;
+    };
 }
 
-Bridge::~Bridge() { audio.onSetupChanged = nullptr; audio.emit = nullptr; media.emit = nullptr; }
+Bridge::~Bridge() { audio.onSetupChanged = nullptr; audio.emit = nullptr; audio.cueAudio = nullptr; media.emit = nullptr; }
 
 Bridge::Options Bridge::add(Options o, const char* name, Fn fn)
 {
@@ -145,6 +155,33 @@ Bridge::Options Bridge::addTo(Options o)
             auto r = Peaks::toVar(*d, spp);
             r.getDynamicObject()->setProperty("cache", cache);
             done(r);
+        });
+    });
+    // Spoken cues (Cues.h): the installed voices, rendering ahead of time, Preview on the Cues outputs.
+    o = add(o, "getVoices", [this](const juce::var&) { return cues.voices(); });
+    o = add(o, "prepareCues", [this](const juce::var& a) {
+        const double rate = audio.sampleRate();
+        if (rate > 0) cues.prepare(a["cues"], rate);
+        auto* r = new juce::DynamicObject(); r->setProperty("ok", rate > 0); return juce::var(r);
+    });
+    // {text, voice, name, speed, outs: [1-based], db} -> plays once -> {ok, seconds, voice} | {error}
+    o = addAsync(o, "previewCue", [this](const juce::var& a, auto done) {
+        const double rate = audio.sampleRate();
+        if (rate <= 0) { done(errorVar("No audio device is open.")); return; }
+        const Cues::Choice c { a["voice"].toString(), a["name"].toString(), a["speed"].isVoid() ? 1.0 : (double) a["speed"] };
+        std::vector<int> outs;
+        if (auto* o2 = a["outs"].getArray()) for (auto& v : *o2) if ((int) v >= 1) outs.push_back((int) v - 1);
+        const float gain = juce::Decibels::decibelsToGain((float) (double) a["db"], -60.0f);
+        bool fellBack = false;
+        cues.resolve(c, fellBack);
+        cues.render(a["text"].toString().trim(), c, rate, [this, done, outs, gain, rate, fellBack](Cues::Audio au, juce::String err) {
+            if (! au) { done(errorVar(err.isEmpty() ? juce::String("Couldn't speak that") : err)); return; }
+            audio.playPreview(au, outs, gain);
+            auto* r = new juce::DynamicObject();
+            r->setProperty("ok", true);
+            r->setProperty("seconds", (double) au->size() / rate);
+            r->setProperty("fellBack", fellBack);
+            done(juce::var(r));
         });
     });
     o = addAsync(o, "locateAudio", [this](const juce::var& a, auto done) { media.locate(a, done); });

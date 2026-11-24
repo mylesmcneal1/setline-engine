@@ -29,7 +29,7 @@ std::string Engine::load(const SongDef& song, const Config& c, std::vector<std::
     diskRun = false;
     if (disk.joinable()) disk.join();
     cfg = c;
-    stems.clear(); clicks.clear(); midiEvents.clear();
+    stems.clear(); clicks.clear(); midiEvents.clear(); cues.clear();
     rampSamples = std::max(1, (int) std::lround(0.010 * cfg.sampleRate));    // live level changes
     fadeOutSamples = std::max(1, (int) std::lround(0.010 * cfg.sampleRate)); // stop
 
@@ -60,6 +60,7 @@ std::string Engine::load(const SongDef& song, const Config& c, std::vector<std::
     for (auto& t : song.tempo) { lastBar = std::max(lastBar, t.bar); if (t.ramp) warnings.push_back("Tempo ramp at bar " + std::to_string(t.bar) + " is played as a jump for now."); }
     for (auto& m : song.midi) lastBar = std::max(lastBar, m.bar);
     if (song.clickHits) for (auto& h : *song.clickHits) lastBar = std::max(lastBar, h.bar);
+    for (auto& c : song.cues) lastBar = std::max(lastBar, c.bar);
     tmap.build(song.tempo, cfg.sampleRate, songLen, lastBar);
     // With stems, the song is as long as its longest stem (as before). Without stems it lasts until the
     // end of the last bar of its tempo map / content. lengthBars, when given, is a minimum either way.
@@ -98,6 +99,19 @@ std::string Engine::load(const SongDef& song, const Config& c, std::vector<std::
             }
         }
     }
+
+    // --- spoken cues: preloaded one-shots from their bar's sample ---
+    cueOuts = song.cueOuts;
+    for (int o : cueOuts) maxOut = std::max(maxOut, o);
+    longestCue = 0;
+    for (auto& c : song.cues) {
+        if (! c.audio || c.audio->empty() || c.bar < 1) continue;
+        const int64_t s = tmap.sampleAt(c.bar, std::max(1.0, c.beat));
+        if (s >= songLen) { warnings.push_back("Cue \"" + c.text + "\" at bar " + std::to_string(c.bar) + " is after the end of the song."); continue; }
+        cues.push_back({ s, c.audio });
+        longestCue = std::max(longestCue, (int64_t) c.audio->size());
+    }
+    std::stable_sort(cues.begin(), cues.end(), [](auto& a, auto& b) { return a.sample < b.sample; });
 
     // --- MIDI ---
     for (auto& m : song.midi) {
@@ -354,6 +368,25 @@ void Engine::renderSegment(float* const* outs, int numOuts, int off, int count, 
                 const float v = voice.amp * (float) (std::cos(voice.phase) * voice.env) * live.at(i);
                 for (int o : clickOuts) if (o >= 0 && o < no && seg[o]) seg[o][i] += v;
                 voice.phase += voice.inc; voice.env *= voice.decay; --voice.remaining;
+            }
+        }
+    }
+
+    // 2b) spoken cues: what plays at song sample s depends only on s (sample s - start of every cue that
+    // has started and not finished), so a start, jump or loop into the middle of a cue plays exactly
+    // the right part of it. Under the Cues track's live level.
+    if (! cueOuts.empty() && ! cues.empty()) {
+        const GainRamp live = cueLive.next(count, rampSamples);
+        const int64_t end = p + count;
+        // first cue that could still be sounding at p
+        auto it = std::lower_bound(cues.begin(), cues.end(), p - longestCue, [](const CueAt& c, int64_t x) { return c.sample < x; });
+        for (; it != cues.end() && it->sample < end; ++it) {
+            const auto& a = *it->audio;
+            const int64_t from = std::max(p, it->sample), to = std::min(end, it->sample + (int64_t) a.size());
+            for (int64_t s = from; s < to; ++s) {
+                const int i = (int) (s - p);
+                const float v = a[(size_t) (s - it->sample)] * live.at(i);
+                for (int o : cueOuts) if (o >= 0 && o < no && seg[o]) seg[o][i] += v;
             }
         }
     }

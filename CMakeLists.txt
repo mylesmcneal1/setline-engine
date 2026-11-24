@@ -113,11 +113,13 @@ if(SETLINE_WITH_JUCE)
       app-gui/SessionFile.cpp
       app-gui/Media.cpp
       app-gui/Peaks.cpp
+      app-gui/Cues.cpp
+      app-gui/SpeechWin.cpp
       app-gui/WebUi.cpp)
     if(APPLE)
-      target_sources(setline PRIVATE app-gui/MacDrop.mm)
+      target_sources(setline PRIVATE app-gui/MacDrop.mm app-gui/SpeechMac.mm)
       # Objective-C++ without changing how JUCE's own sources compile.
-      set_source_files_properties(app-gui/MacDrop.mm PROPERTIES COMPILE_OPTIONS "-xobjective-c++")
+      set_source_files_properties(app-gui/MacDrop.mm app-gui/SpeechMac.mm PROPERTIES COMPILE_OPTIONS "-xobjective-c++")
     endif()
     target_compile_definitions(setline PRIVATE
       JUCE_WEB_BROWSER=1
@@ -133,5 +135,11 @@ if(SETLINE_WITH_JUCE)
               juce::juce_gui_extra juce::juce_audio_devices juce::juce_audio_formats
       PUBLIC  juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
     setline_enable_asio(setline)
+    # Spoken cues: the system's speech (SAPI on Windows, AVSpeechSynthesizer on macOS).
+    if(WIN32)
+      target_link_libraries(setline PRIVATE sapi ole32)
+    elseif(APPLE)
+      target_link_libraries(setline PRIVATE "-framework AVFoundation")
+    endif()
   endif()
 endif()

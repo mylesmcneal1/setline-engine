@@ -64,7 +64,8 @@ void addMsg(SongDef& def, int port, int bar, double beat, double early, std::ini
 } // namespace
 
 MappedSong mapSong(const juce::var& payload, double sr, int numOutputs,
-                   const std::function<int(const juce::String&, std::vector<std::string>&)>& resolvePort)
+                   const std::function<int(const juce::String&, std::vector<std::string>&)>& resolvePort,
+                   const std::function<std::shared_ptr<const std::vector<float>>(const juce::String& text, const juce::var& voice, std::vector<std::string>& warnings)>& cueAudio)
 {
     MappedSong out;
     auto& def = out.def;
@@ -129,6 +130,10 @@ MappedSong mapSong(const juce::var& payload, double sr, int numOutputs,
                 out.engineTrack[t] = Engine::ClickTrack;
             } else if (role == "cues") {
                 out.engineTrack[t] = Engine::CueTrack;
+                if (def.cueOuts.empty()) {
+                    def.cueOuts = outsFor(t);
+                    if (def.cueOuts.empty() && s["cues"].size() > 0) warn("The cues aren't routed to an output (Outputs & MIDI page), so they won't be heard.");
+                }
             } else {
                 const auto f = s["files"][tid];
                 const auto ref = f["path"].toString();
@@ -166,8 +171,21 @@ MappedSong mapSong(const juce::var& payload, double sr, int numOutputs,
             }
         }
     if (noFile > 0) warn(juce::String(noFile) + " audio track" + (noFile > 1 ? "s have" : " has") + " no audio file yet, so " + (noFile > 1 ? "they" : "it") + " plays silence.");
-    if (std::any_of(out.engineTrack.begin(), out.engineTrack.end(), [](auto& p) { return p.second == Engine::CueTrack; }) && s["cues"].size() > 0)
-        warn("Spoken cues aren't played yet (they arrive with audio in step 2).");
+    // ---- spoken cues: rendered ahead of time, played from their bar on the Cues track ----
+    if (! def.cueOuts.empty() && cueAudio) {
+        const juce::var voice = s["cueVoice"].isObject() ? s["cueVoice"] : payload["cueVoice"];
+        if (auto* cs = s["cues"].getArray())
+            for (auto& c : *cs) {
+                const auto text = c["text"].toString().trim();
+                if (text.isEmpty()) continue;
+                CueDef d;
+                d.bar = juce::jmax(1, toInt(c["bar"], 1));
+                d.beat = juce::jmax(1.0, toDouble(c["beat"], 1));
+                d.text = text.toStdString();
+                d.audio = cueAudio(text, voice, out.warnings);
+                if (d.audio) def.cues.push_back(std::move(d));
+            }
+    }
 
     // ---- click: exactly the notes in the click clips ----
     const float accentGain = (float) toDouble(click["accentGain"], 0), beatGain = (float) toDouble(click["beatGain"], -4),

@@ -673,6 +673,62 @@ bool runSelfTest(bool verbose)
         check(loopOk && lp.e.stats.jumps.load() >= 4, "clips: a loop across a clip boundary is sample-exact on every pass (" + std::to_string(lp.e.stats.jumps.load()) + " passes)");
     }
 
+    // ---- Step 2: spoken cues (preloaded one-shots on their bar) ----
+    {
+        // Cue audio with every sample different and non-zero (0.3 s), so its first sample and any offset show.
+        auto cueAudio = [&](float base) {
+            auto v = std::make_shared<std::vector<float>>((size_t) (0.3 * sr));
+            for (size_t i = 0; i < v->size(); ++i) (*v)[i] = base + 0.2f * (float) std::fmod((double) i * 0.6180339887, 1.0) + 0.01f;
+            return std::shared_ptr<const std::vector<float>>(v);
+        };
+        SongDef s; s.name = "Cues"; s.tempo = { { 1, 120, 4, 4 }, { 4, 97, 0, 0 } }; s.lengthBars = 8;
+        s.cueOuts = { 1 };
+        CueDef c1; c1.bar = 3; c1.audio = cueAudio(0.3f); c1.text = "Verse";
+        CueDef c2; c2.bar = 5; c2.beat = 2.5; c2.audio = cueAudio(-0.6f); c2.text = "Chorus";
+        s.cues = { c1, c2 };
+        auto expectCue = [&](const OfflineRun& r, int64_t t) { // what the cue output should hold at song sample t
+            float v = 0;
+            for (auto& c : r.e.cueList()) if (t >= c.sample && t < c.sample + (int64_t) c.audio->size()) v += (*c.audio)[(size_t) (t - c.sample)];
+            return v;
+        };
+        bool onBar = true, exact = true;
+        for (int blk : { 128, 97, 33, 1024 }) {
+            OfflineRun r; r.load(s, sr, 4, blk); r.start(0); r.runToEnd();
+            const int64_t b3 = r.e.tempoMap().sampleAt(3, 1), b5 = r.e.tempoMap().sampleAt(5, 2.5);
+            onBar &= r.e.cueList().size() == 2 && r.e.cueList()[0].sample == b3 && r.e.cueList()[1].sample == b5
+                  && r.at(1, b3 - 1) == 0.0f && r.at(1, b3) == (*c1.audio)[0] && r.at(1, b5 - 1) == 0.0f && r.at(1, b5) == (*c2.audio)[0];
+            for (int64_t t = 0; t < r.e.lengthSamples() && exact; ++t) exact = r.at(1, t) == expectCue(r, t) && r.at(0, t) == 0.0f;
+        }
+        check(onBar, "cues: each cue starts on its bar's exact sample (bar 3, and bar 5 beat 2.5 after a tempo change; blocks 128/97/33/1024)");
+        check(exact, "cues: every cue sample is exact, only on the Cues output, silence elsewhere");
+
+        // starting in the middle of a cue, a loop across a cue, a jump onto a cue
+        OfflineRun full; full.load(s, sr, 4, 97); full.start(0); full.runToEnd();
+        const int64_t b3 = full.e.tempoMap().sampleAt(3, 1);
+        OfflineRun mid; mid.load(s, sr, 4, 97);
+        bool midOk = mid.start(b3 + 1000); mid.runToEnd();
+        for (int64_t t = b3 + 1000; t < b3 + 20000 && midOk; ++t) midOk = mid.at(1, t) == full.at(1, t);
+        check(midOk, "cues: starting inside a cue plays the rest of it from the exact sample");
+        const int64_t B = full.e.tempoMap().sampleAt(2, 1), A = full.e.tempoMap().sampleAt(4, 1), L = A - B; // bars 2-3
+        OfflineRun lp; lp.load(s, sr, 4, 97); lp.e.setLoop(B, A); lp.start(0);
+        while ((int64_t) lp.out[1].size() < A + 3 * L) lp.step();
+        bool loopOk = true;
+        for (int64_t i = 0; i < A + 3 * L && loopOk; ++i) loopOk = lp.out[1][(size_t) i] == full.at(1, i < A ? i : B + (i - A) % L);
+        check(loopOk, "cues: a loop over the cue's bar plays it from its first sample on every pass");
+        OfflineRun jp; jp.load(s, sr, 4, 97); jp.start(0);
+        jp.e.setJump(full.e.tempoMap().sampleAt(2, 1), b3 + 500, false);
+        while ((int64_t) jp.out[1].size() < B + 20000) jp.step();
+        bool jumpOk = true;
+        for (int64_t i = B; i < B + 20000 && jumpOk; ++i) jumpOk = jp.out[1][(size_t) i] == full.at(1, b3 + 500 + (i - B));
+        check(jumpOk, "cues: a jump into a cue plays it from the exact sample");
+
+        // live level: the Cues track muted -> silent
+        OfflineRun mu; mu.load(s, sr, 4, 128); mu.e.setTrackLevel(Engine::CueTrack, 0, true); mu.start(0); mu.runToEnd();
+        bool muted = true;
+        for (auto x : mu.out[1]) muted &= x == 0.0f;
+        check(muted, "cues: muting the Cues track silences them");
+    }
+
     std::printf(ok ? "ALL CHECKS PASSED\n" : "SOME CHECKS FAILED\n");
     return ok;
 }

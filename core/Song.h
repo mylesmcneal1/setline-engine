@@ -48,6 +48,15 @@ struct ClickHitDef {
     float gainDb = 0;      // per-hit level on top of the click track level (e.g. quieter subdivisions)
 };
 
+// One spoken cue: audio rendered ahead of time (mono, at the engine's sample rate), started exactly on
+// its bar/beat. Never synthesized during playback.
+struct CueDef {
+    int bar = 1;
+    double beat = 1;
+    std::shared_ptr<const std::vector<float>> audio;
+    std::string text; // for warnings
+};
+
 struct SongDef {
     std::string name;
     std::vector<TempoChange> tempo;
@@ -58,6 +67,9 @@ struct SongDef {
     // When not set, it clicks every beat (the test song and the spike).
     std::optional<std::vector<ClickHitDef>> clickHits;
     std::vector<MidiEventDef> midi;
+    // Spoken cues: rendered audio played from each cue's bar on the Cues track's outputs (step 2).
+    std::vector<CueDef> cues;
+    std::vector<int> cueOuts; // 0-based; empty = cues play nowhere
     // The song lasts at least this many bars (0 = as long as its stems / tempo map / content say).
     int lengthBars = 0;
 };

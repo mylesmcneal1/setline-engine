@@ -20,7 +20,12 @@ interface Page {
   addNative(list: AudioInfo[]): void; openNewSong(): void; modalOpen(): boolean; dropZone(): HTMLElement;
   addStems(s: Song, list: { role: string; info: AudioInfo }[], refs: Record<string, string>, copy: boolean): void;
   colourOf(t: string): string; roleOf(t: string): string; rerender(): void; redrawTrack(s: Song, t: string): void;
+  // step 2: spoken cues
+  cueCfg(s: Song): CueVoice; cueVoiceAll(): CueVoice; setVoices(list: VoiceInfo[]): void;
 }
+// Cue voice choice as saved (voice id + name: ids differ between computers) and an installed voice.
+interface CueVoice { voice: string; name: string; speed: number }
+interface VoiceInfo { id: string; name: string; lang: string; isDefault: boolean }
 // A file as the app read it (Media::probe). ok = false: error says why it can't be imported.
 interface AudioInfo { path: string; name: string; ok: boolean; channels?: number; rate?: number; frames?: number; seconds?: number; format?: string; bits?: number; error?: string }
 interface Progress { done: number; total: number; file: string; finished: boolean }
@@ -30,7 +35,7 @@ interface FileResult { name?: string; path?: string; text?: string; cancelled?: 
 interface Stats { running: boolean; xruns: number | null; underruns: number; midiSent: number; midiDropped: number; midiLateMaxMs: number; cpu: number; callbackMaxMs: number; budgetMs: number }
 interface Setup { current: { driver: string; device: string; rate: number; buffer: number; latencyMs: number; outputs?: string[] } | null; error?: string }
 
-declare global { interface Window { SLPage?: Page; SLE?: typeof SLE; SLR?: typeof SLR; SLW?: typeof SLW } }
+declare global { interface Window { SLPage?: Page; SLE?: typeof SLE; SLR?: typeof SLR; SLW?: typeof SLW; SLC?: typeof SLC } }
 
 // ---------------------------------------------------------------- output routing (by track name)
 // Each distinct track name is routed once for the whole show: every song's track with that name follows
@@ -153,7 +158,7 @@ function payload(s: Song) {
   s.tracks.forEach((t) => (roles[t] = p.ROLE[t] || ""));
   const outs: Record<string, number[]> = {};
   s.tracks.forEach((t) => { if (!isMidiTrack(s, t)) outs[t] = outsOf(s, t); });
-  return { song, outs, roles, click: p.clickCfg(s) };
+  return { song, outs, roles, click: p.clickCfg(s), cueVoice: p.cueVoiceAll() };
 }
 // What forces a reload: everything except the mixer levels, which change live (setTrackLevel).
 function loadKey(body: ReturnType<typeof payload>): string {
@@ -317,6 +322,36 @@ const rateForImport = () => sessionRate || deviceRate || 48000;
 const sessionText = () => JSON.stringify(tidy({ format: "setline-session", version: 1, ...(sessionRate ? { rate: sessionRate } : {}), ...page().sessionData(), routing: route }), null, 1);
 let lastReported = "";
 
+// ---------------------------------------------------------------- spoken cues (step 2)
+// Cues are rendered by the app ahead of time (Cues.h): every cue of the session is sent for rendering
+// whenever the set of cue texts / voices changes, so Play only picks them up.
+const cuesTrack = (s: Song) => s.tracks.find((t) => page().ROLE[t] === "cues");
+let preparedKey = "";
+function prepareCues() {
+  if (!deviceRate) return;
+  const list: { text: string; voice: string; name: string; speed: number }[] = [];
+  for (const s of page().songs) {
+    if (!cuesTrack(s)) continue;
+    const c = page().cueCfg(s);
+    for (const q of (s.cues || []) as { text?: string }[]) if (q.text && q.text.trim()) list.push({ text: q.text.trim(), voice: c.voice || "", name: c.name || "", speed: c.speed || 1 });
+  }
+  const key = deviceRate + JSON.stringify(list);
+  if (key === preparedKey) return;
+  preparedKey = key;
+  if (list.length) SL.call("prepareCues", { cues: list }).catch(() => {});
+}
+const SLC = {
+  // Speaks text with song s's cue voice, once, on the Cues track's outputs at its level.
+  async preview(s: Song, text: string) {
+    const t = cuesTrack(s), c = page().cueCfg(s);
+    const outs = t ? outsOf(s, t) : [];
+    if (!outs.length) { page().toast("The Cues track isn't routed (Outputs & MIDI page), so a preview can't be heard"); return; }
+    const r = await SL.call<{ ok?: boolean; error?: string; fellBack?: boolean }>("previewCue",
+      { text, voice: c.voice || "", name: c.name || "", speed: c.speed || 1, outs, db: t ? page().gainOf(s, t) : 0 });
+    if (r.error) page().toast(r.error);
+  },
+};
+
 function remember(text = sessionText()) {
   // tracks: what the Outputs & MIDI page lists (it's a separate page; it edits routing in this copy).
   const tracks = trackNames().map((x) => ({ ...x, colour: page().colourOf(x.name) }));
@@ -324,6 +359,7 @@ function remember(text = sessionText()) {
   const dirty = text !== doc.savedText;
   const key = doc.name + "|" + dirty;
   if (key !== lastReported) { lastReported = key; SL.call("setDocument", { name: doc.name, dirty }).catch(() => {}); }
+  prepareCues();
 }
 
 function applySession(text: string) {
@@ -614,6 +650,7 @@ async function main() {
   if (!SL.native) return;
   window.SLE = SLE;
   window.SLW = SLW;
+  window.SLC = SLC;
   await SL.ready;
   SL.on("transport", onTransport);
   SL.on("meters", (m: { peaks: number[] }) => { peaks = m.peaks || []; });
@@ -654,6 +691,8 @@ async function main() {
   }
 
   onSetup(await SL.call<Setup>("getAudioSetup"));
+  try { page().setVoices(await SL.call<VoiceInfo[]>("getVoices")); } catch (e) { console.warn("set.Line: voices", e); }
+  prepareCues();
   showStatus(await SL.call<Stats>("getEngineStats"));
 
   // Coming back to this page while a song plays (pages reload when you switch tabs): follow it.
@@ -677,7 +716,7 @@ async function main() {
     try {
       const AsyncFn = Object.getPrototypeOf(async () => {}).constructor;
       const hooks = { SLE, page, importStems, probe, audioFiles, applyRefMap, checkAudio, onFileDrag, sessionText, applySession,
-        getRate: () => sessionRate, SLR, SLW, waves, remember, payload, getRoute: () => route, isDirty: () => sessionText() !== doc.savedText, setDoc: (n: string) => { doc = { name: n, savedText: "" }; } };
+        getRate: () => sessionRate, SLR, SLW, waves, SLC, prepareCues, remember, payload, getRoute: () => route, isDirty: () => sessionText() !== doc.savedText, setDoc: (n: string) => { doc = { name: n, savedText: "" }; } };
       out = await new AsyncFn("SL", "hooks", info.testScript)(SL, hooks);
     } catch (e) { out = { error: String((e as Error)?.stack || e) }; }
     if (out !== undefined) await SL.call("testDone", { text: JSON.stringify(out, null, 1) }); // undefined: it went to another page

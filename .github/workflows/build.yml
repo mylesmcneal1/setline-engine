@@ -76,6 +76,14 @@ jobs:
           "$BIN" --make-test ci-song --stems 2 --seconds 20
           "$BIN" --render ci-song --out ci-render.wav
 
+      - name: Spoken cues (system voices) test
+        shell: bash
+        run: |
+          if [ -d "$APP/Contents/MacOS" ]; then EXE="$APP/Contents/MacOS/set.Line"; else EXE="$APP"; fi
+          "$EXE" --speech-test speech-test || status=$?
+          cat speech-test/speech-test.txt || true
+          grep -q "SPEECH OK" speech-test/speech-test.txt
+
       - name: Package (macOS)
         if: matrix.name == 'macos'
         run: |

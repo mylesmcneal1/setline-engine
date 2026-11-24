@@ -45,6 +45,12 @@ public:
     // Events for the UI: "transport" (~30 Hz while playing + on change), "meters" (~30 Hz), "engineStats" (1 Hz).
     std::function<void(const juce::Identifier&, const juce::var&)> emit;
 
+    // Spoken cues for loadSong (set by the Bridge): text + saved voice choice -> audio at `rate`.
+    std::function<std::shared_ptr<const std::vector<float>>(const juce::String& text, const juce::var& voice, double rate, std::vector<std::string>& warnings)> cueAudio;
+    // Plays audio once on these outputs (0-based) at gain, on top of whatever is playing (cue Preview).
+    void playPreview(std::shared_ptr<const std::vector<float>> audio, std::vector<int> outs, float gain);
+    double sampleRate() const { auto* d = dm.getCurrentAudioDevice(); return d ? d->getCurrentSampleRate() : 0.0; }
+
     Engine& engine() { return eng; }
     juce::AudioDeviceManager& deviceManager() { return dm; }
     juce::AudioIODevice* device() const { return dm.getCurrentAudioDevice(); }
@@ -92,6 +98,15 @@ private:
     juce::String loadedName;
     std::map<juce::String, int> trackIds;
     std::map<juce::String, TrackLevel> levels;
+
+    // cue preview: handed to the audio thread through previewIn; finished ones come back through
+    // previewDone and are deleted on the message thread (the audio thread never frees memory).
+    struct Preview { std::shared_ptr<const std::vector<float>> audio; std::vector<int> outs; float gain = 1; size_t pos = 0; };
+    std::atomic<Preview*> previewIn { nullptr };
+    Preview* previewNow = nullptr; // audio thread
+    std::array<std::atomic<Preview*>, 4> previewDone {};
+    void retirePreview(Preview* p); // audio thread
+    void collectPreviews();         // message thread
 
     // events
     bool wasPlaying = false, metersLive = false;

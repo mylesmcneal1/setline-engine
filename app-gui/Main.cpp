@@ -67,6 +67,10 @@ public:
         const bool dev = args.contains("--dev");
         const int pi = args.indexOf("--page"); // open another page first (testing), e.g. --page 2-routing.html
         const juce::String page = pi >= 0 ? args[pi + 1] : juce::String();
+        if (const int st = args.indexOf("--speech-test"); st >= 0 && st + 1 < args.size()) {
+            speechTest(juce::File::getCurrentWorkingDirectory().getChildFile(args[st + 1].unquoted()));
+            return;
+        }
         settings = std::make_unique<juce::PropertiesFile>(settingsOptions());
         audio = std::make_unique<AudioHost>(*settings);
         audio->start();
@@ -94,6 +98,8 @@ public:
 
     void shutdown() override
     {
+        if (testThread.joinable()) testThread.join();
+        testCues.reset();
        #if JUCE_MAC
         juce::MenuBarModel::setMacMainMenu(nullptr);
         menu.reset();
@@ -135,6 +141,61 @@ private:
     };
     std::unique_ptr<MacMenu> menu;
    #endif
+    // --speech-test <dir>: lists the installed voices, speaks a cue with each (at 48 kHz, through the same
+    // render + cache path as the show), writes <dir>/<voice>.wav and <dir>/speech-test.txt, then quits
+    // (exit code 1 if nothing could be spoken). No window or audio device: CI runs it on Windows and macOS.
+    void speechTest(const juce::File& dir)
+    {
+        dir.createDirectory();
+        testCues = std::make_unique<Cues>();
+        testThread = std::thread([this, dir] {
+            juce::StringArray report;
+            const auto list = testCues->voices();
+            report.add("voices: " + juce::String(list.size()));
+            int spoken = 0;
+            auto speak = [&](const Cues::Choice& c, const juce::String& label) {
+                juce::String err;
+                bool fellBack = false;
+                const auto t0 = juce::Time::getMillisecondCounterHiRes();
+                auto a = testCues->get("Verse one", c, 48000, err, fellBack);
+                const auto ms = juce::Time::getMillisecondCounterHiRes() - t0;
+                if (! a) { report.add("FAIL " + label + ": " + err); return; }
+                float peak = 0;
+                for (float x : *a) peak = juce::jmax(peak, std::abs(x));
+                report.add("ok   " + label + ": " + juce::String((double) a->size() / 48000.0, 2) + " s, peak " + juce::String(peak, 2)
+                           + ", first sample above -48 dB at " + juce::String((int) (std::find_if(a->begin(), a->end(), [](float x) { return std::abs(x) >= 0.004f; }) - a->begin()))
+                           + ", " + juce::String((int) ms) + " ms" + (fellBack ? " (fell back to the default voice)" : ""));
+                juce::WavAudioFormat wav;
+                std::unique_ptr<juce::OutputStream> os = dir.getChildFile(juce::File::createLegalFileName(label) + ".wav").createOutputStream();
+                if (os) {
+                    static_cast<juce::FileOutputStream*>(os.get())->setPosition(0);
+                    static_cast<juce::FileOutputStream*>(os.get())->truncate();
+                    const auto opts = juce::AudioFormatWriterOptions {}.withSampleRate(48000).withNumChannels(1).withBitsPerSample(24);
+                    if (auto w = wav.createWriterFor(os, opts)) { const float* ch[] = { a->data() }; w->writeFromFloatArrays(ch, 1, (int) a->size()); }
+                }
+                ++spoken;
+            };
+            speak({}, "default voice");
+            if (auto* arr = list.getArray())
+                for (auto& v : *arr) speak({ v["id"].toString(), v["name"].toString(), 1.0 }, v["name"].toString() + " [" + v["lang"].toString() + "]");
+            // A voice from another computer: falls back to the default voice.
+            juce::String err;
+            bool fellBack = false;
+            auto a = testCues->get("Verse one", { "com.example.not-installed", "Not Installed Voice", 1.0 }, 48000, err, fellBack);
+            report.add(juce::String(a && fellBack ? "ok   " : "FAIL ") + "voice not installed here: falls back to the default voice");
+            // Same cue again: from the cache, no new rendering.
+            const auto t0 = juce::Time::getMillisecondCounterHiRes();
+            auto again = testCues->get("Verse one", {}, 48000, err, fellBack);
+            report.add(juce::String(again ? "ok   " : "FAIL ") + "cached cue: " + juce::String((int) (juce::Time::getMillisecondCounterHiRes() - t0)) + " ms");
+            report.add(spoken > 0 ? "SPEECH OK" : "SPEECH FAILED");
+            dir.getChildFile("speech-test.txt").replaceWithText(report.joinIntoString("\n") + "\n");
+            std::printf("%s\n", report.joinIntoString("\n").toRawUTF8());
+            juce::MessageManager::callAsync([spoken] { juce::JUCEApplication::getInstance()->setApplicationReturnValue(spoken > 0 ? 0 : 1); juce::JUCEApplication::quit(); });
+        });
+    }
+    std::unique_ptr<Cues> testCues;
+    std::thread testThread;
+
     std::unique_ptr<juce::PropertiesFile> settings;
     std::unique_ptr<AudioHost> audio;
     std::unique_ptr<Bridge> bridge;

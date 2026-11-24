@@ -38,6 +38,9 @@ AudioHost::~AudioHost()
     eng.stop();
     dm.removeAudioCallback(this);
     dm.closeAudioDevice();
+    delete previewIn.exchange(nullptr);
+    delete previewNow;
+    collectPreviews();
 }
 
 void AudioHost::start()
@@ -258,7 +261,10 @@ juce::var AudioHost::loadSong(const juce::var& payload)
     const double sr = d->getCurrentSampleRate();
     const int outs = d->getActiveOutputChannels().countNumberOfSetBits();
 
-    auto mapped = mapSong(payload, sr, outs, [this](const juce::String& port, std::vector<std::string>& w) { return midiOuts.resolve(port, w); });
+    auto mapped = mapSong(payload, sr, outs, [this](const juce::String& port, std::vector<std::string>& w) { return midiOuts.resolve(port, w); },
+                          [this, sr](const juce::String& text, const juce::var& voice, std::vector<std::string>& w) {
+                              return cueAudio ? cueAudio(text, voice, sr, w) : std::shared_ptr<const std::vector<float>>();
+                          });
     Engine::Config cfg;
     cfg.sampleRate = sr;
     cfg.numOutputs = outs;
@@ -397,6 +403,7 @@ juce::var AudioHost::engineStats()
 
 void AudioHost::timerCallback()
 {
+    collectPreviews();
     if (! emit) return;
     const bool playing = eng.isPlaying();
     if (playing || playing != wasPlaying) {
@@ -427,6 +434,33 @@ void AudioHost::audioDeviceIOCallbackWithContext(const float* const*, int, float
                                                  const juce::AudioIODeviceCallbackContext&)
 {
     eng.process(out, numOut, n);
+    if (auto* p = previewIn.exchange(nullptr, std::memory_order_acq_rel)) { if (previewNow) retirePreview(previewNow); previewNow = p; }
+    if (auto* p = previewNow) {
+        const auto& a = *p->audio;
+        const int k = (int) std::min<size_t>((size_t) n, a.size() - p->pos);
+        for (int o : p->outs)
+            if (o >= 0 && o < numOut && out[o]) for (int i = 0; i < k; ++i) out[o][i] += a[p->pos + (size_t) i] * p->gain;
+        p->pos += (size_t) k;
+        if (p->pos >= a.size()) { retirePreview(p); previewNow = nullptr; }
+    }
+}
+
+void AudioHost::retirePreview(Preview* p)
+{
+    for (auto& slot : previewDone) { Preview* none = nullptr; if (slot.compare_exchange_strong(none, p, std::memory_order_acq_rel)) return; }
+    // All slots full (four previews ended within one timer tick): leave it; a few bytes, never on stage.
+}
+
+void AudioHost::collectPreviews()
+{
+    for (auto& slot : previewDone) delete slot.exchange(nullptr, std::memory_order_acq_rel);
+}
+
+void AudioHost::playPreview(std::shared_ptr<const std::vector<float>> audio, std::vector<int> outs, float gain)
+{
+    if (! audio || audio->empty()) return;
+    auto* p = new Preview { std::move(audio), std::move(outs), gain, 0 };
+    delete previewIn.exchange(p, std::memory_order_acq_rel); // a preview the audio thread hadn't taken yet
 }
 
 void AudioHost::audioDeviceAboutToStart(juce::AudioIODevice* d)
