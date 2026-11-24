@@ -105,6 +105,7 @@ juce::var Cues::voices()
         o->setProperty("id", v.id);
         o->setProperty("name", v.name);
         o->setProperty("lang", v.lang);
+        o->setProperty("quality", v.quality);
         o->setProperty("isDefault", v.id == defaultId);
         a.add(juce::var(o));
     }

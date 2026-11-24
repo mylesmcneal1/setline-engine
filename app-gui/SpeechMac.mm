@@ -38,6 +38,7 @@ std::vector<Voice> listVoices(juce::String& defaultId)
             x.id = str(v.identifier);
             x.name = str(v.name);
             x.lang = str(v.language);
+            x.quality = (int) v.quality; // AVSpeechSynthesisVoiceQuality: 1 default, 2 enhanced, 3 premium
             if (x.id.isNotEmpty() && x.name.isNotEmpty()) out.push_back(x);
         }
     }

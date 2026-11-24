@@ -66,6 +66,7 @@ std::vector<Voice> listVoices(juce::String& defaultId)
             v.name = nm.str().isNotEmpty() ? nm.str() : desc.str().upToFirstOccurrenceOf(" - ", false, false);
             v.name = v.name.replace(" Desktop", "");
             v.lang = langName(lang.str());
+            v.quality = catId == categories[0] ? 1 : 2; // the OneCore voices are the newer, better ones
             if (v.id.isEmpty() || v.name.isEmpty()) continue;
             if (names.contains(v.name)) v.name << " (" << (catId == categories[0] ? "desktop" : "OneCore") << ")";
             names.add(v.name);

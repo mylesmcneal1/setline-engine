@@ -12,6 +12,7 @@ struct Voice {
     juce::String id;   // platform identifier (SAPI token id / AVSpeechSynthesisVoice identifier)
     juce::String name; // "Microsoft Zira", "Samantha"...
     juce::String lang; // "en-US"
+    int quality = 1;   // 1 standard, 2 enhanced, 3 premium (macOS's rating; Windows: OneCore 2, desktop 1)
 };
 
 // Installed voices; defaultId = the system's default voice.
