@@ -185,7 +185,7 @@ if(SETLINE_WITH_JUCE)
     endif()
     # Spoken cues: the system's speech (SAPI on Windows, AVSpeechSynthesizer on macOS).
     if(WIN32)
-      target_link_libraries(setline PRIVATE sapi ole32)
+      target_link_libraries(setline PRIVATE sapi ole32 normaliz)
     elseif(APPLE)
       target_link_libraries(setline PRIVATE "-framework AVFoundation")
     endif()

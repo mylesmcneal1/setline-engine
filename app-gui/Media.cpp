@@ -6,6 +6,7 @@
  #include <windows.h>
 #elif JUCE_MAC
  #include <copyfile.h>
+ #include <CoreFoundation/CoreFoundation.h>
 #endif
 
 namespace setline::gui {
@@ -26,14 +27,17 @@ juce::File sessionFolder(const juce::File& sessionFile)
 
 // A free name in dir for src: the same name, or "name 2.wav", "name 3.wav"...
 // An existing file of the same name and size is taken to be this file (copied before).
+// The copy gets a name that's valid on Windows and macOS (shows move between them).
 juce::File destinationFor(const juce::File& dir, const juce::File& src, bool& alreadyThere)
 {
     alreadyThere = false;
-    auto f = dir.getChildFile(src.getFileName());
+    const auto name = Media::portableName(src.getFileName());
+    const auto stem = name.upToLastOccurrenceOf(".", false, false), ext = name.fromLastOccurrenceOf(".", true, false);
+    auto f = dir.getChildFile(name);
     if (! f.exists()) return f;
     if (f.getSize() == src.getSize()) { alreadyThere = true; return f; }
     for (int n = 2;; ++n) {
-        f = dir.getChildFile(src.getFileNameWithoutExtension() + " " + juce::String(n) + src.getFileExtension());
+        f = dir.getChildFile(stem + " " + juce::String(n) + ext);
         if (! f.exists()) return f;
         if (f.getSize() == src.getSize()) { alreadyThere = true; return f; }
     }
@@ -131,13 +135,107 @@ juce::File Media::startFolder() const
     return last.isDirectory() ? last : juce::File::getSpecialLocation(juce::File::userMusicDirectory);
 }
 
+juce::String Media::nfc(const juce::String& s)
+{
+   #if JUCE_WINDOWS
+    const auto w = s.toWideCharPointer();
+    const int n = NormalizeString(NormalizationC, w, -1, nullptr, 0);
+    if (n <= 0) return s;
+    juce::HeapBlock<wchar_t> buf((size_t) n + 1, true);
+    const int got = NormalizeString(NormalizationC, w, -1, buf.get(), n);
+    return got > 0 ? juce::String(buf.get()) : s;
+   #elif JUCE_MAC
+    CFStringRef in = CFStringCreateWithCString(kCFAllocatorDefault, s.toRawUTF8(), kCFStringEncodingUTF8);
+    if (in == nullptr) return s;
+    CFMutableStringRef m = CFStringCreateMutableCopy(kCFAllocatorDefault, 0, in);
+    CFRelease(in);
+    if (m == nullptr) return s;
+    CFStringNormalize(m, kCFStringNormalizationFormC);
+    const CFIndex len = CFStringGetMaximumSizeForEncoding(CFStringGetLength(m), kCFStringEncodingUTF8) + 1;
+    juce::HeapBlock<char> buf((size_t) len, true);
+    const bool ok = CFStringGetCString(m, buf.get(), len, kCFStringEncodingUTF8);
+    CFRelease(m);
+    return ok ? juce::String::fromUTF8(buf.get()) : s;
+   #else
+    return s;
+   #endif
+}
+
+juce::String Media::portableName(const juce::String& name)
+{
+    juce::String out;
+    const auto in = nfc(name); // (kept alive while its characters are read)
+    for (auto p = in.getCharPointer(); ! p.isEmpty(); ++p) {
+        const auto c = *p;
+        out += (c < 32 || juce::String("<>:\"/\\|?*").containsChar(c)) ? juce::juce_wchar('-') : c;
+    }
+    out = out.trimEnd();
+    while (out.endsWithChar('.') || out.endsWithChar(' ')) out = out.dropLastCharacters(1);
+    out = out.trimStart();
+    const auto base = out.upToFirstOccurrenceOf(".", false, false).trimEnd().toUpperCase();
+    static const juce::StringArray reserved { "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+                                              "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9" };
+    if (reserved.contains(base)) out = "_" + out;
+    return out;
+}
+
+namespace {
+// How two names compare when a show moves: case, Unicode form and characters the other system replaced.
+juce::String looseKey(const juce::String& name) { return Media::portableName(name).toLowerCase(); }
+
+// dir/rel, found even if a folder or file name differs in case or Unicode form, or had characters replaced.
+juce::File findLoosely(const juce::File& dir, const juce::String& rel)
+{
+    auto here = dir;
+    for (auto& part : juce::StringArray::fromTokens(rel, "/", "")) {
+        if (part.isEmpty() || part == ".") continue;
+        if (part == "..") { here = here.getParentDirectory(); continue; }
+        auto exact = here.getChildFile(part);
+        if (exact.exists()) { here = exact; continue; }
+        const auto want = looseKey(part);
+        juce::File found;
+        for (const auto& e : juce::RangedDirectoryIterator(here, false, "*", juce::File::findFilesAndDirectories))
+            if (looseKey(e.getFile().getFileName()) == want) { found = e.getFile(); break; }
+        if (found == juce::File()) return {};
+        here = found;
+    }
+    return here;
+}
+
+// A path written on the other system ("C:\Shows\x.wav" on a Mac, "/Users/..." on Windows).
+bool foreignAbsolute(const juce::String& ref)
+{
+   #if JUCE_WINDOWS
+    return ref.startsWithChar('/');
+   #else
+    const bool windowsPath = ref.length() > 2 && ref[1] == ':' && (ref[2] == '\\' || ref[2] == '/');
+    return windowsPath || ref.startsWith("\\\\");
+   #endif
+}
+} // namespace
+
 juce::File Media::resolve(const juce::String& ref, const juce::File& sessionFile)
 {
     if (ref.isEmpty()) return {};
-    if (juce::File::isAbsolutePath(ref)) return juce::File(ref);
     const auto folder = sessionFolder(sessionFile);
+    if (juce::File::isAbsolutePath(ref) && ! foreignAbsolute(ref)) {
+        const juce::File f(ref);
+        if (f.exists() || folder == juce::File()) return f;
+        // a file kept outside the show, now gone: maybe it travelled in the show's Audio folder
+        if (auto g = findLoosely(folder.getChildFile("Audio"), f.getFileName()); g.existsAsFile()) return g;
+        return f;
+    }
     if (folder == juce::File()) return {};
-    return folder.getChildFile(ref.replaceCharacter('\\', '/'));
+    const auto rel = ref.replaceCharacter('\\', '/');
+    if (foreignAbsolute(ref)) { // only its name means anything here
+        const auto name = rel.fromLastOccurrenceOf("/", false, false);
+        if (auto g = findLoosely(folder.getChildFile("Audio"), name); g.existsAsFile()) return g;
+        return folder.getChildFile("Audio").getChildFile(portableName(name));
+    }
+    const auto f = folder.getChildFile(rel);
+    if (f.exists()) return f;
+    if (auto g = findLoosely(folder, rel); g != juce::File()) return g;
+    return f;
 }
 
 juce::String Media::makeRef(const juce::File& f, const juce::File& sessionFile)
@@ -414,7 +512,17 @@ juce::var Media::check(const juce::var& arg)
     if (auto* refs = arg["refs"].getArray())
         for (auto& r : *refs) {
             const auto ref = r.toString();
-            if (resolve(ref, session).existsAsFile() || pending.contains(resolve(ref, session).getFullPathName())) continue;
+            const auto found = resolve(ref, session);
+            if (pending.contains(found.getFullPathName())) continue;
+            if (found.existsAsFile()) {
+                // found under another name or place (case, Unicode form, a path from the other computer): the
+                // show is corrected to point at it
+                const bool foreign = foreignAbsolute(ref);
+                const auto literal = juce::File::isAbsolutePath(ref) && ! foreign ? juce::File(ref)
+                                   : folder != juce::File() && ! foreign ? folder.getChildFile(ref.replaceCharacter('\\', '/')) : juce::File();
+                if (found.getFullPathName() != literal.getFullPathName()) map->setProperty(ref, makeRef(found, session));
+                continue;
+            }
             // Moved with the session but stored elsewhere (e.g. an absolute path from the other computer).
             const auto name = ref.fromLastOccurrenceOf("/", false, false).fromLastOccurrenceOf("\\", false, false);
             if (folder != juce::File() && name.isNotEmpty()) {

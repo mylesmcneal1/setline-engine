@@ -59,6 +59,11 @@ public:
 
     // Resolves a stored reference against a session file ("" = no session: absolute paths only).
     static juce::File resolve(const juce::String& ref, const juce::File& sessionFile);
+    // A file name that's valid on Windows and macOS: no < > : " / \ | ? * or control characters, no trailing
+    // dots / spaces, not a reserved Windows name (CON, NUL, COM1...), Unicode NFC. "" stays "".
+    static juce::String portableName(const juce::String& name);
+    // Unicode NFC (macOS file names often come as NFD: "e" + combining accent).
+    static juce::String nfc(const juce::String& s);
     // How a file is stored in a session saved at sessionFile.
     static juce::String makeRef(const juce::File& f, const juce::File& sessionFile);
 

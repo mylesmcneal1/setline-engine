@@ -69,6 +69,9 @@ Cues::Choice Bridge::choiceOf(const juce::var& v, juce::String* missing) const
 
 // The cues of the open show are stored in its folder (Cues.h).
 // Everything support needs to know, as text: version, OS, audio, listen mode, MIDI, the show, engine stats, the log.
+// The rate cues are made at: the device's, or 48 kHz without one (offline renders use the same).
+double Bridge::cueRate() const { return audio.sampleRate() > 0 ? audio.sampleRate() : 48000.0; }
+
 juce::String Bridge::diagnostics()
 {
     juce::StringArray t;
@@ -223,7 +226,7 @@ void Bridge::withCues(const juce::var& a, std::function<void()> then)
     const auto c = Cues::choiceFrom(v);
     if (auto* cs = s["cues"].getArray())
         for (auto& q : *cs) if (auto t = q["text"].toString().trim(); t.isNotEmpty()) { juce::var qv = q["voice"].isObject() ? q["voice"] : v; if (q["rec"].toString().isNotEmpty()) { auto* o = qv.getDynamicObject() ? qv.getDynamicObject()->clone().release() : new juce::DynamicObject(); o->setProperty("rec", q["rec"]); qv = juce::var(o); } list.push_back({ t, choiceOf(qv) }); }
-    const double rate = audio.sampleRate();
+    const double rate = cueRate(); // no device (e.g. CI): the rate offline renders use
     if (list.empty() || rate <= 0) { then(); return; }
     cues.ensure(std::move(list), rate, [this, then](std::map<juce::String, juce::String> errors) {
         cueErrors = std::move(errors);
@@ -264,7 +267,7 @@ Bridge::Options Bridge::addRest(Options o)
     // After a save: every cue of the show stored in <show>/Cues (missing ones rendered), unused ones removed.
     o = addAsync(o, "storeCues", [this](const juce::var& a, auto done) {
         syncShow();
-        const double rate = audio.sampleRate();
+        const double rate = cueRate(); // no device (e.g. CI): the rate offline renders use
         if (rate <= 0) { auto* r = new juce::DynamicObject(); r->setProperty("stored", 0); done(juce::var(r)); return; }
         juce::Array<juce::var> list;
         if (auto* l = a["cues"].getArray()) for (auto& x : *l) { auto* o2 = x.getDynamicObject() ? x.getDynamicObject()->clone().release() : new juce::DynamicObject(); o2->setProperty("recPath", choiceOf(x).recording); list.add(juce::var(o2)); }
@@ -296,7 +299,7 @@ Bridge::Options Bridge::addRest(Options o)
     });
     // {cues: [{text, voice, name, speed, pron, rec}]} -> {ready, total}: cues already rendered (or stored in the show)
     o = add(o, "cuesReady", [this](const juce::var& a) {
-        const double rate = audio.sampleRate();
+        const double rate = cueRate(); // no device (e.g. CI): the rate offline renders use
         int ready = 0, total = 0;
         if (auto* l = a["cues"].getArray())
             for (auto& x : *l) {
@@ -371,7 +374,7 @@ Bridge::Options Bridge::addRest(Options o)
     // Spoken cues (Cues.h): the installed voices, rendering ahead of time, Preview on the Cues outputs.
     o = addAsync(o, "getVoices", [this](const juce::var&, auto done) { cues.voicesAsync(done); });
     o = add(o, "prepareCues", [this](const juce::var& a) {
-        const double rate = audio.sampleRate();
+        const double rate = cueRate(); // no device (e.g. CI): the rate offline renders use
         if (rate > 0) {
             juce::Array<juce::var> list; // recordings resolved against the show here
             if (auto* l = a["cues"].getArray()) for (auto& x : *l) { auto* o = x.getDynamicObject() ? x.getDynamicObject()->clone().release() : new juce::DynamicObject(); const auto c = choiceOf(x); o->setProperty("recPath", c.recording); list.add(juce::var(o)); }

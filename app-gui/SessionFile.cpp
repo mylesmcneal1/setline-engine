@@ -1,4 +1,5 @@
 #include "SessionFile.h"
+#include "Media.h"
 
 namespace setline::gui {
 
@@ -99,6 +100,7 @@ void SessionFile::chooseLocation(Done done)
         auto f = fc.getResult();
         if (f == juce::File()) { done(result({ { "cancelled", true } })); return; }
         if (! f.hasFileExtension(extension)) f = f.withFileExtension(extension);
+        f = f.getSiblingFile(Media::portableName(f.getFileNameWithoutExtension()) + extension); // the show opens on Windows and macOS
         const auto stem = f.getFileNameWithoutExtension();
         // Already inside a folder of the same name (e.g. saving over a session): keep it there.
         auto target = f.getParentDirectory().getFileName() == stem ? f : f.getParentDirectory().getChildFile(stem).getChildFile(stem + extension);

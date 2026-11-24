@@ -69,6 +69,7 @@ private:
     Cues::Choice choiceOf(const juce::var& v, juce::String* missingRecording = nullptr) const;
     void syncShow();
     juce::String diagnostics();
+    double cueRate() const;
     std::unique_ptr<juce::FileChooser> diagChooser;
     Options addRest(Options o);
     void preparePeaks(const juce::var& refs, const juce::File& sessionFile);

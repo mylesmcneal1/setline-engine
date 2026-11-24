@@ -159,6 +159,117 @@ jobs:
           name: set.Line-${{ matrix.name }}
           path: set.Line-${{ matrix.name }}.zip
 
+  # Shows move between Windows and Mac (tests/xplat): each system makes a show (stems with awkward names, clips,
+  # click, cues, MIDI, versions) and renders it ...
+  xplat-make:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos
+            os: macos-15
+          - name: windows
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          path: app
+          pattern: "set*-${{ matrix.name }}"
+          merge-multiple: true
+
+      - name: Unpack
+        shell: bash
+        run: |
+          if [ "${{ matrix.name }}" = macos ]; then
+            ditto -x -k app/set.Line-macos.zip app/x
+            tar -xzf app/setline-spike-macos.tar.gz -C app/x
+            echo "EXE=$PWD/app/x/set.Line.app/Contents/MacOS/set.Line" >> "$GITHUB_ENV"
+            echo "SPIKE=$PWD/app/x/setline-spike" >> "$GITHUB_ENV"
+          else
+            7z x -y -oapp/x app/set.Line-windows.zip > /dev/null
+            7z x -y -oapp/x app/setline-spike-windows.zip > /dev/null
+            echo "EXE=$PWD/app/x/set.Line.exe" >> "$GITHUB_ENV"
+            echo "SPIKE=$PWD/app/x/$(cd app/x && find . -name setline-spike.exe | head -n 1)" >> "$GITHUB_ENV"
+          fi
+
+      - name: Make a show on ${{ matrix.name }}
+        shell: bash
+        run: bash tests/xplat/run.sh make "$EXE" "$SPIKE" xplat-work
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: xshow-${{ matrix.name }}
+          path: xplat-work/show
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: xplat-make-log-${{ matrix.name }}
+          path: |
+            xplat-work/made.json
+            xplat-work/app-make.log
+          if-no-files-found: ignore
+
+  # ... and the OTHER system opens it, finds every file, renders it and compares.
+  xplat-check:
+    needs: xplat-make
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos
+            os: macos-15
+            from: windows
+          - name: windows
+            os: windows-latest
+            from: macos
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          path: app
+          pattern: "set*-${{ matrix.name }}"
+          merge-multiple: true
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: xshow-${{ matrix.from }}
+          path: xplat-work/show
+
+      - name: Unpack
+        shell: bash
+        run: |
+          if [ "${{ matrix.name }}" = macos ]; then
+            ditto -x -k app/set.Line-macos.zip app/x
+            tar -xzf app/setline-spike-macos.tar.gz -C app/x
+            echo "EXE=$PWD/app/x/set.Line.app/Contents/MacOS/set.Line" >> "$GITHUB_ENV"
+            echo "SPIKE=$PWD/app/x/setline-spike" >> "$GITHUB_ENV"
+          else
+            7z x -y -oapp/x app/set.Line-windows.zip > /dev/null
+            7z x -y -oapp/x app/setline-spike-windows.zip > /dev/null
+            echo "EXE=$PWD/app/x/set.Line.exe" >> "$GITHUB_ENV"
+            echo "SPIKE=$PWD/app/x/$(cd app/x && find . -name setline-spike.exe | head -n 1)" >> "$GITHUB_ENV"
+          fi
+
+      - name: Open the ${{ matrix.from }} show on ${{ matrix.name }}
+        shell: bash
+        run: bash tests/xplat/run.sh check "$EXE" xplat-work
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: xplat-check-log-${{ matrix.name }}
+          path: |
+            xplat-work/checked.json
+            xplat-work/app-check.log
+          if-no-files-found: ignore
+
   # After every green build on main: the "latest" prerelease, replaced, with the Mac and Windows builds, the Mac
   # update scripts, a SHA-256 checksum file and the commits since the previous "latest" (docs/remote-mac-testing.md).
   release:
