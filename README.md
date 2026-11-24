@@ -1,5 +1,7 @@
 # set.Line engine spike
 
+Copyright (c) 2026 mylesmcneal1. All rights reserved. No license is granted to use, copy, modify or distribute this software (see [LICENSE](LICENSE)).
+
 A small command-line program to answer one question before any more UI work:
 
 **Can set.Line play many stems out of a multi-output interface and fire MIDI patch changes
