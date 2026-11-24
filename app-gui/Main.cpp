@@ -31,6 +31,7 @@ public:
 
         ui = std::make_unique<WebUi>(dev, [&bridge](WebUi::Options o) { return bridge.addTo(o); });
         bridge.attach(&ui->browser());
+        ui->onFileDrag = [&bridge](const juce::String& state, juce::Point<int> at, const juce::StringArray& files) { bridge.fileDrag(state, at, files); };
         setContentNonOwned(ui.get(), false);
 
         const auto saved = settings.getValue("windowState");
@@ -74,6 +75,10 @@ public:
         if (const int rt = args.indexOf("--session-roundtrip"); rt >= 0 && rt + 2 < args.size()) {
             bridge->roundTripIn = juce::File::getCurrentWorkingDirectory().getChildFile(args[rt + 1].unquoted());
             bridge->roundTripOut = juce::File::getCurrentWorkingDirectory().getChildFile(args[rt + 2].unquoted());
+        }
+        if (const int ts = args.indexOf("--test-script"); ts >= 0 && ts + 2 < args.size()) {
+            bridge->testScript = juce::File::getCurrentWorkingDirectory().getChildFile(args[ts + 1].unquoted());
+            bridge->testOut = juce::File::getCurrentWorkingDirectory().getChildFile(args[ts + 2].unquoted());
         }
         window = std::make_unique<MainWindow>(*settings, *bridge, dev, page);
         // Window title: "<session> — set.Line", with a dot while there are unsaved changes.

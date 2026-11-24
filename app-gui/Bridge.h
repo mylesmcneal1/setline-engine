@@ -4,6 +4,7 @@
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <functional>
 #include "SessionFile.h"
+#include "Media.h"
 
 namespace setline::gui {
 
@@ -23,10 +24,18 @@ public:
     bool devMode = false;
     // Test: --session-roundtrip <in> <out> opens <in> in the page, saves it to <out> and quits.
     juce::File roundTripIn, roundTripOut;
+    // Test: --test-script <in.js> <out.json> runs a script in the Edit page (see ui/src/pages/arrange.ts),
+    // writes what it returns and quits. No dialogs, keyboard or mouse needed.
+    juce::File testScript, testOut;
 
     // The page reports the session's name and whether it has unsaved changes (window title, quit check).
     std::function<void(const juce::String& name, bool dirty)> onDocument;
     bool isDirty() const { return dirty; }
+
+    // Files dragged onto the window (the web view hands the page no paths, so the window takes the drop).
+    // state: "over" | "leave" | "drop"; x, y in page pixels.
+    void fileDrag(const juce::String& state, juce::Point<int> at, const juce::StringArray& paths = {});
+    juce::File sessionFile() const { return session.file(); }
 
 private:
     using Fn = std::function<juce::var(const juce::var&)>;
@@ -37,6 +46,7 @@ private:
     AudioHost& audio;
     juce::WebBrowserComponent* browser = nullptr;
     SessionFile session;
+    Media media;
     bool dirty = false;
 };
 

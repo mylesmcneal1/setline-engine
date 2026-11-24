@@ -6,7 +6,7 @@
 
 namespace setline::gui {
 
-class WebUi : public juce::Component {
+class WebUi : public juce::Component, public juce::FileDragAndDropTarget {
 public:
     using Options = juce::WebBrowserComponent::Options;
 
@@ -22,10 +22,21 @@ public:
 
     void resized() override { web->setBounds(getLocalBounds()); }
 
+    // Files dragged onto the window: the web view gives the page no paths, so the window takes the drop
+    // (WebView2's own drop handling is off, see cmake/PatchJuce.cmake; on macOS the WKWebView stops
+    // accepting file drags, see MacDrop.mm) and reports it here.
+    std::function<void(const juce::String& state, juce::Point<int> at, const juce::StringArray& files)> onFileDrag;
+    bool isInterestedInFileDrag(const juce::StringArray&) override { return true; }
+    void fileDragEnter(const juce::StringArray& f, int x, int y) override { if (onFileDrag) onFileDrag("over", { x, y }, f); }
+    void fileDragMove(const juce::StringArray& f, int x, int y) override { if (onFileDrag) onFileDrag("over", { x, y }, f); }
+    void fileDragExit(const juce::StringArray&) override { if (onFileDrag) onFileDrag("leave", {}, {}); }
+    void filesDropped(const juce::StringArray& f, int x, int y) override { if (onFileDrag) onFileDrag("drop", { x, y }, f); }
+
 private:
     struct Browser : juce::WebBrowserComponent {
         Browser(const Options& o, WebUi& u) : juce::WebBrowserComponent(o), owner(u) {}
         bool pageAboutToLoad(const juce::String& url) override;
+        void pageFinishedLoading(const juce::String&) override;
         WebUi& owner;
     };
 

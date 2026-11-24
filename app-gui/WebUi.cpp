@@ -4,6 +4,10 @@
 
 namespace setline::gui {
 
+#if JUCE_MAC
+void stopWebViewFileDrops(juce::Component& browser); // MacDrop.mm
+#endif
+
 namespace {
 
 // ui/dist, zipped at build time (cmake/BuildUi.cmake) and embedded with juce_add_binary_data.
@@ -77,6 +81,13 @@ std::optional<juce::WebBrowserComponent::Resource> WebUi::serve(const juce::Stri
     std::vector<std::byte> bytes(block.getSize());
     if (block.getSize() > 0) std::memcpy(bytes.data(), block.getData(), block.getSize());
     return juce::WebBrowserComponent::Resource { std::move(bytes), mimeFor(path) };
+}
+
+void WebUi::Browser::pageFinishedLoading(const juce::String&)
+{
+   #if JUCE_MAC
+    stopWebViewFileDrops(*this);
+   #endif
 }
 
 bool WebUi::Browser::pageAboutToLoad(const juce::String& url)

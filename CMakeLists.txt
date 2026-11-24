@@ -43,6 +43,9 @@ if(SETLINE_WITH_JUCE)
     GIT_TAG        ${SETLINE_JUCE_TAG}
     GIT_SHALLOW    TRUE)
   FetchContent_MakeAvailable(JUCE)
+  # Sources are compiled at build time, so patching after add_subdirectory is fine.
+  set(JUCE_SOURCE_DIR "${juce_SOURCE_DIR}")
+  include(cmake/PatchJuce.cmake)
 
   juce_add_console_app(setline-spike PRODUCT_NAME "setline-spike")
   target_sources(setline-spike PRIVATE app/Main.cpp)
@@ -108,7 +111,13 @@ if(SETLINE_WITH_JUCE)
       app-gui/Bridge.cpp
       app-gui/SongMapper.cpp
       app-gui/SessionFile.cpp
+      app-gui/Media.cpp
       app-gui/WebUi.cpp)
+    if(APPLE)
+      target_sources(setline PRIVATE app-gui/MacDrop.mm)
+      # Objective-C++ without changing how JUCE's own sources compile.
+      set_source_files_properties(app-gui/MacDrop.mm PROPERTIES COMPILE_OPTIONS "-xobjective-c++")
+    endif()
     target_compile_definitions(setline PRIVATE
       JUCE_WEB_BROWSER=1
       JUCE_USE_CURL=0

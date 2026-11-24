@@ -19,6 +19,13 @@ public:
     void save(const juce::String& text, Done done);
     void saveAs(const juce::String& text, Done done);
 
+    // Step 2: a session lives in its own folder (with Audio/ next to it). Asks where to save and returns
+    // <chosen folder>/<name>/<name>.setline, creating the folder. Nothing is written yet.
+    // -> {path, name} | {cancelled} | {error}
+    void chooseLocation(Done done);
+    // Writes text to path (atomically) and makes it the current session. -> {name, path} | {error}
+    juce::var writeTo(const juce::File& f, const juce::String& text) { return write(f, text); }
+
     juce::String name() const { return current.existsAsFile() ? current.getFileNameWithoutExtension() : juce::String(); }
     juce::File file() const { return current; }
 
