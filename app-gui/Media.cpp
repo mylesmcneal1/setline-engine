@@ -192,6 +192,9 @@ void Media::runJob(std::unique_ptr<Job> job)
     worker->startThread(juce::Thread::Priority::low);
 }
 
+// Where copies go inside the show: Audio (stems) or Cues/Words (recorded cue words).
+static juce::String copyFolder(const juce::var& arg) { return arg["sub"].toString() == "Cues/Words" ? "Cues/Words" : "Audio"; }
+
 void Media::import(const juce::var& arg, Done done)
 {
     if (worker != nullptr && worker->isThreadRunning()) { done(obj({ { "error", "Still copying files; try again when that finishes." } })); return; }
@@ -207,7 +210,7 @@ void Media::import(const juce::var& arg, Done done)
             juce::String ref = src.getFullPathName();
             if (copy && folder != juce::File() && ! src.isAChildOf(folder)) {
                 bool there = false;
-                auto dst = destinationFor(folder.getChildFile("Audio"), src, there);
+                auto dst = destinationFor(folder.getChildFile(copyFolder(arg)), src, there);
                 // Two picked files can't both claim the same free name.
                 for (auto& c : job->copies) if (c.dst == dst) { there = false; dst = dst.getSiblingFile(dst.getFileNameWithoutExtension() + " (" + juce::String(job->copies.size() + 1) + ")" + dst.getFileExtension()); }
                 if (! there) job->copies.push_back({ src, dst });
@@ -247,7 +250,7 @@ void Media::collect(const juce::var& arg, Done done)
             }
             if ((bool) f["copy"] && ! src.isAChildOf(folder)) {
                 bool there = false;
-                auto dst = destinationFor(folder.getChildFile("Audio"), src, there);
+                auto dst = destinationFor(folder.getChildFile(f["sub"].toString() == "Cues/Words" ? "Cues/Words" : "Audio"), src, there);
                 for (auto& c : job->copies) if (c.dst == dst) { there = false; dst = dst.getSiblingFile(dst.getFileNameWithoutExtension() + " (" + juce::String(job->copies.size() + 1) + ")" + dst.getFileExtension()); }
                 if (! there) job->copies.push_back({ src, dst });
                 map->setProperty(ref, makeRef(dst, to));

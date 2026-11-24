@@ -34,7 +34,8 @@ Bridge::Bridge(AudioHost& host, juce::PropertiesFile& settings) : audio(host), s
         });
     });
     audio.cueAudio = [this](const juce::String& text, const juce::var& v, double rate, std::vector<std::string>& w) {
-        const auto c = Cues::choiceFrom(v);
+        juce::String missingRec;
+        const auto c = choiceOf(v, &missingRec);
         juce::String err;
         bool fellBack = false;
         auto a = cues.cached(text, c, rate, fellBack); // rendered before the load (loadSong below)
@@ -45,9 +46,24 @@ Bridge::Bridge(AudioHost& host, juce::PropertiesFile& settings) : audio(host), s
             w.push_back((juce::String("The cue voice ") + q + c.name + qq + (kok ? " isn't downloaded yet, so cues use the computer's voice for now."
                                                                                        : " isn't installed on this computer, so cues use the default voice.")).toStdString());
         }
+        if (missingRec.isNotEmpty()) w.push_back((juce::String("The recording ") + q + missingRec + qq + " for the cue " + q + text + qq + " is missing, so the voice says it.").toStdString());
         if (! a) w.push_back((juce::String("Cue ") + q + text + qq + " couldn't be spoken: " + err).toStdString());
         return a;
     };
+}
+
+// The cue choice for a {voice, name, speed, pron, rec} the page sent: rec is a recorded word's reference in the
+// show (Audio-style path), resolved here; a recording that's missing falls back to the voice (missing = its name).
+Cues::Choice Bridge::choiceOf(const juce::var& v, juce::String* missing) const
+{
+    auto c = Cues::choiceFrom(v);
+    const auto rec = v["rec"].toString();
+    if (rec.isNotEmpty()) {
+        const auto f = Media::resolve(rec, session.file());
+        if (f.existsAsFile()) c.recording = f.getFullPathName();
+        else if (missing != nullptr) *missing = rec.fromLastOccurrenceOf("/", false, false).fromLastOccurrenceOf("\\", false, false);
+    }
+    return c;
 }
 
 Bridge::~Bridge() { kokoro::setListener(nullptr); *alive = nullptr; audio.onSetupChanged = nullptr; audio.emit = nullptr; audio.cueAudio = nullptr; media.emit = nullptr; }
@@ -129,7 +145,7 @@ void Bridge::withCues(const juce::var& a, std::function<void()> then)
     const juce::var v = s["cueVoice"].isObject() ? s["cueVoice"] : a["cueVoice"];
     const auto c = Cues::choiceFrom(v);
     if (auto* cs = s["cues"].getArray())
-        for (auto& q : *cs) if (auto t = q["text"].toString().trim(); t.isNotEmpty()) list.push_back({ t, q["voice"].isObject() ? Cues::choiceFrom(q["voice"]) : c });
+        for (auto& q : *cs) if (auto t = q["text"].toString().trim(); t.isNotEmpty()) { juce::var qv = q["voice"].isObject() ? q["voice"] : v; if (q["rec"].toString().isNotEmpty()) { auto* o = qv.getDynamicObject() ? qv.getDynamicObject()->clone().release() : new juce::DynamicObject(); o->setProperty("rec", q["rec"]); qv = juce::var(o); } list.push_back({ t, choiceOf(qv) }); }
     const double rate = audio.sampleRate();
     if (list.empty() || rate <= 0) { then(); return; }
     cues.ensure(std::move(list), rate, [this, then](std::map<juce::String, juce::String> errors) {
@@ -227,14 +243,18 @@ Bridge::Options Bridge::addRest(Options o)
     o = addAsync(o, "getVoices", [this](const juce::var&, auto done) { cues.voicesAsync(done); });
     o = add(o, "prepareCues", [this](const juce::var& a) {
         const double rate = audio.sampleRate();
-        if (rate > 0) cues.prepare(a["cues"], rate);
+        if (rate > 0) {
+            juce::Array<juce::var> list; // recordings resolved against the show here
+            if (auto* l = a["cues"].getArray()) for (auto& x : *l) { auto* o = x.getDynamicObject() ? x.getDynamicObject()->clone().release() : new juce::DynamicObject(); const auto c = choiceOf(x); o->setProperty("recPath", c.recording); list.add(juce::var(o)); }
+            cues.prepare(list, rate);
+        }
         auto* r = new juce::DynamicObject(); r->setProperty("ok", rate > 0); return juce::var(r);
     });
     // {text, voice, name, speed, outs: [1-based], db} -> plays once -> {ok, seconds, voice} | {error}
     o = addAsync(o, "previewCue", [this](const juce::var& a, auto done) {
         const double rate = audio.sampleRate();
         if (rate <= 0) { done(errorVar("No audio device is open.")); return; }
-        const auto c = Cues::choiceFrom(a);
+        const auto c = choiceOf(a);
         std::vector<int> outs;
         if (auto* o2 = a["outs"].getArray()) for (auto& v : *o2) if ((int) v >= 1) outs.push_back((int) v - 1);
         const float gain = juce::Decibels::decibelsToGain((float) (double) a["db"], -60.0f);

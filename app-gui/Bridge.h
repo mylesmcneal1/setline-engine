@@ -56,6 +56,7 @@ private:
     Cues cues;
     std::map<juce::String, juce::String> cueErrors; // from the last song load: cue text -> why it couldn't be spoken
     void withCues(const juce::var& payload, std::function<void()> then);
+    Cues::Choice choiceOf(const juce::var& v, juce::String* missingRecording = nullptr) const;
     Options addRest(Options o);
     void preparePeaks(const juce::var& refs, const juce::File& sessionFile);
     bool dirty = false;

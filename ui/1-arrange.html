@@ -1260,6 +1260,27 @@ let CUEV={voice:'',name:'',speed:1}, cuevFresh=true, cueOpen=false, VOICES=null,
 // computer's voices use the respelling. VMODEL: the Kokoro download ({state, done, total, error}); UNKNOWN: words
 // in this show's cues no dictionary knows (sounded out from their spelling until a pronunciation is added).
 let PRON={}, VMODEL={state:'',done:0,total:0,error:''}, UNKNOWN=[];
+// Recorded cue words (the whole show; a song's own s.cueWords win): {id, word, path (in the show: Cues/Words/…), name,
+// copy}. A cue that says exactly the word (case, spaces and end punctuation ignored) plays the recording.
+let CUEWORDS=[], cwSeq=1;
+const normCue=t=>(t||'').trim().toLowerCase().replace(/[.!?,;:…]+$/,'').replace(/\s+/g,' ');
+function wordFor(s,text){ const n=normCue(text); if(!n) return null; return ((s&&s.cueWords)||[]).find(w=>normCue(w.word)===n)||CUEWORDS.find(w=>normCue(w.word)===n)||null; }
+const recFor=(s,text)=>{ const w=wordFor(s,text); return w&&w.path?w.path:''; };
+function allWords(){ return [...CUEWORDS,...songs.flatMap(s=>s.cueWords||[])]; }
+function addWords(s,list,only){ const L=only?(s.cueWords||(s.cueWords=[])):CUEWORDS; snap();
+  list.forEach(x=>{ const word=x.name.replace(/\.[^.]+$/,'').replace(/[_]+/g,' ').trim(); const same=L.find(w=>normCue(w.word)===normCue(word)); if(same){ same.path=x.ref; same.name=x.name; same.copy=true; } else L.push({id:'w'+(cwSeq++),word,path:x.ref,name:x.name,copy:true}); });
+  if(cueOpen) renderInsp(); redrawSong(s); }
+function wordsPanel(s){ const rows=[...(s.cueWords||[]).map(w=>[w,true]),...CUEWORDS.filter(w=>!(s.cueWords||[]).some(o=>normCue(o.word)===normCue(w.word))).map(w=>[w,false])];
+  return `<div class="kicker" style="margin-top:14px">CUE WORDS</div>
+    <p class="faint" style="font-size:11px;line-height:1.5;margin:4px 0 6px">Your own recordings. A cue that says exactly this word plays the recording instead of the voice. They’re copied into the show.</p>
+    ${rows.map(([w,own])=>`<div class="kv"><label><input class="cwW" data-id="${w.id}" value="${esc(w.word)}" style="width:100%"></label><div style="display:flex;gap:6px;align-items:center;min-width:0"><span class="faint" style="font-size:11px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(w.path)}">${esc(w.name)}${own?' · this song':''}</span><button class="ibtn cwP" data-id="${w.id}" title="Preview">▶</button><button class="ibtn cwX" data-id="${w.id}" title="Remove">✕</button></div></div>`).join('')}
+    <div class="acts" style="margin-top:6px"><button class="btn line" id="cwAdd">＋ Recorded word…</button><button class="btn line" id="cwAddSong" title="Only in ${esc(s.name)}; wins over the show's word">＋ Only in this song…</button></div>`; }
+function wireWords(s){ const find=id=>allWords().find(w=>w.id===id), listOf=w=>CUEWORDS.includes(w)?CUEWORDS:songs.find(x=>(x.cueWords||[]).includes(w)).cueWords;
+  document.querySelectorAll('.cwW').forEach(i=>i.onchange=()=>{ const w=find(i.dataset.id); if(!w||!i.value.trim()) return; snap(); w.word=i.value.trim(); redrawSong(s); renderInsp(); });
+  document.querySelectorAll('.cwX').forEach(b=>b.onclick=()=>{ const w=find(b.dataset.id); if(!w) return; snap(); const L=listOf(w); L.splice(L.indexOf(w),1); redrawSong(s); renderInsp(); });
+  document.querySelectorAll('.cwP').forEach(b=>b.onclick=()=>{ const w=find(b.dataset.id); if(w) previewCue(s,w.word); });
+  const add=only=>{ if(window.SLC) SLC.addWords(s,only); else toast('In the app this picks audio files (WAV, AIFF, FLAC)'); };
+  if($('cwAdd')) $('cwAdd').onclick=()=>add(false); if($('cwAddSong')) $('cwAddSong').onclick=()=>add(true); }
 const isKokoro=c=>/^kokoro:/.test((c&&c.voice)||'');
 // Voice menu order: the computer's language first (English here), best quality on top, the exact locale before
 // other regions; the rest behind "More voices…". A saved voice from the rest still shows (selected) in the first part.
@@ -1293,6 +1314,7 @@ function cuePanel(s){ if(!cueOpen) return ''; const c=cueCfg(s), own=!!s.cueVoic
     ${missing?`<p class="hint" id="cvMissing" style="color:var(--amber);font-size:11px;line-height:1.5;margin:-2px 0 8px">“${esc(c.name||c.voice)}” isn’t installed on this computer, so cues use ${d?esc(d.name):'the default voice'}. The choice stays saved and comes back on a computer that has it.</p>`:''}
     <div class="kv"><label>Speed</label><div style="display:flex;align-items:center;gap:8px"><input type="range" class="fad wide" id="cvSpeed" min="0.7" max="1.5" step="0.05" value="${sp}" style="--p:${((sp-.7)/.8*100).toFixed(1)}%"><span class="db" id="cvSpeedV">${sp.toFixed(2)}×</span></div></div>
     <div class="acts" style="margin-top:10px"><button class="btn pri" id="cvPrev">▶ Preview</button>${own?'<button class="btn" id="cvReset">Use the set’s voice</button>':''}</div>
+    ${wordsPanel(s)}
     ${pronPanel()}
     <p class="faint" style="font-size:11px;margin-top:10px;line-height:1.5">Cues are spoken by this voice, recorded ahead of time and played exactly on their bar. Preview speaks the selected cue, or “Verse one”.</p></div>`; }
 // The Kokoro voices: downloaded only when asked. Not downloaded: a button; downloading: progress + Cancel.
@@ -1312,7 +1334,7 @@ function wirePron(s){ const put=(w,v)=>{ w=(w||'').trim().toLowerCase(); if(!w) 
   document.querySelectorAll('.pronIn').forEach(i=>i.onchange=()=>put(i.dataset.w,i.value));
   document.querySelectorAll('.pronDel').forEach(b=>b.onclick=()=>put(b.dataset.w,''));
   const nw=$('pronNewW'), nv=$('pronNewV'); if(nv) nv.onchange=()=>{ if(nw.value.trim()&&nv.value.trim()) put(nw.value,nv.value); }; }
-function wireCuePanel(s){ if(!$('cvClose')) return; wirePron(s);
+function wireCuePanel(s){ if(!$('cvClose')) return; wirePron(s); wireWords(s);
   if($('cvDlStart')) $('cvDlStart').onclick=()=>{ if(window.SLC) SLC.downloadVoices(); else toast('In the app this downloads the Kokoro voices'); };
   if($('cvDlCancel')) $('cvDlCancel').onclick=()=>{ if(window.SLC) SLC.cancelVoiceDownload(); };
   if(window.SLC) SLC.checkWords(s); const own=()=>!!s.cueVoice, set=(k,v)=>{ if(own()) s.cueVoice[k]=v; else CUEV[k]=v; }, rr=()=>{ renderInsp(); renderFolders(); };
@@ -1480,7 +1502,7 @@ function drawLane(cv){
     if(!regs.length){ g.fillStyle='#4f555f'; g.font='11px Inter, sans-serif'; g.fillText('Empty. Double-click to add a click clip (or drag one in from another song).',10,H/2+4); } }
   else if(role==='cues'){ g.clearRect(0,0,W,H); const cs=cuesOf(s);
     cs.forEach(c=>{ const X=cueT(s,c)*PXS; g.font='600 10.5px Inter, sans-serif'; const tw=g.measureText(c.text).width+14, sel=isPick('cue',c.id); g.fillStyle=sel?'#e9ebef':'#2a2f37'; g.beginPath(); g.roundRect(X,H/2-10,tw,20,5); g.fill();
-      g.fillStyle=sel?'#0b0c0e':'#d9dce1'; g.fillText(c.text,X+7,H/2+4); g.fillStyle=sel?'#e9ebef':'#8a909b'; g.fillRect(X,4,1.5,H-8); });
+      g.fillStyle=sel?'#0b0c0e':'#d9dce1'; g.fillText(c.text,X+7,H/2+4); if(recFor(s,c.text)){ g.fillStyle=sel?'#0b0c0e':'#f5a524'; g.beginPath(); g.arc(X+tw-4,H/2-6,2.2,0,7); g.fill(); } g.fillStyle=sel?'#e9ebef':'#8a909b'; g.fillRect(X,4,1.5,H-8); });
     if(!cs.length){ g.fillStyle='#4f555f'; g.font='11px Inter, sans-serif'; g.fillText('No cues. Double-click to add a spoken cue.',10,H/2+4); } }
   else if(role==='midi'){ g.clearRect(0,0,W,H); const evs=[...(s.midi[t]||[])].sort((a,b)=>evTime(s,a)-evTime(s,b)), regs=regsOf(s,t);
     const chip=(e,X,nx,cy,ch,faint)=>{ let lab=evName(e); g.font='500 10px Inter, sans-serif'; const room=nx-X-6; let tw=g.measureText(lab).width+10; if(tw>room){ lab=autoLabel(e).replace('Scene ','').replace('Preset ','P'); tw=g.measureText(lab).width+10; }
@@ -2222,8 +2244,8 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
   setPos(t){ pos=t; }, setPlayId(id){ playId=id; document.querySelectorAll('.folder').forEach(f=>f.classList.toggle('playing',f.dataset.id===playId)); }, setPlaying(b){ playing=b; $('playBtn').classList.toggle('on',b); last=performance.now(); requestAnimationFrame(tick); },
   redraw(){ lcd(); },
   // Everything a .setline session holds.
-  sessionData(){ const o=JSON.parse(ser()); o.presets=presets.filter(p=>!p.built); o.click=CLICK; if(Object.keys(CLICKT).length) o.clickT=CLICKT; o.cueVoice=CUEV; if(Object.keys(PRON).length) o.pron=PRON; return o; },
-  loadSession(o){ if(Array.isArray(o.presets)){ presets=[...presets.filter(p=>p.built),...o.presets]; } if(o.click) CLICK={...CLICK,...o.click}; CLICKT={...(o.clickT||{})}; CUEV={voice:'',name:'',speed:1,...(o.cueVoice||{})}; cuevFresh=false; PRON={...(o.pron||{})}; UNKNOWN=[];
+  sessionData(){ const o=JSON.parse(ser()); o.presets=presets.filter(p=>!p.built); o.click=CLICK; if(Object.keys(CLICKT).length) o.clickT=CLICKT; o.cueVoice=CUEV; if(Object.keys(PRON).length) o.pron=PRON; if(CUEWORDS.length) o.cueWords=CUEWORDS; return o; },
+  loadSession(o){ if(Array.isArray(o.presets)){ presets=[...presets.filter(p=>p.built),...o.presets]; } if(o.click) CLICK={...CLICK,...o.click}; CLICKT={...(o.clickT||{})}; CUEV={voice:'',name:'',speed:1,...(o.cueVoice||{})}; cuevFresh=false; PRON={...(o.pron||{})}; UNKNOWN=[]; CUEWORDS=Array.isArray(o.cueWords)?o.cueWords:[]; cwSeq=1+Math.max(0,...allWords().map(w=>+String(w.id).slice(1)||0));
     restore(JSON.stringify({songs:o.songs||[],setlists:o.setlists&&o.setlists.length?o.setlists:[{id:'L1',name:'Setlist 1',order:[]}],curSet:o.curSet||'L1'}));
     // ids made from now on must not collide with the loaded ones
     let num=0; const pre={}; const walk=v=>{ if(Array.isArray(v)) v.forEach(walk); else if(v&&typeof v==='object'){ if(typeof v.id==='number') num=Math.max(num,v.id); else if(typeof v.id==='string'){ const m=v.id.match(/^([a-zA-Z])(\d+)$/); if(m) pre[m[1]]=Math.max(pre[m[1]]||0,+m[2]); } Object.values(v).forEach(walk); } };
@@ -2234,9 +2256,11 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
   setDirty(d){ const m=$('dirtyMk'); if(m) m.hidden=!d; },
   menu:(e,items)=>ctxMenu(e,items), saveBox:(t,b,c)=>saveBox(t,b,c),
   // a new show: the set's cue voice starts fresh (Kokoro Heart once downloaded, else the computer's)
-  freshShow(){ CUEV={voice:'',name:'',speed:1}; cuevFresh=true; CLICKT={}; PRON={}; UNKNOWN=[]; if(VMODEL.state==='ready'){ CUEV={...KOKORO_DEFAULT}; cuevFresh=false; } },
+  freshShow(){ CUEV={voice:'',name:'',speed:1}; cuevFresh=true; CLICKT={}; PRON={}; UNKNOWN=[]; CUEWORDS=[]; if(VMODEL.state==='ready'){ CUEV={...KOKORO_DEFAULT}; cuevFresh=false; } },
   confirm(title,body,ok,fn){ confirmBox(title,body,ok,fn); },
   // step 2: stems
+  // phase 7: recorded cue words
+  recFor:(s,t)=>recFor(s,t), wordFiles:()=>allWords(), addWords:(s,list,only)=>addWords(s,list,only), words:()=>CUEWORDS,
   // phase 6b: cues on the grid, count-in (tests)
   cue:{ t:(s,c)=>cueT(s,c), at:(s,t)=>cueAt(s,t), times:(s,into,n,sp)=>countInTimes(s,into,n,sp), add:(s,o)=>addCountIn(s,o), box:(s,into)=>countInBox(s,into) },
   // phase 6b: click tracks (tests)

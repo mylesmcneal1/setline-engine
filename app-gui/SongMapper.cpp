@@ -190,7 +190,13 @@ MappedSong mapSong(const juce::var& payload, double sr, int numOutputs,
                 d.bar = juce::jmax(1, toInt(c["bar"], 1));
                 d.beat = juce::jmax(1.0, toDouble(c["beat"], 1));
                 d.text = text.toStdString();
-                d.audio = cueAudio(text, c["voice"].isObject() ? c["voice"] : voice, out.warnings); // a cue's own voice (count-in), else the song's
+                juce::var v = c["voice"].isObject() ? c["voice"] : voice; // a cue's own voice (count-in), else the song's
+                if (c["rec"].toString().isNotEmpty()) { // a recorded word (phase 7): the recording instead of the voice
+                    auto* o = v.getDynamicObject() ? v.getDynamicObject()->clone().release() : new juce::DynamicObject();
+                    o->setProperty("rec", c["rec"]);
+                    v = juce::var(o);
+                }
+                d.audio = cueAudio(text, v, out.warnings);
                 if (d.audio) def.cues.push_back(std::move(d));
             }
     }

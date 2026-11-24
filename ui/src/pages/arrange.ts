@@ -23,6 +23,8 @@ interface Page {
   // step 2: spoken cues
   cueCfg(s: Song): CueVoice; cueVoiceAll(): CueVoice; setVoices(list: VoiceInfo[]): void;
   setDirty(d: boolean): void; freshShow(): void;
+  recFor(s: Song, text: string): string; wordFiles(): { path: string; copy?: boolean }[];
+  addWords(s: Song, list: { name: string; ref: string }[], only: boolean): void;
   menu(e: { clientX: number; clientY: number }, items: (MenuItem | "-")[]): void;
   saveBox(title: string, body: string, choice: (c: "save" | "discard") => void): void;
   pron(): Record<string, string>; setVoiceModel(st: VoiceModel): void; setUnknownWords(list: string[]): void;
@@ -168,7 +170,10 @@ function payload(s: Song) {
   // The show's pronunciations go with the cue voice (the song's own, or the set's), as the app keys cues by them.
   const pron = p.pron();
   if (song.cueVoice) song.cueVoice = { ...song.cueVoice, pron };
-  for (const q of (song.cues || []) as { voice?: Record<string, unknown> }[]) if (q.voice) q.voice = { ...q.voice, pron };
+  for (const q of (song.cues || []) as { text?: string; rec?: string; voice?: Record<string, unknown> }[]) {
+    if (q.voice) q.voice = { ...q.voice, pron };
+    const rec = p.recFor(s, q.text || ""); if (rec) q.rec = rec; // a recorded word plays instead of the voice
+  }
   // each click track other than "Click" with its own settings (the app plays every click track, sample-exact)
   const clickTracks: Record<string, Record<string, unknown>> = {};
   s.tracks.forEach((t) => { if (p.ROLE[t] === "click" && t !== "Click") clickTracks[t] = p.clickCfg(s, t); });
@@ -345,7 +350,7 @@ const cuesTrack = (s: Song) => s.tracks.find((t) => page().ROLE[t] === "cues");
 let preparedKey = "";
 function prepareCues() {
   if (!deviceRate) return;
-  const list: { text: string; voice: string; name: string; speed: number; pron: Record<string, string> }[] = [];
+  const list: { text: string; voice: string; name: string; speed: number; pron: Record<string, string>; rec: string }[] = [];
   const pron = page().pron();
   for (const s of page().songs) {
     if (!cuesTrack(s)) continue;
@@ -353,7 +358,7 @@ function prepareCues() {
     for (const q of (s.cues || []) as { text?: string; voice?: CueVoice }[]) {
       if (!q.text || !q.text.trim()) continue;
       const v = q.voice || c; // a cue's own voice (count-in), else the song's / set's
-      list.push({ text: q.text.trim(), voice: v.voice || "", name: v.name || "", speed: v.speed || c.speed || 1, pron });
+      list.push({ text: q.text.trim(), voice: v.voice || "", name: v.name || "", speed: v.speed || c.speed || 1, pron, rec: page().recFor(s, q.text) });
     }
   }
   const key = deviceRate + JSON.stringify(list);
@@ -368,8 +373,22 @@ const SLC = {
     const outs = t ? outsOf(s, t) : [];
     if (!outs.length) { page().toast("The Cues track isn't routed (Outputs & MIDI page), so a preview can't be heard"); return; }
     const r = await SL.call<{ ok?: boolean; error?: string; fellBack?: boolean }>("previewCue",
-      { text, voice: c.voice || "", name: c.name || "", speed: c.speed || 1, pron: page().pron(), outs, db: t ? page().gainOf(s, t) : 0 });
+      { text, voice: c.voice || "", name: c.name || "", speed: c.speed || 1, pron: page().pron(), rec: page().recFor(s, text), outs, db: t ? page().gainOf(s, t) : 0 });
     if (r.error) page().toast(r.error);
+  },
+  // "+ Recorded word…": WAV / AIFF / FLAC at any rate, copied into <show>/Cues/Words (on save if the show is new).
+  async addWords(s: Song, only: boolean) {
+    const r = await SL.call<{ files?: AudioInfo[]; cancelled?: boolean; error?: string }>("pickAudioFiles", { rate: 0, multiple: true });
+    if (r.error) { page().toast(r.error); return; }
+    if (r.cancelled || !r.files) return;
+    const good = r.files.filter((x) => x.ok);
+    if (good.length < r.files.length) { const bad = r.files.find((x) => !x.ok)!; page().toast(`${bad.name}: ${bad.error}`); }
+    if (!good.length) return;
+    const cur = await SL.call<FileResult>("getSessionFile");
+    const imp = await SL.call<{ files?: { path: string; ref: string }[]; error?: string }>("importAudio", { session: cur.path || "", copy: true, files: good.map((x) => x.path), sub: "Cues/Words" });
+    if (imp.error) { page().toast(imp.error); return; }
+    page().addWords(s, (imp.files || []).map((f) => ({ name: f.path.split(/[\\/]/).pop() || f.path, ref: f.ref })), only);
+    preparedKey = ""; prepareCues(); loadedKey = null;
   },
   downloadVoices() { SL.call("downloadVoices").catch(() => {}); },
   cancelVoiceDownload() { SL.call("cancelVoiceDownload").catch(() => {}); },
@@ -378,7 +397,7 @@ const SLC = {
     const c = page().cueCfg(s);
     if (!/^kokoro:/.test(c.voice || "")) { page().setUnknownWords([]); return; }
     const texts: string[] = [];
-    for (const x of page().songs) for (const q of (x.cues || []) as { text?: string }[]) if (q.text && q.text.trim()) texts.push(q.text.trim());
+    for (const x of page().songs) for (const q of (x.cues || []) as { text?: string }[]) if (q.text && q.text.trim() && !page().recFor(x, q.text)) texts.push(q.text.trim());
     const r = await SL.call<{ unknown?: string[] }>("checkCueWords", { texts, voice: c.voice, name: c.name, speed: c.speed || 1, pron: page().pron() });
     page().setUnknownWords(r.unknown || []);
   },
@@ -414,6 +433,7 @@ function audioFiles(): { song: Song; track: string; f: { path: string; copy?: bo
 }
 function applyRefMap(map: Record<string, string>) {
   for (const x of audioFiles()) if (map[x.f.path] !== undefined) x.f.path = map[x.f.path];
+  for (const w of page().wordFiles()) if (map[w.path] !== undefined) w.path = map[w.path]; // recorded cue words
   forgetMissingPeaks(); // located files get their waveforms
 }
 
@@ -505,10 +525,10 @@ async function saveSession(as: boolean, to?: string): Promise<boolean> {
     }
     // Stems flagged "Copy into session" are copied into its Audio folder; every reference becomes
     // relative to the session folder (absolute only for files kept outside it).
-    const files = audioFiles();
-    if (files.length) {
+    const files = audioFiles(), words = page().wordFiles();
+    if (files.length || words.length) {
       const c = await SL.call<{ map?: Record<string, string>; missing?: string[]; error?: string }>("collectAudio",
-        { from: cur.path || "", to: target, files: files.map((x) => ({ ref: x.f.path, copy: !!x.f.copy })) });
+        { from: cur.path || "", to: target, files: [...files.map((x) => ({ ref: x.f.path, copy: !!x.f.copy })), ...words.map((w) => ({ ref: w.path, copy: true, sub: "Cues/Words" }))] });
       if (c.error) { page().toast(c.error); return false; }
       applyRefMap(c.map || {});
       if (c.missing && c.missing.length) page().toast(`${c.missing.length} audio file${c.missing.length > 1 ? "s are" : " is"} missing; saved without copying ${c.missing.length > 1 ? "them" : "it"}`);

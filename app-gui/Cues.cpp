@@ -1,6 +1,7 @@
 #include "Cues.h"
 #include "Peaks.h"
 #include <juce_audio_basics/juce_audio_basics.h>
+#include <juce_audio_formats/juce_audio_formats.h>
 #include <juce_events/juce_events.h>
 #include <cmath>
 #include <cstring>
@@ -74,7 +75,7 @@ juce::String respell(const juce::String& text, const kokoro::Pronunciations& pro
 
 Cues::Choice Cues::choiceFrom(const juce::var& v)
 {
-    Choice c { v["voice"].toString(), v["name"].toString(), v["speed"].isVoid() ? 1.0 : (double) v["speed"], {} };
+    Choice c { v["voice"].toString(), v["name"].toString(), v["speed"].isVoid() ? 1.0 : (double) v["speed"], {}, v["recPath"].toString() };
     if (auto* o = v["pron"].getDynamicObject())
         for (auto& p : o->getProperties())
             if (auto w = p.name.toString().trim().toLowerCase(); w.isNotEmpty() && p.value.toString().trim().isNotEmpty()) c.pron[w] = p.value.toString().trim();
@@ -188,6 +189,7 @@ juce::String Cues::resolveLocked(const Choice& c, bool& fellBack) const
 
 juce::String Cues::fallbackReason(const Choice& c)
 {
+    if (c.recording.isNotEmpty()) return {};
     bool fb = false;
     resolve(c, fb);
     if (! fb) return {};
@@ -210,9 +212,33 @@ void Cues::checkWords(juce::StringArray texts, Choice c, std::function<void(juce
 
 juce::String Cues::keyOf(const juce::String& text, const juce::String& voiceId, const Choice& c, double rate) const
 {
+    if (c.recording.isNotEmpty()) { // the file itself (a new recording under the same name is a new key)
+        const juce::File f(c.recording);
+        return "rec|" + f.getFullPathName() + "|" + juce::String(f.getSize()) + "|" + juce::String(f.getLastModificationTime().toMilliseconds()) + "|" + juce::String((int) rate);
+    }
     // Kokoro renders carry the model's name, so a future model never reuses them.
     return text + "|" + voiceId + "|" + juce::String(c.speed, 2) + "|" + juce::String((int) rate)
          + (kokoro::isKokoro(voiceId) ? "|kokoro-v1.0" : "") + (pronKey(text, c.pron).isNotEmpty() ? "|" + pronKey(text, c.pron) : juce::String());
+}
+
+// A recorded cue word: WAV / AIFF / FLAC at any rate, mono or stereo (mixed to mono). Worker thread.
+bool Cues::readRecording(const juce::File& f, std::vector<float>& out, double& rate, juce::String& error)
+{
+    static juce::AudioFormatManager fm;
+    static const bool registered = [] { fm.registerBasicFormats(); return true; }();
+    (void) registered;
+    std::unique_ptr<juce::AudioFormatReader> r(f.existsAsFile() ? fm.createReaderFor(f) : nullptr);
+    if (r == nullptr) { error = "The recording " + f.getFileName() + (f.existsAsFile() ? " can't be read." : " is missing."); return false; }
+    const auto n = (int) std::min<juce::int64>(r->lengthInSamples, (juce::int64) (r->sampleRate * 30)); // a cue word, not a song
+    if (n <= 0) { error = "The recording " + f.getFileName() + " is empty."; return false; }
+    juce::AudioBuffer<float> b((int) r->numChannels, n);
+    r->read(&b, 0, n, 0, true, true);
+    out.assign((size_t) n, 0.0f);
+    const float k = 1.0f / (float) b.getNumChannels();
+    for (int ch = 0; ch < b.getNumChannels(); ++ch)
+        for (int i = 0; i < n; ++i) out[(size_t) i] += b.getSample(ch, i) * k;
+    rate = r->sampleRate;
+    return true;
 }
 
 Cues::Audio Cues::renderNow(const juce::String& text, const juce::String& voiceId, const Choice& c, double rate, juce::String& error)
@@ -238,8 +264,9 @@ Cues::Audio Cues::renderNow(const juce::String& text, const juce::String& voiceI
 
     std::vector<float> raw;
     double rawRate = 0;
-    if (kokoro::isKokoro(voiceId) ? ! kokoro::render(text, voiceId, c.speed, c.pron, raw, rawRate, error)
-                                  : ! speech::render(respell(text, c.pron), voiceId, c.speed, rate, raw, rawRate, error))
+    if (c.recording.isNotEmpty()) { if (! readRecording(juce::File(c.recording), raw, rawRate, error)) return nullptr; }
+    else if (kokoro::isKokoro(voiceId) ? ! kokoro::render(text, voiceId, c.speed, c.pron, raw, rawRate, error)
+                                       : ! speech::render(respell(text, c.pron), voiceId, c.speed, rate, raw, rawRate, error))
         return nullptr;
     auto a = std::make_shared<std::vector<float>>(resample(raw, rawRate, rate));
     trim(*a, rate);
@@ -286,7 +313,8 @@ Cues::Audio Cues::cached(const juce::String& text, const Choice& c, double rate,
     std::lock_guard<std::mutex> g(dataLock);
     fellBack = false;
     if (! listed) return nullptr;
-    const auto id = resolveLocked(c, fellBack);
+    const auto id = c.recording.isNotEmpty() ? juce::String() : resolveLocked(c, fellBack);
+    if (c.recording.isNotEmpty()) fellBack = false;
     auto it = memo.find(keyOf(text, id, c, rate));
     return it != memo.end() ? it->second : nullptr;
 }

@@ -7,6 +7,8 @@
 // - Rendered speech is resampled once, at render time, to the show's rate (the one allowed exception
 //   to "never resample": it is generated material, not a user's stem). Leading silence is trimmed, so
 //   the first word starts on the cue's bar.
+// - A cue whose text is one of the show's recorded words plays that recording instead (any rate, mono or
+//   stereo: mixed to mono, resampled once, leading silence trimmed, like speech).
 // - A voice that isn't installed here (a session made on another computer) falls back to the default
 //   voice; the session keeps its choice.
 // All speech runs on one worker thread; the public functions can be called from the message thread.
@@ -29,7 +31,8 @@ class Cues {
 public:
     using Audio = std::shared_ptr<const std::vector<float>>;
     // voice id + display name as saved, speed, and the show's pronunciations (Kokoro.h)
-    struct Choice { juce::String voice, name; double speed = 1; kokoro::Pronunciations pron; };
+    // recording: a recorded cue word (full path) used instead of a voice (phase 7, part 2).
+    struct Choice { juce::String voice, name; double speed = 1; kokoro::Pronunciations pron; juce::String recording; };
     // From the page's {voice, name, speed, pron: {word: sounds like}}.
     static Choice choiceFrom(const juce::var& v);
     // Why a choice falls back to the default voice: "" (it doesn't), "missing" or "notDownloaded" (Kokoro).
@@ -71,6 +74,7 @@ private:
     void run();
     Audio renderNow(const juce::String& text, const juce::String& voiceId, const Choice& c, double rate, juce::String& error); // worker
     juce::String keyOf(const juce::String& text, const juce::String& voiceId, const Choice& c, double rate) const;
+    static bool readRecording(const juce::File& f, std::vector<float>& out, double& rate, juce::String& error); // worker
     void ensureVoices(); // worker
     juce::String resolveLocked(const Choice& c, bool& fellBack) const; // dataLock held
 
