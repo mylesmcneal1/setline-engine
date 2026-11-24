@@ -6,3 +6,16 @@ ci-song/
 .DS_Store
 test-song/
 build-asio/
+
+# Never commit audio, shows, models or local leftovers (test shows live outside the repo; see docs)
+*.aif
+*.aiff
+*.flac
+*.mp3
+*.setline
+Shows/
+*.onnx
+*.log
+*.zip
+*.tar.gz
+*.patch
