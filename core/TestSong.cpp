@@ -862,6 +862,40 @@ bool runSelfTest(bool verbose)
         check(onsets(m.out[0], m.firstSample) == bandFrom && silent, "two click tracks: from bar 3 beat 2 the band click is still exact while the muted drums click is silent");
     }
 
+    // ---- Phase 6b: count-in cues on beats and between them ("1, 2, 3, 4" before bar 3 in 4/4; 8ths "1 & 2 &";
+    // every eighth-beat of a 7/8 bar): each starts on its beat's exact sample, at any block size, also from mid-song.
+    {
+        SongDef s; s.name = "Count-in";
+        s.tempo = { { 1, 120, 4, 4 }, { 4, 97, 7, 8 } };
+        s.lengthBars = 6;
+        TempoMap tm; tm.build(s.tempo, sr, 0, 8);
+        s.cueOuts = { 0 };
+        auto a = std::make_shared<std::vector<float>>((size_t) 2000, 0.3f);
+        std::vector<std::pair<int, double>> at;
+        for (double b : { 1.0, 2.0, 3.0, 4.0 }) at.push_back({ 2, b });              // 1, 2, 3, 4 into bar 3
+        for (double b : { 1.0, 1.5, 2.0, 2.5, 3.0, 3.5 }) at.push_back({ 3, b });    // 8ths
+        for (double b : { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0 }) at.push_back({ 4, b }); // every beat of 7/8 (an 8th)
+        for (auto& [bar, beat] : at) { CueDef c; c.bar = bar; c.beat = beat; c.audio = a; c.text = "count"; s.cues.push_back(c); }
+        std::vector<int64_t> want;
+        for (auto& [bar, beat] : at) want.push_back(tm.sampleAt(bar, beat));
+        auto onsets = [](const std::vector<float>& x, int64_t first) {
+            std::vector<int64_t> v;
+            for (size_t i = 0; i < x.size(); ++i) if (x[i] != 0.0f && (i == 0 || x[i - 1] == 0.0f)) v.push_back(first + (int64_t) i);
+            return v;
+        };
+        bool exact = true; std::string why;
+        for (int blk : { 128, 97, 33, 1024 }) {
+            OfflineRun r; r.load(s, sr, 1, blk); r.start(0); r.runToEnd();
+            if (onsets(r.out[0], 0) != want) { exact = false; why += " block " + std::to_string(blk); }
+        }
+        OfflineRun m; m.load(s, sr, 1, 97);
+        const int64_t from = tm.sampleAt(3, 1.75);
+        m.start(from); m.runToEnd();
+        std::vector<int64_t> rest; for (auto x : want) if (x >= from) rest.push_back(x);
+        const auto got = onsets(m.out[0], m.firstSample);
+        check(exact && got == rest, "count-in cues on beats, 8ths and 7/8 beats start on their exact samples (blocks 128/97/33/1024, and from bar 3 beat 1.75)" + why);
+    }
+
     std::printf(ok ? "ALL CHECKS PASSED\n" : "SOME CHECKS FAILED\n");
     return ok;
 }

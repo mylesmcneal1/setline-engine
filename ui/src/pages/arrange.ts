@@ -164,6 +164,7 @@ function payload(s: Song) {
   // The show's pronunciations go with the cue voice (the song's own, or the set's), as the app keys cues by them.
   const pron = p.pron();
   if (song.cueVoice) song.cueVoice = { ...song.cueVoice, pron };
+  for (const q of (song.cues || []) as { voice?: Record<string, unknown> }[]) if (q.voice) q.voice = { ...q.voice, pron };
   // each click track other than "Click" with its own settings (the app plays every click track, sample-exact)
   const clickTracks: Record<string, Record<string, unknown>> = {};
   s.tracks.forEach((t) => { if (p.ROLE[t] === "click" && t !== "Click") clickTracks[t] = p.clickCfg(s, t); });
@@ -343,7 +344,11 @@ function prepareCues() {
   for (const s of page().songs) {
     if (!cuesTrack(s)) continue;
     const c = page().cueCfg(s);
-    for (const q of (s.cues || []) as { text?: string }[]) if (q.text && q.text.trim()) list.push({ text: q.text.trim(), voice: c.voice || "", name: c.name || "", speed: c.speed || 1, pron });
+    for (const q of (s.cues || []) as { text?: string; voice?: CueVoice }[]) {
+      if (!q.text || !q.text.trim()) continue;
+      const v = q.voice || c; // a cue's own voice (count-in), else the song's / set's
+      list.push({ text: q.text.trim(), voice: v.voice || "", name: v.name || "", speed: v.speed || c.speed || 1, pron });
+    }
   }
   const key = deviceRate + JSON.stringify(list);
   if (key === preparedKey) return;

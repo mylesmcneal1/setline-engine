@@ -129,7 +129,7 @@ void Bridge::withCues(const juce::var& a, std::function<void()> then)
     const juce::var v = s["cueVoice"].isObject() ? s["cueVoice"] : a["cueVoice"];
     const auto c = Cues::choiceFrom(v);
     if (auto* cs = s["cues"].getArray())
-        for (auto& q : *cs) if (auto t = q["text"].toString().trim(); t.isNotEmpty()) list.push_back({ t, c });
+        for (auto& q : *cs) if (auto t = q["text"].toString().trim(); t.isNotEmpty()) list.push_back({ t, q["voice"].isObject() ? Cues::choiceFrom(q["voice"]) : c });
     const double rate = audio.sampleRate();
     if (list.empty() || rate <= 0) { then(); return; }
     cues.ensure(std::move(list), rate, [this, then](std::map<juce::String, juce::String> errors) {

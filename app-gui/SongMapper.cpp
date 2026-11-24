@@ -190,7 +190,7 @@ MappedSong mapSong(const juce::var& payload, double sr, int numOutputs,
                 d.bar = juce::jmax(1, toInt(c["bar"], 1));
                 d.beat = juce::jmax(1.0, toDouble(c["beat"], 1));
                 d.text = text.toStdString();
-                d.audio = cueAudio(text, voice, out.warnings);
+                d.audio = cueAudio(text, c["voice"].isObject() ? c["voice"] : voice, out.warnings); // a cue's own voice (count-in), else the song's
                 if (d.audio) def.cues.push_back(std::move(d));
             }
     }
