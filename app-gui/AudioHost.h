@@ -38,6 +38,9 @@ public:
     // req: {fromBar, fromBeat, toBar, toBeat} loops that range inside the engine (sample-exact); null/{} clears it.
     juce::var setLoop(const juce::var& req);
     juce::var transportState();
+    // Tests (--test-script): maps the song exactly as loadSong does and renders it offline (no device):
+    // {fromBar, seconds, loop: {fromBar, toBar}} -> {rate, bars: [sample per downbeat], outs: [{onsets, peak}], midi: [sample]}
+    juce::var renderOffline(const juce::var& payload, const juce::var& opts);
     juce::var engineStats();
 
     // Called on the message thread: device changed underneath us (unplugged, driver reset, rate changed).

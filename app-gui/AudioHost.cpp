@@ -472,3 +472,65 @@ void AudioHost::audioDeviceAboutToStart(juce::AudioIODevice* d)
 void AudioHost::audioDeviceStopped() { eng.setDeviceRunning(false); }
 
 } // namespace setline::gui
+
+namespace setline::gui {
+
+juce::var AudioHost::renderOffline(const juce::var& payload, const juce::var& opts)
+{
+    auto* d = dm.getCurrentAudioDevice();
+    const double sr = d ? d->getCurrentSampleRate() : 48000.0;
+    const int numOut = d ? d->getActiveOutputChannels().countNumberOfSetBits() : 8;
+    // MIDI is only logged offline: every port resolves to 0, so no device is opened.
+    auto mapped = mapSong(payload, sr, numOut, [](const juce::String&, std::vector<std::string>&) { return 0; },
+                          [this, sr](const juce::String& text, const juce::var& voice, std::vector<std::string>& w) {
+                              return cueAudio ? cueAudio(text, voice, sr, w) : std::shared_ptr<const std::vector<float>>();
+                          });
+    Engine e;
+    Engine::Config cfg; cfg.sampleRate = sr; cfg.numOutputs = numOut; cfg.offline = true;
+    std::vector<std::string> warnings = mapped.warnings;
+    if (auto err = e.load(mapped.def, cfg, warnings); ! err.empty()) { auto* o = new juce::DynamicObject(); o->setProperty("error", juce::String(err)); return juce::var(o); }
+    for (auto& [name, id] : mapped.engineTrack) { const auto& lv = mapped.levels[name]; e.setTrackLevel(id, lv.db, lv.mute || lv.db <= -60.0f); }
+    const auto& tm = e.tempoMap();
+    if (opts["loop"].isObject()) e.setLoop(tm.sampleAt((int) opts["loop"]["fromBar"], 1), tm.sampleAt((int) opts["loop"]["toBar"], 1));
+    const int64_t from = tm.sampleAt(juce::jmax(1, (int) opts.getProperty("fromBar", 1)), 1);
+    const int64_t total = (int64_t) ((double) opts.getProperty("seconds", 10.0) * sr);
+    std::vector<std::vector<float>> out((size_t) numOut, std::vector<float>((size_t) total, 0.0f));
+    const int block = 128;
+    std::vector<std::vector<float>> buf((size_t) numOut, std::vector<float>(block));
+    std::vector<float*> ptrs; for (auto& b : buf) ptrs.push_back(b.data());
+    juce::Array<juce::var> res;
+    int64_t first = 0;
+    if (e.start(from)) {
+        first = e.position();
+        for (int64_t done = 0; done < total && e.isPlaying(); done += block) {
+            e.process(ptrs.data(), numOut, block);
+            for (int c = 0; c < numOut; ++c) for (int i = 0; i < block && done + i < total; ++i) out[(size_t) c][(size_t) (done + i)] = buf[(size_t) c][(size_t) i];
+        }
+    }
+    for (int c = 0; c < numOut; ++c) {
+        juce::Array<juce::var> on;
+        float peak = 0; int64_t lastLoud = -1000000;
+        const auto& x = out[(size_t) c];
+        for (int64_t i = 0; i < total; ++i) {
+            const float a = std::abs(x[(size_t) i]);
+            peak = juce::jmax(peak, a);
+            if (a > 1e-4f) { if (i - lastLoud > 2400 && on.size() < 64) on.add((double) i); lastLoud = i; } // after 50 ms of silence
+        }
+        auto* o = new juce::DynamicObject(); o->setProperty("onsets", on); o->setProperty("peak", peak);
+        res.add(juce::var(o));
+    }
+    juce::Array<juce::var> bars, midi, w;
+    for (int b = 1; b <= tm.numBars(); ++b) bars.add((double) tm.sampleAt(b, 1));
+    for (auto& m : e.midiLog) midi.add((double) m.sample);
+    for (auto& s : warnings) w.add(juce::String(s));
+    auto* o = new juce::DynamicObject();
+    o->setProperty("rate", sr);
+    o->setProperty("first", (double) first); // song sample of stream index 0 (a start mid-song prerolls 5 ms)
+    o->setProperty("bars", bars);
+    o->setProperty("outs", res);
+    o->setProperty("midi", midi);
+    o->setProperty("warnings", w);
+    return juce::var(o);
+}
+
+} // namespace setline::gui

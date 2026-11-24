@@ -1210,19 +1210,27 @@ function wireClickPanel(s){ if(!$('ckClose')) return; const own=()=>!!s.click, s
 // Voices: in the app the system's installed voices (window.SLPage.setVoices); in a browser its own speech voices.
 // A saved choice keeps both the voice id and its name; a voice missing on this computer falls back to the
 // default voice with a warning, and the choice stays saved for the computer that has it.
-let CUEV={voice:'',name:'',speed:1}, cueOpen=false, VOICES=null;
+let CUEV={voice:'',name:'',speed:1}, cueOpen=false, VOICES=null, allVoices=false;
+// Voice menu order: the computer's language first (English here), best quality on top, the exact locale before
+// other regions; the rest behind "More voices…". A saved voice from the rest still shows (selected) in the first part.
+function voiceMenu(found){ const sys=(navigator.language||'en-US').toLowerCase(), lang=sys.split('-')[0], l=voiceList();
+  const mine=v=>(v.lang||'').toLowerCase().split(/[-_]/)[0]===lang, rank=v=>[-(v.quality||1),(v.lang||'').toLowerCase().replace('_','-')===sys?0:1,v.name.toLowerCase()];
+  const cmp=(a,b)=>{ const x=rank(a),y=rank(b); for(let i=0;i<x.length;i++){ if(x[i]<y[i]) return -1; if(x[i]>y[i]) return 1; } return 0; };
+  const first=l.filter(v=>mine(v)||(found&&v.id===found.id)).sort(cmp), rest=l.filter(v=>!first.includes(v)).sort((a,b)=>(a.lang||'').localeCompare(b.lang||'')||cmp(a,b));
+  return {first,rest}; }
 const cueCfg=s=>s.cueVoice||CUEV;
 function voiceList(){ if(VOICES) return VOICES; try{ return speechSynthesis.getVoices().map(v=>({id:v.name,name:v.name,lang:v.lang,isDefault:v.default})); }catch(e){ return []; } }
 function defaultVoice(){ const l=voiceList(); return l.find(v=>v.isDefault)||l[0]||null; }
 function voiceFound(c){ if(!c.voice&&!c.name) return defaultVoice(); const l=voiceList(); return l.find(v=>v.id===c.voice)||l.find(v=>c.name&&v.name.toLowerCase()===c.name.toLowerCase())||null; }
 function voiceLabel(c){ if(!c.voice&&!c.name){ const d=defaultVoice(); return d?d.name:'Default voice'; } return c.name||c.voice; }
-function openCuePanel(s){ cueOpen=true; clickOpen=false; selClip=null; selSec=null; if(selId!==s.id) select(s.id,false); if(isOpen&&!isOpen('R')) setPanel('R',true); renderInsp(); $('insp').scrollTop=0; }
+function openCuePanel(s){ cueOpen=true; allVoices=false; clickOpen=false; selClip=null; selSec=null; if(selId!==s.id) select(s.id,false); if(isOpen&&!isOpen('R')) setPanel('R',true); renderInsp(); $('insp').scrollTop=0; }
 // Preview text: the selected cue on this song, otherwise "Verse one".
 function previewText(s){ if(pick&&pick.kind==='cue'&&pick.song===s.id){ const c=cuesOf(s).find(x=>x.id===pick.id); if(c&&c.text) return c.text; } return 'Verse one'; }
 function previewCue(s,text){ const c=cueCfg(s); if(window.SLC){ SLC.preview(s,text); return; }
   try{ speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(text), v=speechSynthesis.getVoices().find(x=>x.name===(voiceFound(c)||{}).name); if(v) u.voice=v; u.rate=c.speed||1; speechSynthesis.speak(u); }catch(e){} }
 function cuePanel(s){ if(!cueOpen) return ''; const c=cueCfg(s), own=!!s.cueVoice, list=voiceList(), found=voiceFound(c), missing=(c.voice||c.name)&&!found, d=defaultVoice();
-  const opts=`<option value="" ${!c.voice&&!c.name?'selected':''}>Default voice${d?' ('+esc(d.name)+')':''}</option>`+(missing?`<option value="__saved" selected>${esc(c.name||c.voice)} (not on this computer)</option>`:'')+list.map(v=>`<option value="${esc(v.id)}" ${found&&(c.voice||c.name)&&found.id===v.id?'selected':''}>${esc(v.name)}${v.lang?' · '+esc(v.lang):''}</option>`).join('');
+  const opts=`<option value="" ${!c.voice&&!c.name?'selected':''}>Default voice${d?' ('+esc(d.name)+')':''}</option>`+(missing?`<option value="__saved" selected>${esc(c.name||c.voice)} (not on this computer)</option>`:'')+(()=>{ const m=voiceMenu((c.voice||c.name)?found:null), o=v=>`<option value="${esc(v.id)}" ${found&&(c.voice||c.name)&&found.id===v.id?'selected':''}>${esc(v.name)}${v.lang?' · '+esc(v.lang):''}${v.quality>=3?' · Premium':v.quality===2?' · Enhanced':''}</option>`;
+      return m.first.map(o).join('')+(m.rest.length?(allVoices?`<optgroup label="More voices">${m.rest.map(o).join('')}</optgroup>`:`<option value="__more">More voices… (${m.rest.length})</option>`):''); })();
   const sp=c.speed||1;
   return `<div class="secpanel ckp"><div class="kicker">CUE VOICE</div>
     <div class="sph"><span class="cd" style="background:#7d8696"></span><b style="font-size:16px;flex:1">Cues</b><button class="ibtn" id="cvClose" title="Done">✕</button></div>
@@ -1233,9 +1241,9 @@ function cuePanel(s){ if(!cueOpen) return ''; const c=cueCfg(s), own=!!s.cueVoic
     <div class="acts" style="margin-top:10px"><button class="btn pri" id="cvPrev">▶ Preview</button>${own?'<button class="btn" id="cvReset">Use the set’s voice</button>':''}</div>
     <p class="faint" style="font-size:11px;margin-top:10px;line-height:1.5">Cues are spoken by this voice, recorded ahead of time and played exactly on their bar. Preview speaks the selected cue, or “Verse one”.</p></div>`; }
 function wireCuePanel(s){ if(!$('cvClose')) return; const own=()=>!!s.cueVoice, set=(k,v)=>{ if(own()) s.cueVoice[k]=v; else CUEV[k]=v; }, rr=()=>{ renderInsp(); renderFolders(); };
-  $('cvClose').onclick=()=>{ cueOpen=false; renderInsp(); };
+  $('cvClose').onclick=()=>{ cueOpen=false; allVoices=false; renderInsp(); };
   $('cvScope').querySelectorAll('button').forEach(b=>b.onclick=()=>{ if(b.dataset.v==='song'&&!s.cueVoice){ snap(); s.cueVoice={...CUEV}; } if(b.dataset.v==='all'&&s.cueVoice){ snap(); delete s.cueVoice; } rr(); });
-  $('cvVoice').onchange=e=>{ const v=e.target.value; if(v==='__saved') return; snap(); const x=voiceList().find(y=>y.id===v); set('voice',x?x.id:''); set('name',x?x.name:''); rr(); previewCue(s,previewText(s)); };
+  $('cvVoice').onchange=e=>{ const v=e.target.value; if(v==='__saved') return; if(v==='__more'){ allVoices=true; renderInsp(); return; } snap(); const x=voiceList().find(y=>y.id===v); set('voice',x?x.id:''); set('name',x?x.name:''); rr(); previewCue(s,previewText(s)); };
   const sp=$('cvSpeed'); sp.oninput=()=>{ const v=+sp.value; set('speed',v); sp.style.setProperty('--p',((v-.7)/.8*100).toFixed(1)+'%'); $('cvSpeedV').textContent=v.toFixed(2)+'×'; };
   sp.onchange=()=>{ snap(); previewCue(s,previewText(s)); };
   $('cvPrev').onclick=()=>previewCue(s,previewText(s));
@@ -2055,7 +2063,7 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
   setSessionName(n){ $('crumbAll').textContent=n||'Untitled session'; },
   confirm(title,body,ok,fn){ confirmBox(title,body,ok,fn); },
   // step 2: stems
-  cueCfg:s=>cueCfg(s), cueVoiceAll:()=>CUEV, setVoices:l=>{ VOICES=l; if(cueOpen) renderInsp(); renderFolders(); }, pickCue:(s,id)=>{ const t=s.tracks.find(x=>ROLE[x]==='cues'); if(t) setPick({kind:'cue',song:s.id,track:t,id}); }, openCuePanel:s=>openCuePanel(s), rerender:()=>refresh(), redrawTrack:(s,t)=>redrawTrack(s,t), colourOf:t=>TCOL[t]||'#9aa0aa', roleOf:t=>ROLE[t]||'',
+  cueCfg:s=>cueCfg(s), cueVoiceAll:()=>CUEV, setVoices:l=>{ VOICES=l; if(cueOpen) renderInsp(); renderFolders(); }, pickCue:(s,id)=>{ const t=s.tracks.find(x=>ROLE[x]==='cues'); if(t) setPick({kind:'cue',song:s.id,track:t,id}); }, openCuePanel:s=>openCuePanel(s), newVer:(s,n)=>newVer(s,n), switchVer:(s,id)=>{ switchVer(s,id); refresh(); }, newAlt:(s,t,copy,n)=>newAlt(s,t,copy,n), buildBars:s=>buildBars(s), rerender:()=>refresh(), redrawTrack:(s,t)=>redrawTrack(s,t), colourOf:t=>TCOL[t]||'#9aa0aa', roleOf:t=>ROLE[t]||'',
   guessRole:n=>{ const g=ROLE_GUESS.find(([re])=>re.test(n)); return g&&g[1]!=="__skip"?g[1]:""; },
   addNative, openNewSong, modalOpen:()=>modal.classList.contains('show'), dropZone:()=>dz,
   addStems(s,list,refs,copy){ snap(); const a=s.audio; attachStems(s,list,refs,copy); if(s.audio!==a) buildBars(s); refresh(); } };

@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <thread>
 
 namespace setline {
@@ -727,6 +728,94 @@ bool runSelfTest(bool verbose)
         bool muted = true;
         for (auto x : mu.out[1]) muted &= x == 0.0f;
         check(muted, "cues: muting the Cues track silences them");
+    }
+
+    // ---- Step 2: everything together. Click hits, MIDI, audio clips and cues all come from the same tempo
+    // map and rounding rule: every one of them must land on the same sample, from the top, from a start
+    // or jump anywhere, and on every pass of a loop, at any block size.
+    {
+        SongDef s; s.name = "Together";
+        s.tempo = { { 1, 120, 4, 4 }, { 5, 97, 7, 8 }, { 7, 133.7, 3, 4 } }; // tempo and meter changes
+        s.lengthBars = 12;
+        TempoMap tm; tm.build(s.tempo, sr, 0, 14);
+        // a stem: digital silence except a run of 0.5 starting at every clip's start; one clip per bar 2..11
+        const int64_t fileLen = tm.sampleAt(13, 1);
+        auto src = std::make_shared<InMemorySource>(); src->sr = sr; src->data.assign(1, std::vector<float>((size_t) fileLen, 0.0f));
+        std::vector<ClipDef> clips;
+        for (int b = 2; b <= 11; ++b) {
+            const int64_t at = tm.sampleAt(b, 1);
+            for (int64_t i = at; i < at + 200; ++i) src->data[0][(size_t) i] = 0.5f;
+            clips.push_back({ at, tm.sampleAt(b + 1, 1), at, 0, 0, 0, false }); // each bar its own clip, file offset = timeline
+        }
+        StemDef st; st.name = "Stem"; st.source = src; st.outs = { 0 }; st.clips = clips;
+        s.stems.push_back(st);
+        s.clickOuts = { 1 };
+        std::vector<ClickHitDef> hits;
+        for (int b = 2; b <= 11; ++b) hits.push_back({ b, 1, true, 0 });
+        s.clickHits = hits;
+        auto cueA = std::make_shared<std::vector<float>>((size_t) 2000, 0.4f);
+        s.cueOuts = { 2 };
+        for (int b = 2; b <= 11; ++b) { CueDef c; c.bar = b; c.audio = cueA; c.text = "Bar"; s.cues.push_back(c); }
+        for (int b = 2; b <= 11; ++b) { MidiEventDef m; m.port = 0; m.bar = b; m.beat = 1; m.bytes[0] = 0x90; m.bytes[1] = 60; m.bytes[2] = 100; m.len = 3; m.label = "probe"; s.midi.push_back(m); }
+
+        // What a run heard: per bar downbeat (as a song sample), did stem, click and cue start exactly there,
+        // and did MIDI fire exactly there?
+        auto bars = [&](const OfflineRun& r, int64_t fromStream, int64_t toStream, const std::function<int64_t(int64_t)>& songAt) {
+            int good = 0, seen = 0;
+            for (int64_t i = std::max<int64_t>(fromStream, 1); i < toStream; ++i) {
+                const int64_t t = songAt(i);
+                bool isDown = false;
+                for (int b = 2; b <= 11; ++b) isDown |= tm.sampleAt(b, 1) == t;
+                if (! isDown) continue;
+                ++seen;
+                const bool stem = r.out[0][(size_t) i] == 0.5f && r.out[0][(size_t) i - 1] == 0.0f;
+                const bool click = std::fabs(r.out[1][(size_t) i]) > 0.05f && r.out[1][(size_t) i - 1] == 0.0f;
+                const bool cue = r.out[2][(size_t) i] == 0.4f && r.out[2][(size_t) i - 1] == 0.0f;
+                if (stem && click && cue) ++good;
+            }
+            return std::pair<int, int>(good, seen);
+        };
+        bool topOk = true; std::string topWhy;
+        for (int blk : { 128, 97, 33, 1024, 2048 }) {
+            OfflineRun r; r.load(s, sr, 4, blk); r.start(0); r.runToEnd();
+            const auto [g, n] = bars(r, 0, (int64_t) r.out[0].size(), [](int64_t i) { return i; });
+            int midiOk = 0;
+            for (auto& x : r.e.midiLog) for (int b = 2; b <= 11; ++b) midiOk += x.sample == tm.sampleAt(b, 1);
+            if (! (n == 10 && g == 10 && midiOk == 10 && (int) r.e.midiLog.size() == 10 && r.e.stats.underruns.load() == 0)) {
+                topOk = false; topWhy += " block " + std::to_string(blk) + ": " + std::to_string(g) + "/" + std::to_string(n) + " bars, MIDI " + std::to_string(midiOk);
+            }
+        }
+        check(topOk, "together: stem clip, click, cue and MIDI start on the same sample at all 10 downbeats (tempo + meter changes; blocks 128/97/33/1024/2048)" + topWhy);
+
+        // From a start mid-song and from a jump
+        OfflineRun st5; st5.load(s, sr, 4, 97);
+        const int64_t b5 = tm.sampleAt(5, 1);
+        bool fromOk = st5.start(b5); st5.runToEnd();
+        {
+            const auto [g, n] = bars(st5, 0, (int64_t) st5.out[0].size(), [&](int64_t i) { return st5.firstSample + i; });
+            int midiOk = 0; for (auto& x : st5.e.midiLog) for (int b = 5; b <= 11; ++b) midiOk += x.sample == tm.sampleAt(b, 1);
+            fromOk &= n == 7 && g == 7 && midiOk == 7 && st5.e.midiLog.size() == 7;
+        }
+        OfflineRun jp; jp.load(s, sr, 4, 97); jp.start(0);
+        const int64_t at = tm.sampleAt(3, 2.5), to = tm.sampleAt(8, 1) - 1; // lands one sample before bar 8's downbeat
+        jp.e.setJump(at, to, false);
+        jp.runToEnd();
+        {
+            const auto [g, n] = bars(jp, at + 1, (int64_t) jp.out[0].size(), [&](int64_t i) { return to + (i - at); });
+            fromOk &= n == 4 && g == 4 && jp.e.stats.jumps.load() == 1; // bars 8..11 after the jump
+            int midiAfter = 0; for (auto& x : jp.e.midiLog) for (int b = 8; b <= 11; ++b) midiAfter += x.sample == tm.sampleAt(b, 1);
+            fromOk &= midiAfter == 4;
+        }
+        check(fromOk, "together: from a start at bar 5 and after a jump (bar 3 beat 2.5 -> just before bar 8) everything still lands on each downbeat");
+
+        // Across a loop (bars 5-6: a 7/8 bar at 97 BPM and the next), several passes
+        const int64_t B = tm.sampleAt(5, 1), A = tm.sampleAt(7, 1), L = A - B;
+        OfflineRun lp; lp.load(s, sr, 4, 97); lp.e.setLoop(B, A); lp.start(0);
+        while ((int64_t) lp.out[0].size() < A + 4 * L + 10) lp.step();
+        const auto [g, n] = bars(lp, A, A + 4 * L, [&](int64_t i) { return B + (i - A) % L; });
+        int midiPass = 0; for (auto& x : lp.e.midiLog) if (x.sample == B || x.sample == tm.sampleAt(6, 1)) ++midiPass;
+        check(n == 8 && g == 8 && midiPass >= 2 + 8 && lp.e.stats.underruns.load() == 0,
+              "together: a loop over bars 5-6 keeps stem, click, cue and MIDI on the downbeats on every pass (" + std::to_string(g) + "/" + std::to_string(n) + ")");
     }
 
     std::printf(ok ? "ALL CHECKS PASSED\n" : "SOME CHECKS FAILED\n");

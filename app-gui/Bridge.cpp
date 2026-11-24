@@ -88,21 +88,38 @@ Bridge::Options Bridge::addTo(Options o)
     // song is mapped and loaded on the message thread, which never waits for speech.
     o = addAsync(o, "loadSong", [this](const juce::var& a, auto done) {
         if (! a.isObject() || ! a["song"].isObject()) { done(errorVar("loadSong: expected {song, outs, roles, click}")); return; }
-        // Stems are stored relative to the session's folder.
-        a.getDynamicObject()->setProperty("sessionFile", session.file() == juce::File() ? juce::String() : session.file().getFullPathName());
-        std::vector<std::pair<juce::String, Cues::Choice>> list;
-        const auto s = a["song"];
-        const juce::var v = s["cueVoice"].isObject() ? s["cueVoice"] : a["cueVoice"];
-        const Cues::Choice c { v["voice"].toString(), v["name"].toString(), v["speed"].isVoid() ? 1.0 : (double) v["speed"] };
-        if (auto* cs = s["cues"].getArray())
-            for (auto& q : *cs) if (auto t = q["text"].toString().trim(); t.isNotEmpty()) list.push_back({ t, c });
-        const double rate = audio.sampleRate();
-        if (list.empty() || rate <= 0) { done(audio.loadSong(a)); return; }
-        cues.ensure(std::move(list), rate, [this, a, done](std::map<juce::String, juce::String> errors) {
-            cueErrors = std::move(errors);
-            done(audio.loadSong(a));
-        });
+        withCues(a, [this, a, done] { done(audio.loadSong(a)); });
     });
+    if (testScript != juce::File()) // tests only: the song rendered offline exactly as it would load (AudioHost::renderOffline)
+        o = addAsync(o, "testRender", [this](const juce::var& a, auto done) {
+            withCues(a["payload"], [this, a, done] { done(audio.renderOffline(a["payload"], a)); });
+        });
+    return addRest(o);
+}
+
+// Before a song is mapped: stems resolve against the open session, and its cues are rendered (on the Cues
+// worker, usually already cached); then "then" runs on the message thread, which never waits for speech.
+void Bridge::withCues(const juce::var& a, std::function<void()> then)
+{
+    if (! a.isObject()) { then(); return; }
+    // Stems are stored relative to the session's folder.
+    a.getDynamicObject()->setProperty("sessionFile", session.file() == juce::File() ? juce::String() : session.file().getFullPathName());
+    std::vector<std::pair<juce::String, Cues::Choice>> list;
+    const auto s = a["song"];
+    const juce::var v = s["cueVoice"].isObject() ? s["cueVoice"] : a["cueVoice"];
+    const Cues::Choice c { v["voice"].toString(), v["name"].toString(), v["speed"].isVoid() ? 1.0 : (double) v["speed"] };
+    if (auto* cs = s["cues"].getArray())
+        for (auto& q : *cs) if (auto t = q["text"].toString().trim(); t.isNotEmpty()) list.push_back({ t, c });
+    const double rate = audio.sampleRate();
+    if (list.empty() || rate <= 0) { then(); return; }
+    cues.ensure(std::move(list), rate, [this, then](std::map<juce::String, juce::String> errors) {
+        cueErrors = std::move(errors);
+        then();
+    });
+}
+
+Bridge::Options Bridge::addRest(Options o)
+{
     o = add(o, "transport", [this](const juce::var& a) { return audio.transport(a); });
     o = add(o, "getTransport", [this](const juce::var&) { return audio.transportState(); });
     o = add(o, "getEngineStats", [this](const juce::var&) { return audio.engineStats(); });
