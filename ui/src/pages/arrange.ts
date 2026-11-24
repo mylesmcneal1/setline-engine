@@ -348,8 +348,9 @@ let lastReported = "";
 // whenever the set of cue texts / voices changes, so Play only picks them up.
 const cuesTrack = (s: Song) => s.tracks.find((t) => page().ROLE[t] === "cues");
 let preparedKey = "";
-function prepareCues() {
-  if (!deviceRate) return;
+// Every cue of the show as the app renders it: text, voice (the cue's own, else the song's / set's), pronunciations,
+// and the recording it plays instead (recorded words).
+function cueList() {
   const list: { text: string; voice: string; name: string; speed: number; pron: Record<string, string>; rec: string }[] = [];
   const pron = page().pron();
   for (const s of page().songs) {
@@ -361,6 +362,11 @@ function prepareCues() {
       list.push({ text: q.text.trim(), voice: v.voice || "", name: v.name || "", speed: v.speed || c.speed || 1, pron, rec: page().recFor(s, q.text) });
     }
   }
+  return list;
+}
+function prepareCues() {
+  if (!deviceRate) return;
+  const list = cueList();
   const key = deviceRate + JSON.stringify(list);
   if (key === preparedKey) return;
   preparedKey = key;
@@ -536,6 +542,8 @@ async function saveSession(as: boolean, to?: string): Promise<boolean> {
     const text = sessionText();
     const r = await SL.call<FileResult>("writeSession", { path: target, text });
     if (r.error) { page().toast(r.error); return false; }
+    // the show's cue audio goes into <show>/Cues, so it plays the same on any computer (rendered once)
+    SL.call("storeCues", { cues: cueList() }).catch(() => {});
     doc = { name: r.name || doc.name, savedText: text };
     page().setSessionName(doc.name);
     page().toast(`Saved “${doc.name}”`);
@@ -839,7 +847,7 @@ async function main() {
     try {
       const AsyncFn = Object.getPrototypeOf(async () => {}).constructor;
       const hooks = { SLE, page, importStems, probe, audioFiles, applyRefMap, checkAudio, onFileDrag, sessionText, applySession,
-        getRate: () => sessionRate, saveTo: (path: string) => saveSession(false, path), SLR, SLW, waves, SLC, prepareCues, remember, payload, getRoute: () => route, isDirty: () => sessionText() !== doc.savedText, setDoc: (n: string) => { doc = { name: n, savedText: "" }; } };
+        getRate: () => sessionRate, saveTo: (path: string) => saveSession(false, path), cueList: () => cueList(), SLR, SLW, waves, SLC, prepareCues, remember, payload, getRoute: () => route, isDirty: () => sessionText() !== doc.savedText, setDoc: (n: string) => { doc = { name: n, savedText: "" }; } };
       out = await new AsyncFn("SL", "hooks", info.testScript)(SL, hooks);
     } catch (e) { out = { error: String((e as Error)?.stack || e) }; }
     if (out !== undefined) await SL.call("testDone", { text: JSON.stringify(out, null, 1) }); // undefined: it went to another page

@@ -9,11 +9,16 @@
 //   the first word starts on the cue's bar.
 // - A cue whose text is one of the show's recorded words plays that recording instead (any rate, mono or
 //   stereo: mixed to mono, resampled once, leading silence trimmed, like speech).
+// - Every cue rendered with its real voice (or recording) is also stored in the show folder: <show>/Cues/<hash>.wav
+//   plus cues.json (text, voice, speed, source...). It's looked up there first, by what the show asked for, so a
+//   show opened on another computer plays these exact files even without that voice or the Kokoro model. A cue
+//   rendered with a stand-in voice is never stored. Saving prunes stored cues the show no longer uses.
 // - A voice that isn't installed here (a session made on another computer) falls back to the default
 //   voice; the session keeps its choice.
 // All speech runs on one worker thread; the public functions can be called from the message thread.
 #pragma once
 #include <juce_core/juce_core.h>
+#include <atomic>
 #include <condition_variable>
 #include <deque>
 #include <functional>
@@ -66,13 +71,28 @@ public:
     void render(const juce::String& text, const Choice& c, double rate, std::function<void(Audio, juce::String error)> done);
 
     static juce::File cacheFolder();
+    // The open show's folder (empty: not saved yet, nothing stored). Message thread.
+    void setShowFolder(const juce::File& folder);
+    // Saving: stores every cue of the show (rendering what's missing) and removes stored cues it no longer
+    // uses; calls back with how many are stored. [{text, voice, name, speed, pron, recPath}]
+    void storeShow(const juce::var& list, double rate, std::function<void(int stored, int removed)> done);
+    // Tests: where a cue came from the last time: "show", "memory", "cache" or "render".
+    juce::String lastSource() { std::lock_guard<std::mutex> g(dataLock); return lastFrom; }
     static juce::File cacheOverride; // tests: a fresh cache folder instead of the app's
 
 private:
     struct Task { std::function<void()> fn; };
     void post(std::function<void()> fn, bool urgent);
     void run();
-    Audio renderNow(const juce::String& text, const juce::String& voiceId, const Choice& c, double rate, juce::String& error); // worker
+    // worker: the show's stored cue, else memo / app cache / render (and store it in the show if it's the real voice)
+    Audio renderNow(const juce::String& text, const juce::String& voiceId, const Choice& c, double rate, juce::String& error, bool fellBack = false);
+    Audio renderRaw(const juce::String& text, const juce::String& voiceId, const Choice& c, double rate, juce::String& error); // worker
+    juce::String storeKeyOf(const juce::String& text, const Choice& c, double rate, juce::String* base = nullptr) const;
+    Audio loadStored(const juce::File& dir, const juce::String& key, const juce::String& base, double rate); // worker
+    void saveStored(const juce::File& dir, const juce::String& key, const juce::String& base, const Audio& a, double rate,
+                    const juce::String& text, const Choice& c, const juce::String& voiceId); // worker
+    juce::var& manifest(const juce::File& dir); // worker
+    void writeManifest(const juce::File& dir);  // worker
     juce::String keyOf(const juce::String& text, const juce::String& voiceId, const Choice& c, double rate) const;
     static bool readRecording(const juce::File& f, std::vector<float>& out, double& rate, juce::String& error); // worker
     void ensureVoices(); // worker
@@ -89,6 +109,11 @@ private:
     std::vector<speech::Voice> installed;
     juce::String defaultId;
     bool listed = false;
+    juce::File showDir;          // dataLock
+    std::atomic<int> showGen { 0 }; // bumped when the show changes: background renders for the old one are dropped
+    juce::String lastFrom;       // dataLock
+    juce::File manifestDir;      // worker: the manifest below is this folder's
+    juce::var manifestData;      // worker
     std::shared_ptr<bool> alive = std::make_shared<bool>(true);
 };
 

@@ -54,5 +54,5 @@ oldest macOS each version's macOS library is built for (read from the libraries 
 - we build ONNX Runtime ourselves for that target.
 
 Even on a computer where ONNX Runtime can't load (e.g. macOS 10.15), set.Line still opens and plays
-shows, because the library is only loaded when a voice is rendered. Cues then use the computer's
-voices, or a show's stored cue audio (phase 7, part 3).
+shows, because the library is only loaded when a voice is rendered. A show plays the cue audio stored in its
+folder (<show>/Cues), made where it was rendered; new or edited cues use the computer's voices there.

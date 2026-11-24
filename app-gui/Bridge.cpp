@@ -66,6 +66,9 @@ Cues::Choice Bridge::choiceOf(const juce::var& v, juce::String* missing) const
     return c;
 }
 
+// The cues of the open show are stored in its folder (Cues.h).
+void Bridge::syncShow() { cues.setShowFolder(session.file() == juce::File() ? juce::File() : session.file().getParentDirectory()); }
+
 Bridge::~Bridge() { kokoro::setListener(nullptr); *alive = nullptr; audio.onSetupChanged = nullptr; audio.emit = nullptr; audio.cueAudio = nullptr; media.emit = nullptr; }
 
 Bridge::Options Bridge::add(Options o, const char* name, Fn fn)
@@ -163,9 +166,9 @@ Bridge::Options Bridge::addRest(Options o)
     o = add(o, "setLoop", [this](const juce::var& a) { return audio.setLoop(a); });
 
     // Sessions (.setline): the page sends / receives the session as JSON text.
-    o = addAsync(o, "openSession", [this](const juce::var&, auto done) { session.open(done); });
-    o = addAsync(o, "saveSession", [this](const juce::var& a, auto done) { session.save(a["text"].toString(), done); });
-    o = addAsync(o, "saveSessionAs", [this](const juce::var& a, auto done) { session.saveAs(a["text"].toString(), done); });
+    o = addAsync(o, "openSession", [this](const juce::var&, auto done) { session.open([this, done](juce::var r) { syncShow(); done(r); }); });
+    o = addAsync(o, "saveSession", [this](const juce::var& a, auto done) { session.save(a["text"].toString(), [this, done](juce::var r) { syncShow(); done(r); }); });
+    o = addAsync(o, "saveSessionAs", [this](const juce::var& a, auto done) { session.saveAs(a["text"].toString(), [this, done](juce::var r) { syncShow(); done(r); }); });
     // Step 2: sessions live in their own folder; audio references are relative to it (see Media.h).
     o = add(o, "getSessionFile", [this](const juce::var&) {
         auto* r = new juce::DynamicObject();
@@ -179,9 +182,24 @@ Bridge::Options Bridge::addRest(Options o)
     o = add(o, "openSessionPath", [this](const juce::var& a) {
         const auto p = a["path"].toString();
         if (! juce::File::isAbsolutePath(p)) return errorVar("openSessionPath: expected an absolute path");
-        return session.openPath(juce::File(p));
+        auto r = session.openPath(juce::File(p));
+        syncShow();
+        return r;
     });
-    o = add(o, "closeSession", [this](const juce::var&) { session.close(); auto* r = new juce::DynamicObject(); r->setProperty("ok", true); return juce::var(r); });
+    // After a save: every cue of the show stored in <show>/Cues (missing ones rendered), unused ones removed.
+    o = addAsync(o, "storeCues", [this](const juce::var& a, auto done) {
+        syncShow();
+        const double rate = audio.sampleRate();
+        if (rate <= 0) { auto* r = new juce::DynamicObject(); r->setProperty("stored", 0); done(juce::var(r)); return; }
+        juce::Array<juce::var> list;
+        if (auto* l = a["cues"].getArray()) for (auto& x : *l) { auto* o2 = x.getDynamicObject() ? x.getDynamicObject()->clone().release() : new juce::DynamicObject(); o2->setProperty("recPath", choiceOf(x).recording); list.add(juce::var(o2)); }
+        cues.storeShow(list, rate, [done](int stored, int removed) {
+            auto* r = new juce::DynamicObject(); r->setProperty("stored", stored); r->setProperty("removed", removed); done(juce::var(r));
+        });
+    });
+    // Tests: where the last cue came from (show / memory / cache / render).
+    o = add(o, "cueSource", [this](const juce::var&) { auto* r = new juce::DynamicObject(); r->setProperty("from", cues.lastSource()); return juce::var(r); });
+    o = add(o, "closeSession", [this](const juce::var&) { session.close(); syncShow(); auto* r = new juce::DynamicObject(); r->setProperty("ok", true); return juce::var(r); });
     o = add(o, "quitAnswered", [this](const juce::var&) { if (onQuitAnswered) onQuitAnswered(); auto* r = new juce::DynamicObject(); r->setProperty("ok", true); return juce::var(r); });
     o = add(o, "quitNow", [this](const juce::var&) {
         dirty = false;
@@ -192,7 +210,9 @@ Bridge::Options Bridge::addRest(Options o)
     o = add(o, "writeSession", [this](const juce::var& a) {
         const auto path = a["path"].toString();
         if (! juce::File::isAbsolutePath(path)) return errorVar("writeSession: expected an absolute path");
-        return session.writeTo(juce::File(path), a["text"].toString());
+        auto r = session.writeTo(juce::File(path), a["text"].toString());
+        syncShow();
+        return r;
     });
     // Windows: the page posts dropped files with chrome.webview.postMessageWithAdditionalObjects; the
     // JUCE patch (cmake/PatchJuce.cmake) adds their real paths to the payload. Sent back to the page as

@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstring>
 #include <future>
+#include <set>
 
 namespace setline::gui {
 
@@ -93,7 +94,13 @@ Cues::~Cues()
 }
 
 juce::File Cues::cacheOverride;
-juce::File Cues::cacheFolder() { return cacheOverride != juce::File() ? cacheOverride : Peaks::appCacheFolder().getParentDirectory().getChildFile("Cues"); }
+juce::File Cues::cacheFolder()
+{
+    if (cacheOverride != juce::File()) return cacheOverride;
+    const auto env = juce::SystemStats::getEnvironmentVariable("SETLINE_CUE_CACHE", {}); // tests: "another computer"
+    if (env.isNotEmpty()) return juce::File(env);
+    return Peaks::appCacheFolder().getParentDirectory().getChildFile("Cues");
+}
 
 void Cues::post(std::function<void()> fn, bool urgent)
 {
@@ -241,10 +248,147 @@ bool Cues::readRecording(const juce::File& f, std::vector<float>& out, double& r
     return true;
 }
 
-Cues::Audio Cues::renderNow(const juce::String& text, const juce::String& voiceId, const Choice& c, double rate, juce::String& error)
+// ---- cues stored in the show (part 3) ----
+// The cue as the show asked for it: the saved voice id (or name), not what's installed here; a recording by its
+// file name and size (the show's copy moves with the show). base: the same without the rate.
+juce::String Cues::storeKeyOf(const juce::String& text, const Choice& c, double rate, juce::String* base) const
+{
+    juce::String b;
+    if (c.recording.isNotEmpty()) {
+        const juce::File f(c.recording);
+        b = "rec|" + f.getFileName() + "|" + juce::String(f.getSize());
+    } else {
+        const auto v = c.voice.isNotEmpty() ? c.voice : c.name.isNotEmpty() ? "name:" + c.name : juce::String("default");
+        const auto pk = pronKey(text, c.pron);
+        b = "say|" + text + "|" + v + "|" + juce::String(c.speed, 2) + (kokoro::isKokoro(v) ? "|kokoro-v1.0" : "") + (pk.isNotEmpty() ? "|" + pk : juce::String());
+    }
+    if (base != nullptr) *base = b;
+    return b + "|" + juce::String((int) rate);
+}
+
+void Cues::setShowFolder(const juce::File& folder) { std::lock_guard<std::mutex> g(dataLock); if (folder != showDir) ++showGen; showDir = folder; }
+
+juce::var& Cues::manifest(const juce::File& dir)
+{
+    if (manifestDir != dir) {
+        manifestDir = dir;
+        manifestData = juce::JSON::parse(dir.getChildFile("cues.json"));
+        if (! manifestData.isObject() || ! manifestData["cues"].isArray()) {
+            auto* o = new juce::DynamicObject();
+            o->setProperty("version", 1);
+            o->setProperty("about", "set.Line: the show's spoken cues, rendered once. Each entry is one WAV in this folder (mono, 32-bit float, at the show rate).");
+            o->setProperty("cues", juce::Array<juce::var>());
+            manifestData = juce::var(o);
+        }
+    }
+    return manifestData;
+}
+
+void Cues::writeManifest(const juce::File& dir)
+{
+    const auto f = dir.getChildFile("cues.json");
+    juce::TemporaryFile tmp(f);
+    if (tmp.getFile().replaceWithText(juce::JSON::toString(manifestData, false), false, false, "\n")) tmp.overwriteTargetFileWithTemporary();
+}
+
+Cues::Audio Cues::loadStored(const juce::File& dir, const juce::String& key, const juce::String& base, double rate)
+{
+    if (! dir.isDirectory()) return nullptr;
+    auto* list = manifest(dir)["cues"].getArray();
+    if (list == nullptr) return nullptr;
+    const juce::var* exact = nullptr, *other = nullptr;
+    for (auto& e : *list) { if (e["key"].toString() == key) { exact = &e; break; } if (e["base"].toString() == base && other == nullptr) other = &e; }
+    const auto* e = exact != nullptr ? exact : other;
+    if (e == nullptr) return nullptr;
+    static juce::AudioFormatManager fm;
+    static const bool registered = [] { fm.registerBasicFormats(); return true; }();
+    (void) registered;
+    std::unique_ptr<juce::AudioFormatReader> r(fm.createReaderFor(dir.getChildFile((*e)["file"].toString())));
+    if (r == nullptr || r->lengthInSamples <= 0 || r->lengthInSamples > (juce::int64) r->sampleRate * 60) return nullptr;
+    juce::AudioBuffer<float> b(1, (int) r->lengthInSamples);
+    r->read(&b, 0, (int) r->lengthInSamples, 0, true, false);
+    std::vector<float> v(b.getReadPointer(0), b.getReadPointer(0) + b.getNumSamples());
+    if (exact == nullptr) { // stored at another rate (the show runs at a new rate): resampled once, and stored too
+        auto a = std::make_shared<std::vector<float>>(resample(v, r->sampleRate, rate));
+        Choice c; // metadata copied from the other entry
+        c.voice = (*e)["voice"].toString(); c.name = (*e)["name"].toString(); c.speed = (double) (*e)["speed"];
+        saveStored(dir, key, base, a, rate, (*e)["text"].toString(), c, (*e)["source"].toString() == "recording" ? juce::String() : c.voice);
+        return a;
+    }
+    return std::make_shared<std::vector<float>>(std::move(v));
+}
+
+void Cues::saveStored(const juce::File& dir, const juce::String& key, const juce::String& base, const Audio& a, double rate,
+                      const juce::String& text, const Choice& c, const juce::String& voiceId)
+{
+    if (! dir.createDirectory()) return;
+    const auto name = juce::String::toHexString(key.hashCode64()) + ".wav";
+    const auto f = dir.getChildFile(name);
+    {
+        juce::TemporaryFile tmp(f);
+        bool ok = false;
+        {
+            std::unique_ptr<juce::OutputStream> os = std::make_unique<juce::FileOutputStream>(tmp.getFile());
+            juce::WavAudioFormat wav;
+            const auto opts = juce::AudioFormatWriterOptions {}.withSampleRate(rate).withNumChannels(1).withBitsPerSample(32)
+                                  .withSampleFormat(juce::AudioFormatWriterOptions::SampleFormat::floatingPoint);
+            if (auto w = wav.createWriterFor(os, opts)) { const float* ch[] = { a->data() }; ok = w->writeFromFloatArrays(ch, 1, (int) a->size()); }
+        }
+        if (! ok || ! tmp.overwriteTargetFileWithTemporary()) return;
+    }
+    auto& m = manifest(dir);
+    auto* list = m["cues"].getArray();
+    for (int i = list->size(); --i >= 0;) if ((*list)[i]["key"].toString() == key) list->remove(i);
+    auto* o = new juce::DynamicObject();
+    o->setProperty("key", key); o->setProperty("base", base); o->setProperty("file", name);
+    o->setProperty("text", text); o->setProperty("rate", rate); o->setProperty("samples", (int) a->size());
+    if (c.recording.isNotEmpty()) { o->setProperty("source", "recording"); o->setProperty("recording", juce::File(c.recording).getFileName()); }
+    else {
+        o->setProperty("source", kokoro::isKokoro(voiceId) ? "kokoro" : "system");
+        o->setProperty("voice", c.voice); o->setProperty("name", c.name); o->setProperty("speed", c.speed);
+        if (kokoro::isKokoro(voiceId)) o->setProperty("model", "Kokoro-82M v1.0");
+    }
+    o->setProperty("rendered", juce::Time::getCurrentTime().toISO8601(true));
+    list->add(juce::var(o));
+    writeManifest(dir);
+}
+
+Cues::Audio Cues::renderNow(const juce::String& text, const juce::String& voiceId, const Choice& c, double rate, juce::String& error, bool fellBack)
+{
+    juce::String base;
+    const auto skey = storeKeyOf(text, c, rate, &base);
+    juce::File dir;
+    Audio known;
+    {
+        std::lock_guard<std::mutex> g(dataLock);
+        if (showDir != juce::File()) dir = showDir.getChildFile("Cues");
+        if (auto it = memo.find(skey); it != memo.end()) { lastFrom = "memory"; known = it->second; }
+    }
+    if (known) { // rendered before the show had a folder (or for another show): make sure this show has it too
+        if (dir != juce::File()) {
+            bool there = false;
+            if (auto* l = manifest(dir)["cues"].getArray()) for (auto& e : *l) if (e["key"].toString() == skey) { there = true; break; }
+            if (! there) saveStored(dir, skey, base, known, rate, text, c, voiceId);
+        }
+        return known;
+    }
+    // 1. the show's own copy: exactly what was rendered where the show was made
+    if (dir != juce::File())
+        if (auto a = loadStored(dir, skey, base, rate)) { std::lock_guard<std::mutex> g(dataLock); lastFrom = "show"; return memo[skey] = a; }
+    // 2. this computer: memo / cache / render with the voice that's here
+    auto a = renderRaw(text, voiceId, c, rate, error);
+    if (a && ! fellBack) { // the real voice (or the recording): keep it, and store it in the show
+        if (dir != juce::File()) saveStored(dir, skey, base, a, rate, text, c, voiceId);
+        std::lock_guard<std::mutex> g(dataLock);
+        memo[skey] = a;
+    }
+    return a;
+}
+
+Cues::Audio Cues::renderRaw(const juce::String& text, const juce::String& voiceId, const Choice& c, double rate, juce::String& error)
 {
     const auto key = keyOf(text, voiceId, c, rate);
-    { std::lock_guard<std::mutex> g(dataLock); if (auto it = memo.find(key); it != memo.end()) return it->second; }
+    { std::lock_guard<std::mutex> g(dataLock); if (auto it = memo.find(key); it != memo.end()) { lastFrom = "memory"; return it->second; } }
 
     const auto file = cacheFolder().getChildFile(juce::String::toHexString(key.hashCode64()) + ".cue");
     {   // disk cache: magic, key, rate, count, samples
@@ -256,6 +400,7 @@ Cues::Audio Cues::renderNow(const juce::String& text, const juce::String& voiceI
                 auto a = std::make_shared<std::vector<float>>((size_t) n);
                 if (in.read(a->data(), n * (int) sizeof(float)) == n * (int) sizeof(float)) {
                     std::lock_guard<std::mutex> g(dataLock);
+                    lastFrom = "cache";
                     return memo[key] = a;
                 }
             }
@@ -287,7 +432,40 @@ Cues::Audio Cues::renderNow(const juce::String& text, const juce::String& voiceI
         if (! ok || ! tmp.moveFileTo(file)) tmp.deleteFile();
     }
     std::lock_guard<std::mutex> g(dataLock);
+    lastFrom = "render";
     return memo[key] = a;
+}
+
+void Cues::storeShow(const juce::var& list, double rate, std::function<void(int, int)> done)
+{
+    std::vector<std::pair<juce::String, Choice>> items;
+    if (auto* a = list.getArray()) for (auto& x : *a) if (auto t = x["text"].toString().trim(); t.isNotEmpty()) items.push_back({ t, choiceFrom(x) });
+    auto alive_ = alive;
+    post([this, items, rate, done, alive_] {
+        ensureVoices();
+        juce::File dir;
+        { std::lock_guard<std::mutex> g(dataLock); if (showDir != juce::File()) dir = showDir.getChildFile("Cues"); }
+        int stored = 0, removed = 0;
+        if (dir != juce::File()) {
+            std::set<juce::String> keep;
+            for (auto& [text, c] : items) {
+                bool fb = false;
+                juce::String err;
+                const auto id = c.recording.isNotEmpty() ? juce::String() : resolve(c, fb);
+                renderNow(text, id, c, rate, err, fb);
+                { std::lock_guard<std::mutex> g(dataLock); if (memo.count(storeKeyOf(text, c, rate))) ++stored; } // from the show, or rendered with the real voice
+                keep.insert(storeKeyOf(text, c, rate));
+                for (double r : { 44100.0, 48000.0, 88200.0, 96000.0 }) keep.insert(storeKeyOf(text, c, r)); // the same cue at other rates stays
+            }
+            auto& m = manifest(dir);
+            if (auto* l = m["cues"].getArray()) {
+                for (int i = l->size(); --i >= 0;)
+                    if (keep.count((*l)[i]["key"].toString()) == 0) { dir.getChildFile((*l)[i]["file"].toString()).deleteFile(); l->remove(i); ++removed; }
+                writeManifest(dir);
+            }
+        }
+        juce::MessageManager::callAsync([alive_, done, stored, removed] { if (*alive_ && done) done(stored, removed); });
+    }, false);
 }
 
 Cues::Audio Cues::get(const juce::String& text, const Choice& c, double rate, juce::String& error, bool& fellBack)
@@ -298,8 +476,9 @@ Cues::Audio Cues::get(const juce::String& text, const Choice& c, double rate, ju
     auto f = p->get_future();
     post([this, text, c, rate, result, fb, p] {
         ensureVoices();
-        const auto id = resolve(c, *fb);
-        result->first = renderNow(text, id, c, rate, result->second);
+        const auto id = c.recording.isNotEmpty() ? juce::String() : resolve(c, *fb);
+        if (c.recording.isNotEmpty()) *fb = false;
+        result->first = renderNow(text, id, c, rate, result->second, *fb);
         p->set_value();
     }, true);
     if (f.wait_for(std::chrono::seconds(20)) != std::future_status::ready) { error = "Speech took too long."; return nullptr; }
@@ -313,6 +492,7 @@ Cues::Audio Cues::cached(const juce::String& text, const Choice& c, double rate,
     std::lock_guard<std::mutex> g(dataLock);
     fellBack = false;
     if (! listed) return nullptr;
+    if (auto it = memo.find(storeKeyOf(text, c, rate)); it != memo.end()) return it->second; // the show's cue, or the real voice's
     const auto id = c.recording.isNotEmpty() ? juce::String() : resolveLocked(c, fellBack);
     if (c.recording.isNotEmpty()) fellBack = false;
     auto it = memo.find(keyOf(text, id, c, rate));
@@ -328,7 +508,8 @@ void Cues::ensure(std::vector<std::pair<juce::String, Choice>> list, double rate
         for (auto& [text, c] : list) {
             bool fb = false;
             juce::String err;
-            if (! renderNow(text, resolve(c, fb), c, rate, err)) errors[text] = err;
+            const auto id = c.recording.isNotEmpty() ? juce::String() : resolve(c, fb);
+            if (! renderNow(text, id, c, rate, err, fb && c.recording.isEmpty())) errors[text] = err;
         }
         juce::MessageManager::callAsync([alive_, done, errors] { if (*alive_) done(errors); });
     }, true);
@@ -341,11 +522,14 @@ void Cues::prepare(const juce::var& list, double rate)
             const auto text = x["text"].toString().trim();
             if (text.isEmpty()) continue;
             const auto c = choiceFrom(x);
-            post([this, text, c, rate] {
+            const int gen = showGen.load();
+            post([this, text, c, rate, gen] {
+                if (gen != showGen.load()) return; // another show is open now: the page prepares its cues
                 ensureVoices();
                 bool fb = false;
                 juce::String err;
-                renderNow(text, resolve(c, fb), c, rate, err);
+                const auto id = c.recording.isNotEmpty() ? juce::String() : resolve(c, fb);
+                renderNow(text, id, c, rate, err, fb && c.recording.isEmpty());
             }, false);
         }
 }
@@ -357,7 +541,8 @@ void Cues::render(const juce::String& text, const Choice& c, double rate, std::f
         ensureVoices();
         bool fb = false;
         juce::String err;
-        auto a = renderNow(text, resolve(c, fb), c, rate, err);
+        const auto id = c.recording.isNotEmpty() ? juce::String() : resolve(c, fb);
+        auto a = renderNow(text, id, c, rate, err, fb && c.recording.isEmpty());
         juce::MessageManager::callAsync([alive_, done, a, err] { if (*alive_) done(a, err); });
     }, true);
 }
