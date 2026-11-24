@@ -19,7 +19,7 @@ interface Page {
   guessRole(fileName: string): string;
   addNative(list: AudioInfo[]): void; openNewSong(): void; modalOpen(): boolean; dropZone(): HTMLElement;
   addStems(s: Song, list: { role: string; info: AudioInfo }[], refs: Record<string, string>, copy: boolean): void;
-  colourOf(t: string): string; roleOf(t: string): string; rerender(): void;
+  colourOf(t: string): string; roleOf(t: string): string; rerender(): void; redrawTrack(s: Song, t: string): void;
 }
 // A file as the app read it (Media::probe). ok = false: error says why it can't be imported.
 interface AudioInfo { path: string; name: string; ok: boolean; channels?: number; rate?: number; frames?: number; seconds?: number; format?: string; bits?: number; error?: string }
@@ -30,7 +30,7 @@ interface FileResult { name?: string; path?: string; text?: string; cancelled?: 
 interface Stats { running: boolean; xruns: number | null; underruns: number; midiSent: number; midiDropped: number; midiLateMaxMs: number; cpu: number; callbackMaxMs: number; budgetMs: number }
 interface Setup { current: { driver: string; device: string; rate: number; buffer: number; latencyMs: number; outputs?: string[] } | null; error?: string }
 
-declare global { interface Window { SLPage?: Page; SLE?: typeof SLE; SLR?: typeof SLR } }
+declare global { interface Window { SLPage?: Page; SLE?: typeof SLE; SLR?: typeof SLR; SLW?: typeof SLW } }
 
 // ---------------------------------------------------------------- output routing (by track name)
 // Each distinct track name is routed once for the whole show: every song's track with that name follows
@@ -345,6 +345,77 @@ function audioFiles(): { song: Song; track: string; f: { path: string; copy?: bo
 }
 function applyRefMap(map: Record<string, string>) {
   for (const x of audioFiles()) if (map[x.f.path] !== undefined) x.f.path = map[x.f.path];
+  forgetMissingPeaks(); // located files get their waveforms
+}
+
+// ---------------------------------------------------------------- waveforms (step 2)
+// The app computes each stem's peaks in the background (Peaks.h) at 256, 1024 and 4096 frames per value.
+// The Edit page asks SLW.get for the level that fits its zoom; null means "not here yet": the request is
+// queued and the track redrawn when it arrives. Lanes on screen are fetched first, a few at a time, so
+// opening a session with many stems never blocks the page. Another level already here is drawn meanwhile.
+interface Wave { data: Uint8Array; perSec: number }
+const LEVELS = [256, 1024, 4096];
+const waves = new Map<string, Wave | "pending" | "missing">(); // key: ref|level
+const waveQueue: { key: string; ref: string; level: number }[] = [];
+let waveBusy = 0;
+const levelFor = (rate: number, pxs: number) => { let l = LEVELS[0]; for (const v of LEVELS) if (v <= rate / pxs) l = v; return l; };
+
+const SLW = {
+  get(s: Song, t: string, pxs: number): Wave | null {
+    const f = (s.files || {})[t];
+    if (!f || !f.path) return null;
+    const level = levelFor(f.rate || sessionRate || 48000, pxs), key = f.path + "|" + level;
+    const w = waves.get(key);
+    if (w && w !== "pending" && w !== "missing") return w;
+    if (!w) { waves.set(key, "pending"); waveQueue.push({ key, ref: f.path, level }); schedulePump(); }
+    for (const l of LEVELS) { const o = waves.get(f.path + "|" + l); if (o && typeof o === "object") return o; } // another zoom's peaks
+    return null;
+  },
+  stats: () => ({ cached: [...waves.values()].filter((w) => typeof w === "object").length, queued: waveQueue.length, busy: waveBusy }),
+};
+
+function laneVisible(ref: string) {
+  const sc = document.getElementById("scroller");
+  if (!sc) return false;
+  const box = sc.getBoundingClientRect();
+  for (const s of page().songs)
+    for (const [t, f] of Object.entries(s.files || {}))
+      if ((f as any)?.path === ref) {
+        const cv = document.querySelector(`canvas[data-song="${s.id}"][data-t="${s.tracks.indexOf(t)}"]`);
+        const r = cv?.getBoundingClientRect();
+        if (r && r.bottom > box.top && r.top < box.bottom) return true;
+      }
+  return false;
+}
+
+// After the current redraw has queued all its lanes, so the choice sees every lane on screen.
+let pumpSoon = false;
+function schedulePump() {
+  if (pumpSoon) return;
+  pumpSoon = true;
+  setTimeout(() => { pumpSoon = false; pumpWaves(); }, 0);
+}
+function pumpWaves() {
+  while (waveBusy < 3 && waveQueue.length) {
+    let i = waveQueue.findIndex((q) => laneVisible(q.ref)); // what's on screen first
+    if (i < 0) i = 0;
+    const q = waveQueue.splice(i, 1)[0];
+    waveBusy++;
+    SL.call<{ peaks?: string; rate?: number; spp?: number; error?: string }>("getPeaks", { ref: q.ref, spp: q.level })
+      .then((r) => {
+        if (r.error || !r.peaks) { waves.set(q.key, "missing"); return; }
+        const bin = atob(r.peaks), data = new Uint8Array(bin.length);
+        for (let k = 0; k < bin.length; k++) data[k] = bin.charCodeAt(k);
+        waves.set(q.key, { data, perSec: r.rate! / r.spp! });
+        for (const s of page().songs)
+          for (const [t, f] of Object.entries(s.files || {})) if ((f as any)?.path === q.ref) page().redrawTrack(s, t);
+      })
+      .catch(() => waves.set(q.key, "missing"))
+      .finally(() => { waveBusy--; pumpWaves(); });
+  }
+}
+function forgetMissingPeaks() {
+  for (const [k, w] of waves) if (w === "missing") waves.delete(k);
 }
 
 let saving = false;
@@ -542,6 +613,7 @@ function installDrop() {
 async function main() {
   if (!SL.native) return;
   window.SLE = SLE;
+  window.SLW = SLW;
   await SL.ready;
   SL.on("transport", onTransport);
   SL.on("meters", (m: { peaks: number[] }) => { peaks = m.peaks || []; });
@@ -605,7 +677,7 @@ async function main() {
     try {
       const AsyncFn = Object.getPrototypeOf(async () => {}).constructor;
       const hooks = { SLE, page, importStems, probe, audioFiles, applyRefMap, checkAudio, onFileDrag, sessionText, applySession,
-        getRate: () => sessionRate, SLR, remember, payload, getRoute: () => route, isDirty: () => sessionText() !== doc.savedText, setDoc: (n: string) => { doc = { name: n, savedText: "" }; } };
+        getRate: () => sessionRate, SLR, SLW, waves, remember, payload, getRoute: () => route, isDirty: () => sessionText() !== doc.savedText, setDoc: (n: string) => { doc = { name: n, savedText: "" }; } };
       out = await new AsyncFn("SL", "hooks", info.testScript)(SL, hooks);
     } catch (e) { out = { error: String((e as Error)?.stack || e) }; }
     if (out !== undefined) await SL.call("testDone", { text: JSON.stringify(out, null, 1) }); // undefined: it went to another page

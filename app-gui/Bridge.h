@@ -5,6 +5,7 @@
 #include <functional>
 #include "SessionFile.h"
 #include "Media.h"
+#include "Peaks.h"
 
 namespace setline::gui {
 
@@ -47,6 +48,8 @@ private:
     juce::WebBrowserComponent* browser = nullptr;
     SessionFile session;
     Media media;
+    Peaks peaks;
+    void preparePeaks(const juce::var& refs, const juce::File& sessionFile);
     bool dirty = false;
 };
 

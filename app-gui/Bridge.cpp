@@ -110,9 +110,37 @@ Bridge::Options Bridge::addTo(Options o)
     });
     o = addAsync(o, "pickAudioFiles", [this](const juce::var& a, auto done) { media.pick(a, done); });
     o = add(o, "probeAudio", [this](const juce::var& a) { return media.probePaths(a); });
-    o = addAsync(o, "importAudio", [this](const juce::var& a, auto done) { media.import(a, done); });
+    o = addAsync(o, "importAudio", [this](const juce::var& a, auto done) {
+        const juce::File sessionFile(a["session"].toString());
+        media.import(a, [this, done, sessionFile](juce::var r) {
+            juce::Array<juce::var> refs; // waveforms are computed right after the copy, in the background
+            if (auto* f = r["files"].getArray()) for (auto& x : *f) refs.add(x["ref"]);
+            preparePeaks(refs, sessionFile);
+            done(r);
+        });
+    });
     o = addAsync(o, "collectAudio", [this](const juce::var& a, auto done) { media.collect(a, done); });
-    o = add(o, "checkAudio", [this](const juce::var& a) { return media.check(a); });
+    o = add(o, "checkAudio", [this](const juce::var& a) {
+        auto r = media.check(a);
+        // Opening a session: waveforms not cached yet are computed in the background (found files only).
+        juce::Array<juce::var> refs;
+        if (auto* list = a["refs"].getArray())
+            for (auto& ref : *list) {
+                const auto moved = r["map"][juce::Identifier(ref.toString())];
+                refs.add(moved.isVoid() ? ref : moved);
+            }
+        preparePeaks(refs, juce::File(a["session"].toString()));
+        return r;
+    });
+    // Waveform of one file at about `spp` frames per value: {rate, frames, channels, spp, peaks: base64} | {error}.
+    o = addAsync(o, "getPeaks", [this](const juce::var& a, auto done) {
+        const auto f = Media::resolve(a["ref"].toString(), session.file());
+        if (f == juce::File()) { done(errorVar("No such file")); return; }
+        const int spp = a["spp"].isVoid() ? 1024 : (int) a["spp"];
+        peaks.get(f, [done, spp](std::shared_ptr<const Peaks::Data> d, const juce::String& error) {
+            done(d != nullptr ? Peaks::toVar(*d, spp) : errorVar(error));
+        });
+    });
     o = addAsync(o, "locateAudio", [this](const juce::var& a, auto done) { media.locate(a, done); });
 
     o = add(o, "roundTripRead", [this](const juce::var&) {
@@ -134,6 +162,15 @@ Bridge::Options Bridge::addTo(Options o)
         auto* r = new juce::DynamicObject(); r->setProperty("ok", true); return juce::var(r);
     });
     return o;
+}
+
+void Bridge::preparePeaks(const juce::var& refs, const juce::File& sessionFile)
+{
+    juce::Array<juce::File> files;
+    if (auto* a = refs.getArray())
+        for (auto& r : *a)
+            if (auto f = Media::resolve(r.toString(), sessionFile); f.existsAsFile()) files.add(f);
+    peaks.prepare(files);
 }
 
 void Bridge::fileDrag(const juce::String& state, juce::Point<int> at, const juce::StringArray& paths)

@@ -1362,7 +1362,18 @@ function drawLane(cv){
     clipsOf(s,t).forEach((cl,ci)=>{ const x0=cl.start*PXS, x1=cl.end*PXS, cw=x1-x0, dim=off||cl.mute, isSel=sel&&selClip.id===cl.id;
       const y0=clip(g,x0,cw,H,c,[cl.gain?`${cl.gain>0?'+':''}${cl.gain} dB`:'',cl.mute?'Muted':''].filter(Boolean).join(' · '),dim), y1=H-4, mid=(y0+y1)/2, half=(y1-y0)/2-1;
       // waveform: a smooth peak envelope with an RMS core, drawn as one mirrored shape (Logic / Ableton style)
-      const X0=Math.ceil(x0)+2, X1=Math.floor(x1)-2; if(X1>X0){
+      // In the app, a stem's real peaks (window.SLW: null while they load); the simulation is for the browser.
+      const real=window.SLW&&(s.files||{})[t]?SLW.get(s,t,PXS):undefined;
+      const X0=Math.ceil(x0)+2, X1=Math.floor(x1)-2; if(X1>X0&&real!==undefined){
+        const pk=[]; if(real){ const d=real.data, ps=real.perSec, amp0=Math.min(1.6,base*linOf(cl.gain));
+          for(let X=X0;X<=X1;X++){ const tt=X/PXS, src=tt-cl.start+cl.off; let i=Math.floor(src*ps), j=Math.max(i+1,Math.ceil((src+1/PXS)*ps)), m=0;
+            if(i<0) i=0; if(j>d.length) j=d.length; for(;i<j;i++) if(d[i]>m) m=d[i];
+            const v=(m/255)*(m/255)*amp0*clipEnv(cl,tt); pk.push(j<=0||src>=d.length/ps?0:Math.min(half,Math.max(.6,v*half*.98))); } }
+        g.save(); g.beginPath(); g.rect(x0,y0,cw,y1-y0); g.clip();
+        if(pk.length){ g.fillStyle=dim?'rgba(255,255,255,.2)':mixW(c,.22,.9); g.beginPath(); g.moveTo(X0,mid); pk.forEach((h,i)=>g.lineTo(X0+i,mid-h)); for(let i=pk.length-1;i>=0;i--) g.lineTo(X0+i,mid+pk[i]); g.closePath(); g.fill(); }
+        g.fillStyle=dim?'rgba(255,255,255,.12)':hexA(c,.35); g.fillRect(x0+1,mid-.25,cw-2,.5);
+        g.restore(); }
+      else if(X1>X0){
         const beats=s.bars.flatMap(bb=>bb.beatT); let bi=0; const seed=t.length*7919+ci*131;
         const perc=role==='drums'?1:role==='bass'?.55:(role==='keys'||role==='guitars')?.3:.12;
         const vn=(u,sd)=>{ const i=Math.floor(u), f=u-i, k=f*f*(3-2*f), A=hash01(i+sd), B=hash01(i+1+sd); return A+(B-A)*k; };
@@ -2007,7 +2018,7 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
   setSessionName(n){ $('crumbAll').textContent=n||'Untitled session'; },
   confirm(title,body,ok,fn){ confirmBox(title,body,ok,fn); },
   // step 2: stems
-  rerender:()=>refresh(), colourOf:t=>TCOL[t]||'#9aa0aa', roleOf:t=>ROLE[t]||'',
+  rerender:()=>refresh(), redrawTrack:(s,t)=>redrawTrack(s,t), colourOf:t=>TCOL[t]||'#9aa0aa', roleOf:t=>ROLE[t]||'',
   guessRole:n=>{ const g=ROLE_GUESS.find(([re])=>re.test(n)); return g&&g[1]!=="__skip"?g[1]:""; },
   addNative, openNewSong, modalOpen:()=>modal.classList.contains('show'), dropZone:()=>dz,
   addStems(s,list,refs,copy){ snap(); const a=s.audio; attachStems(s,list,refs,copy); if(s.audio!==a) buildBars(s); refresh(); } };

@@ -112,6 +112,7 @@ if(SETLINE_WITH_JUCE)
       app-gui/SongMapper.cpp
       app-gui/SessionFile.cpp
       app-gui/Media.cpp
+      app-gui/Peaks.cpp
       app-gui/WebUi.cpp)
     if(APPLE)
       target_sources(setline PRIVATE app-gui/MacDrop.mm)
