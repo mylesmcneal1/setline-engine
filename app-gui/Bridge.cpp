@@ -21,7 +21,8 @@ Bridge::Bridge(AudioHost& host, juce::PropertiesFile& settings) : audio(host), s
         const Cues::Choice c { v["voice"].toString(), v["name"].toString(), v["speed"].isVoid() ? 1.0 : (double) v["speed"] };
         juce::String err;
         bool fellBack = false;
-        auto a = cues.get(text, c, rate, err, fellBack);
+        auto a = cues.cached(text, c, rate, fellBack); // rendered before the load (loadSong below)
+        if (! a) { auto it = cueErrors.find(text); err = it != cueErrors.end() && it->second.isNotEmpty() ? it->second : juce::String("not ready"); }
         const juce::String q = juce::String::fromUTF8("\xe2\x80\x9c"), qq = juce::String::fromUTF8("\xe2\x80\x9d");
         if (fellBack) w.push_back((juce::String("The cue voice ") + q + c.name + qq + " isn't installed on this computer, so cues use the default voice.").toStdString());
         if (! a) w.push_back((juce::String("Cue ") + q + text + qq + " couldn't be spoken: " + err).toStdString());
@@ -83,11 +84,24 @@ Bridge::Options Bridge::addTo(Options o)
         return audio.setSetup(a);
     });
     o = add(o, "getMidiOutputs", [this](const juce::var&) { return audio.midiOutputs(); });
-    o = add(o, "loadSong", [this](const juce::var& a) {
-        if (! a.isObject() || ! a["song"].isObject()) return errorVar("loadSong: expected {song, outs, roles, click}");
+    // Loading a song: its cues are rendered first (on the Cues worker, usually already cached), then the
+    // song is mapped and loaded on the message thread, which never waits for speech.
+    o = addAsync(o, "loadSong", [this](const juce::var& a, auto done) {
+        if (! a.isObject() || ! a["song"].isObject()) { done(errorVar("loadSong: expected {song, outs, roles, click}")); return; }
         // Stems are stored relative to the session's folder.
         a.getDynamicObject()->setProperty("sessionFile", session.file() == juce::File() ? juce::String() : session.file().getFullPathName());
-        return audio.loadSong(a);
+        std::vector<std::pair<juce::String, Cues::Choice>> list;
+        const auto s = a["song"];
+        const juce::var v = s["cueVoice"].isObject() ? s["cueVoice"] : a["cueVoice"];
+        const Cues::Choice c { v["voice"].toString(), v["name"].toString(), v["speed"].isVoid() ? 1.0 : (double) v["speed"] };
+        if (auto* cs = s["cues"].getArray())
+            for (auto& q : *cs) if (auto t = q["text"].toString().trim(); t.isNotEmpty()) list.push_back({ t, c });
+        const double rate = audio.sampleRate();
+        if (list.empty() || rate <= 0) { done(audio.loadSong(a)); return; }
+        cues.ensure(std::move(list), rate, [this, a, done](std::map<juce::String, juce::String> errors) {
+            cueErrors = std::move(errors);
+            done(audio.loadSong(a));
+        });
     });
     o = add(o, "transport", [this](const juce::var& a) { return audio.transport(a); });
     o = add(o, "getTransport", [this](const juce::var&) { return audio.transportState(); });
@@ -158,7 +172,7 @@ Bridge::Options Bridge::addTo(Options o)
         });
     });
     // Spoken cues (Cues.h): the installed voices, rendering ahead of time, Preview on the Cues outputs.
-    o = add(o, "getVoices", [this](const juce::var&) { return cues.voices(); });
+    o = addAsync(o, "getVoices", [this](const juce::var&, auto done) { cues.voicesAsync(done); });
     o = add(o, "prepareCues", [this](const juce::var& a) {
         const double rate = audio.sampleRate();
         if (rate > 0) cues.prepare(a["cues"], rate);

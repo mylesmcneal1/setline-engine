@@ -51,6 +51,7 @@ private:
     Media media;
     Peaks peaks;
     Cues cues;
+    std::map<juce::String, juce::String> cueErrors; // from the last song load: cue text -> why it couldn't be spoken
     void preparePeaks(const juce::var& refs, const juce::File& sessionFile);
     bool dirty = false;
 };

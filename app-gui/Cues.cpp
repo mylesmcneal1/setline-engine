@@ -90,10 +90,14 @@ void Cues::ensureVoices()
 
 juce::var Cues::voices()
 {
-    auto p = std::make_shared<std::promise<void>>();
-    auto f = p->get_future();
-    post([this, p] { ensureVoices(); p->set_value(); }, true);
-    if (f.wait_for(std::chrono::seconds(20)) != std::future_status::ready) return juce::Array<juce::var>();
+    bool have;
+    { std::lock_guard<std::mutex> g(dataLock); have = listed; }
+    if (! have) {
+        auto p = std::make_shared<std::promise<void>>();
+        auto f = p->get_future();
+        post([this, p] { ensureVoices(); p->set_value(); }, true);
+        if (f.wait_for(std::chrono::seconds(20)) != std::future_status::ready) return juce::Array<juce::var>();
+    }
     std::lock_guard<std::mutex> g(dataLock);
     juce::Array<juce::var> a;
     for (auto& v : installed) {
@@ -107,11 +111,25 @@ juce::var Cues::voices()
     return a;
 }
 
+void Cues::voicesAsync(std::function<void(juce::var)> done)
+{
+    auto alive_ = alive;
+    post([this, done, alive_] {
+        ensureVoices();
+        juce::MessageManager::callAsync([this, done, alive_] { if (*alive_) done(voices()); }); // listed: voices() returns at once
+    }, true);
+}
+
 juce::String Cues::resolve(const Choice& c, bool& fellBack)
+{
+    std::lock_guard<std::mutex> g(dataLock);
+    return resolveLocked(c, fellBack);
+}
+
+juce::String Cues::resolveLocked(const Choice& c, bool& fellBack) const
 {
     fellBack = false;
     if (c.voice.isEmpty() && c.name.isEmpty()) return {};
-    std::lock_guard<std::mutex> g(dataLock);
     for (auto& v : installed) if (v.id == c.voice) return v.id;
     for (auto& v : installed) if (c.name.isNotEmpty() && v.name.equalsIgnoreCase(c.name)) return v.id;
     fellBack = true;
@@ -185,6 +203,31 @@ Cues::Audio Cues::get(const juce::String& text, const Choice& c, double rate, ju
     fellBack = *fb;
     error = result->second;
     return result->first;
+}
+
+Cues::Audio Cues::cached(const juce::String& text, const Choice& c, double rate, bool& fellBack)
+{
+    std::lock_guard<std::mutex> g(dataLock);
+    fellBack = false;
+    if (! listed) return nullptr;
+    const auto id = resolveLocked(c, fellBack);
+    auto it = memo.find(keyOf(text, id, c.speed, rate));
+    return it != memo.end() ? it->second : nullptr;
+}
+
+void Cues::ensure(std::vector<std::pair<juce::String, Choice>> list, double rate, std::function<void(std::map<juce::String, juce::String>)> done)
+{
+    auto alive_ = alive;
+    post([this, list = std::move(list), rate, done, alive_] {
+        ensureVoices();
+        std::map<juce::String, juce::String> errors;
+        for (auto& [text, c] : list) {
+            bool fb = false;
+            juce::String err;
+            if (! renderNow(text, resolve(c, fb), c.speed, rate, err)) errors[text] = err;
+        }
+        juce::MessageManager::callAsync([alive_, done, errors] { if (*alive_) done(errors); });
+    }, true);
 }
 
 void Cues::prepare(const juce::var& list, double rate)

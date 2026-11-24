@@ -34,11 +34,18 @@ public:
 
     // [{id, name, lang, isDefault}] (listed once, then cached)
     juce::var voices();
+    // The same, without blocking: calls back on the message thread.
+    void voicesAsync(std::function<void(juce::var)> done);
     // The installed voice for a saved choice: its id, else a voice with the same name (ids differ between
     // computers), else "" = the default voice (fellBack = true when a voice was asked for).
     juce::String resolve(const Choice& c, bool& fellBack);
 
-    // Audio for one cue at `rate` (mono). Renders now if it isn't cached (waits up to 20 s).
+    // Renders whatever of these isn't cached yet (first in the queue), then calls back on the message
+    // thread with an error per text that couldn't be spoken. Loading a song waits for this, never blocking.
+    void ensure(std::vector<std::pair<juce::String, Choice>> list, double rate, std::function<void(std::map<juce::String, juce::String> errors)> done);
+    // Already rendered audio (nullptr if not), without waiting. fellBack: the voice isn't installed here.
+    Audio cached(const juce::String& text, const Choice& c, double rate, bool& fellBack);
+    // Audio for one cue at `rate` (mono). Renders now if it isn't cached (waits up to 20 s; tests).
     Audio get(const juce::String& text, const Choice& c, double rate, juce::String& error, bool& fellBack);
     // Renders these in the background so they're ready before Play: [{text, voice, name, speed}].
     void prepare(const juce::var& list, double rate);
@@ -54,6 +61,7 @@ private:
     Audio renderNow(const juce::String& text, const juce::String& voiceId, double speed, double rate, juce::String& error); // worker
     juce::String keyOf(const juce::String& text, const juce::String& voiceId, double speed, double rate) const;
     void ensureVoices(); // worker
+    juce::String resolveLocked(const Choice& c, bool& fellBack) const; // dataLock held
 
     std::mutex lock;
     std::condition_variable wake;
