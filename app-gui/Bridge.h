@@ -60,6 +60,7 @@ private:
 
     AudioHost& audio;
     juce::WebBrowserComponent* browser = nullptr;
+    juce::PropertiesFile& settings; // (Preferences: the Shows folder)
     SessionFile session;
     Media media;
     Peaks peaks;
@@ -70,7 +71,7 @@ private:
     void syncShow();
     juce::String diagnostics();
     double cueRate() const;
-    std::unique_ptr<juce::FileChooser> diagChooser;
+    std::unique_ptr<juce::FileChooser> diagChooser, folderChooser;
     Options addRest(Options o);
     void preparePeaks(const juce::var& refs, const juce::File& sessionFile);
     bool dirty = false;

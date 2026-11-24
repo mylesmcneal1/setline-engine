@@ -1,6 +1,7 @@
 #include "Bridge.h"
 #include "AudioHost.h"
 #include "Log.h"
+#include "Folders.h"
 
 #ifndef SETLINE_ORT_VERSION
  #define SETLINE_ORT_VERSION "?"
@@ -17,7 +18,7 @@ juce::var errorVar(const juce::String& msg)
 }
 } // namespace
 
-Bridge::Bridge(AudioHost& host, juce::PropertiesFile& settings) : audio(host), session(settings), media(settings)
+Bridge::Bridge(AudioHost& host, juce::PropertiesFile& settings) : audio(host), settings(settings), session(settings), media(settings)
 {
     audio.onSetupChanged = [this] { emit("audioSetupChanged", audio.getSetup()); };
     audio.emit = [this](const juce::Identifier& id, const juce::var& v) { emit(id, v); };
@@ -167,6 +168,37 @@ Bridge::Options Bridge::addTo(Options o)
         }
         startShowTaken = true;
         return juce::var(r);
+    });
+    // ---- standard folders (Folders.h): Shows (changeable), Library, Save by name ----
+    o = add(o, "folders", [this](const juce::var&) {
+        auto* r = new juce::DynamicObject();
+        r->setProperty("shows", folders::shows(settings).getFullPathName());
+        r->setProperty("defaultShows", folders::defaultShows().getFullPathName());
+        r->setProperty("library", folders::library().getFullPathName());
+        return juce::var(r);
+    });
+    o = add(o, "showTarget", [this](const juce::var& a) { return session.inShows(a["name"].toString(), (bool) a["create"]); });
+    o = addAsync(o, "chooseShowsFolder", [this](const juce::var&, auto done) {
+        folderChooser = std::make_unique<juce::FileChooser>("Where new shows are saved", folders::shows(settings));
+        folderChooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories, [this, done](const juce::FileChooser& fc) {
+            auto* r = new juce::DynamicObject();
+            const auto f = fc.getResult();
+            if (f == juce::File() || ! f.isDirectory()) r->setProperty("cancelled", true);
+            else { settings.setValue("showsFolder", f.getFullPathName()); settings.saveIfNeeded(); applog::line("Shows folder: " + f.getFullPathName()); }
+            r->setProperty("shows", folders::shows(settings).getFullPathName());
+            done(juce::var(r));
+        });
+    });
+    o = add(o, "resetShowsFolder", [this](const juce::var&) {
+        settings.removeValue("showsFolder"); settings.saveIfNeeded();
+        auto* r = new juce::DynamicObject(); r->setProperty("shows", folders::shows(settings).getFullPathName()); return juce::var(r);
+    });
+    o = add(o, "revealFolder", [this](const juce::var& a) {
+        const auto which = a["which"].toString();
+        const auto f = which == "library" ? folders::library() : which == "logs" ? applog::folder() : folders::shows(settings);
+        f.createDirectory();
+        f.startAsProcess(); // opens it in Explorer / Finder
+        auto* r = new juce::DynamicObject(); r->setProperty("path", f.getFullPathName()); return juce::var(r);
     });
     o = add(o, "forgetLastShow", [this](const juce::var&) { session.forgetLast(); return juce::var(true); });
     o = add(o, "getAudioSetup", [this](const juce::var& a) { return audio.getSetup(a.isObject() && (bool) a["rescan"]); });

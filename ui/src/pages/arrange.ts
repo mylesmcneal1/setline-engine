@@ -24,6 +24,8 @@ interface Page {
   cueCfg(s: Song): CueVoice; cueVoiceAll(): CueVoice; setVoices(list: VoiceInfo[]): void;
   setDirty(d: boolean): void; freshShow(): void;
   setListen(st: ListenState, what?: string): void;
+  nameBox(o: { title: string; value: string; where: string }, done: (r: { name?: string; elsewhere?: boolean } | null) => void): void;
+  prefsBox(f: Folders, act: (a: string) => void): void;
   copyStatus(p: { done: number; total: number; files?: number; filesDone?: number; finished: boolean; error?: string }): void;
   recFor(s: Song, text: string): string; wordFiles(): { path: string; copy?: boolean }[];
   addWords(s: Song, list: { name: string; ref: string }[], only: boolean): void;
@@ -35,6 +37,7 @@ interface Page {
 // Cue voice choice as saved (voice id + name: ids differ between computers) and an installed voice.
 interface CueVoice { voice: string; name: string; speed: number }
 interface ListenState { on?: boolean; driver?: string; device?: string; current?: string; mode?: string; output?: number[]; click?: boolean; cues?: boolean; midi?: boolean; error?: string; devices?: { driver: string; device: string }[] }
+interface Folders { shows: string; defaultShows: string; library: string }
 interface MenuItem { label: string; icon?: string; key?: string; dis?: boolean; act: () => void }
 interface VoiceInfo { id: string; name: string; lang: string; isDefault: boolean; engine?: string; gender?: string; grade?: string; rank?: number }
 // The built-in Kokoro voices' download (Kokoro.h): missing | downloading | ready | failed.
@@ -277,6 +280,7 @@ const SLE = {
   newSession: () => newSession(),
   listen: (req: Partial<ListenState>) => setListen(req),
   diagnostics: (how: "copy" | "save") => diagnostics(how),
+  preferences: () => preferences(),
   listenMenu: (at: { clientX: number; clientY: number }) => listenMenu(at),
   fileMenu: (at: { clientX: number; clientY: number }) => fileMenu(at),
   // ---- step 2: stems ----
@@ -444,7 +448,7 @@ const SLC = {
   },
   // "+ Recorded word…": WAV / AIFF / FLAC at any rate, copied into <show>/Cues/Words (on save if the show is new).
   async addWords(s: Song, only: boolean) {
-    const r = await SL.call<{ files?: AudioInfo[]; cancelled?: boolean; error?: string }>("pickAudioFiles", { rate: 0, multiple: true });
+    const r = await SL.call<{ files?: AudioInfo[]; cancelled?: boolean; error?: string }>("pickAudioFiles", { rate: 0, multiple: true, from: "cueWords" });
     if (r.error) { page().toast(r.error); return; }
     if (r.cancelled || !r.files) return;
     const good = r.files.filter((x) => x.ok);
@@ -584,10 +588,9 @@ async function saveSession(as: boolean, to?: string): Promise<boolean> {
     const cur = await SL.call<FileResult>("getSessionFile");
     let target = to || cur.path || "";
     if (!to && (as || !target)) {
-      const r = await SL.call<FileResult>("chooseSessionFile");
-      if (r.cancelled) return false;
-      if (r.error || !r.path) { page().toast(r.error || "Couldn't save"); return false; }
-      target = r.path;
+      const where = await askShowName(as);
+      if (!where) return false;
+      target = where;
     }
     // Stems flagged "Copy into session" are copied into its Audio folder; every reference becomes
     // relative to the session folder (absolute only for files kept outside it).
@@ -611,6 +614,44 @@ async function saveSession(as: boolean, to?: string): Promise<boolean> {
     remember(text);
     return true;
   } finally { saving = false; }
+}
+
+// Save / Save As (6c item 3): just a name; the show goes to <Shows>/<name>/<name>.setline ("Choose another
+// place…" for the old dialog). -> the path, or "" when cancelled.
+async function askShowName(as: boolean): Promise<string> {
+  const f = await SL.call<Folders>("folders");
+  const pick = await new Promise<{ name?: string; elsewhere?: boolean } | null>((res) =>
+    page().nameBox({ title: as ? "Save show as" : "Save show", value: doc.name || "Untitled show", where: f.shows }, res));
+  if (!pick) return "";
+  if (pick.elsewhere) {
+    const r = await SL.call<FileResult>("chooseSessionFile");
+    if (r.cancelled) return "";
+    if (r.error || !r.path) { page().toast(r.error || "Couldn't save"); return ""; }
+    return r.path;
+  }
+  const t = await SL.call<{ path: string; name: string; exists: boolean }>("showTarget", { name: pick.name });
+  const cur = await SL.call<FileResult>("getSessionFile");
+  if (t.exists && t.path !== cur.path) {
+    const yes = await new Promise<boolean>((res) => {
+      let answered = false;
+      page().confirm(`Replace “${t.name}”?`, `A show called “${t.name}” is already in ${f.shows}. Replacing it overwrites its show file (its audio stays).`, "Replace", () => { answered = true; res(true); });
+      // Cancel / Esc close the box without calling back
+      const watch = setInterval(() => { if (!document.querySelector(".cfbox")) { clearInterval(watch); if (!answered) res(false); } }, 150);
+    });
+    if (!yes) return askShowName(as);
+  }
+  const made = await SL.call<{ path?: string; error?: string }>("showTarget", { name: pick.name, create: true });
+  if (made.error || !made.path) { page().toast(made.error || "Couldn't save"); return ""; }
+  return made.path;
+}
+// Preferences (6c item 3): where new shows go, the Library, the logs.
+async function preferences() {
+  const f = await SL.call<Folders>("folders");
+  page().prefsBox(f, async (a) => {
+    if (a === "shows") { const r = await SL.call<Folders & { cancelled?: boolean }>("chooseShowsFolder"); if (!r.cancelled) page().toast("New shows go in " + r.shows); preferences(); }
+    else if (a === "showsDefault") { const r = await SL.call<Folders>("resetShowsFolder"); page().toast("New shows go in " + r.shows); preferences(); }
+    else await SL.call("revealFolder", { which: a });
+  });
 }
 
 // ---------------------------------------------------------------- File menu (phase 6b)
@@ -698,6 +739,8 @@ async function fileMenu(at: { clientX: number; clientY: number }) {
     { label: "Save As…", icon: "", key: (mod === "⌘" ? "⇧⌘" : "Ctrl+Shift+") + "S", act: () => { saveSession(true); } },
     "-",
     { label: "Close", icon: "✕", act: () => newSession("Closing the session.") },
+    "-",
+    { label: "Preferences…", icon: "⚙", key: mod + ",", act: () => { preferences(); } },
     "-",
     { label: "Copy diagnostics", icon: "⧉", act: () => { diagnostics("copy"); } },
     { label: "Save diagnostics…", icon: "", act: () => { diagnostics("save"); } },
@@ -938,6 +981,7 @@ async function main() {
     if (m.cmd === "open") openSession(); else if (m.cmd === "save") saveSession(false); else if (m.cmd === "saveAs") saveSession(true);
     else if (m.cmd === "about") showAbout();
     else if (m.cmd === "retryShow") retryStartShow();
+    else if (m.cmd === "prefs") preferences();
     else if (m.cmd === "copyDiagnostics") diagnostics("copy"); else if (m.cmd === "saveDiagnostics") diagnostics("save");
     else if (m.cmd === "new") newSession(); else if (m.cmd === "close") newSession("Closing the session.");
     else if (m.cmd === "quit") { SL.call("quitAnswered").catch(() => {}); askSave("Quitting set.Line.", () => { SL.call("quitNow").catch(() => {}); }); }

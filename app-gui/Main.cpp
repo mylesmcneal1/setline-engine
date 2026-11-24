@@ -9,6 +9,7 @@
 #include "Ort.h"
 #include "Splash.h"
 #include "Log.h"
+#include "Folders.h"
 
 namespace setline::gui {
 
@@ -82,6 +83,7 @@ public:
         settings = std::make_unique<juce::PropertiesFile>(settingsOptions());
         applog::start(JUCE_APPLICATION_VERSION_STRING);
         applog::line("Started: " + args.joinIntoString(" "));
+        for (auto& m : folders::migrate(*settings)) applog::line("Folders: " + m); // once: what earlier builds kept elsewhere
         // The loading window first (not in test runs unless asked: --with-splash); the rest starts once it has
         // painted, so set.Line shows up at once.
         const bool testRun = args.indexOf("--test-script") >= 0 || args.indexOf("--session-roundtrip") >= 0;
@@ -194,6 +196,8 @@ public:
         {
             juce::PopupMenu apple; // set.Line > About set.Line (the page shows the build)
             apple.addItem(juce::PopupMenu::Item("About set.Line").setID(9).setAction([this] { sendMenu("about"); }));
+            apple.addSeparator();
+            apple.addItem(juce::PopupMenu::Item(juce::String::fromUTF8("Settings\xe2\x80\xa6")).setID(10).setAction([this] { sendMenu("prefs"); }));
             juce::MenuBarModel::setMacMainMenu(menu.get(), &apple);
         }
        #endif

@@ -1,5 +1,6 @@
 #include "SessionFile.h"
 #include "Media.h"
+#include "Folders.h"
 
 namespace setline::gui {
 
@@ -15,7 +16,7 @@ juce::var result(std::initializer_list<std::pair<const char*, juce::var>> props)
 juce::File SessionFile::startFolder() const
 {
     const juce::File last(settings.getValue("sessionFolder"));
-    return last.isDirectory() ? last : juce::File::getSpecialLocation(juce::File::userDocumentsDirectory);
+    return last.isDirectory() ? last : folders::shows(settings); // Documents/set.Line/Shows unless chosen in Preferences
 }
 
 void SessionFile::open(Done done)
@@ -86,6 +87,16 @@ void SessionFile::saveAs(const juce::String& text, Done done)
         if (! f.hasFileExtension(extension)) f = f.withFileExtension(extension);
         done(write(f, text));
     });
+}
+
+juce::var SessionFile::inShows(const juce::String& name, bool create)
+{
+    auto stem = Media::portableName(name.trim());
+    if (stem.isEmpty()) stem = "Untitled show";
+    const auto dir = folders::shows(settings).getChildFile(stem);
+    const auto f = dir.getChildFile(stem + extension);
+    if (create && ! dir.createDirectory()) return result({ { "error", "Couldn't create the folder " + dir.getFullPathName() } });
+    return result({ { "path", f.getFullPathName() }, { "name", stem }, { "folder", folders::shows(settings).getFullPathName() }, { "exists", f.existsAsFile() } });
 }
 
 void SessionFile::chooseLocation(Done done)

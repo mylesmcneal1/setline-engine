@@ -1085,6 +1085,30 @@ function repeatBox(s,t,r){ const bg=document.createElement('div'); bg.className=
   const key=e=>{ if(e.key==='Escape'){ e.stopPropagation(); close(); } if(e.key==='Enter'){ e.stopPropagation(); e.preventDefault(); go(); } };
   document.addEventListener('keydown',key,true); bg.onclick=e=>{ if(e.target===bg) close(); }; $('rpN').onfocus=()=>{ bg.querySelector('input[value=n]').checked=true; };
   bg.querySelector('[data-a=no]').onclick=close; bg.querySelector('[data-a=ok]').onclick=go; $('rpN').select(); }
+// Save a show by name (6c item 3): into the Shows folder; "Choose another place…" for anywhere else.
+// done({name}) | done({elsewhere:true}); Cancel / Esc: done(null).
+function nameBox(o,done){ const bg=document.createElement('div'); bg.className='cfbg';
+  bg.innerHTML=`<div class="cfbox"><b>${esc(o.title)}</b><p>Saved in <span class="faint">${esc(o.where)}</span>, in a folder of its own with its audio.</p>
+    <input id="nbName" type="text" value="${esc(o.value)}" spellcheck="false" style="width:100%;margin-top:12px;padding:7px 9px;font-size:13px">
+    <div class="cfa"><button class="btn line" data-a="else" style="margin-right:auto">Choose another place…</button><button class="btn line" data-a="no">Cancel</button><button class="btn pri" data-a="ok">Save</button></div></div>`;
+  document.body.appendChild(bg); let answered=false; const close=v=>{ bg.remove(); document.removeEventListener('keydown',key,true); if(!answered){ answered=true; done(v); } };
+  const ok=()=>{ const n=$('nbName').value.trim(); if(!n){ $('nbName').focus(); return; } close({name:n}); };
+  const key=e=>{ if(e.key==='Escape'){ e.stopPropagation(); close(null); } if(e.key==='Enter'){ e.stopPropagation(); e.preventDefault(); ok(); } };
+  document.addEventListener('keydown',key,true); bg.onclick=e=>{ if(e.target===bg) close(null); };
+  bg.querySelector('[data-a=no]').onclick=()=>close(null); bg.querySelector('[data-a=ok]').onclick=ok; bg.querySelector('[data-a=else]').onclick=()=>close({elsewhere:true});
+  const i=$('nbName'); i.focus(); i.select(); }
+// Preferences: where shows are saved, the Library, the logs. act("shows" | "showsDefault" | "library" | "logs")
+function prefsBox(f,act){ const bg=document.createElement('div'); bg.className='cfbg';
+  const row=(label,path,btns)=>`<div style="display:grid;grid-template-columns:110px 1fr auto;gap:10px;align-items:center;margin-top:12px;font-size:12.5px"><span class="faint">${label}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(path)}">${esc(path)}</span><span style="display:flex;gap:6px">${btns}</span></div>`;
+  bg.innerHTML=`<div class="cfbox" style="width:620px;max-width:92vw"><b>Preferences</b>
+    ${row('New shows',f.shows,`<button class="btn line" data-a="shows">Change…</button>${f.shows!==f.defaultShows?'<button class="btn line" data-a="showsDefault">Use Documents</button>':''}`)}
+    ${row('Library',f.library,'<button class="btn line" data-a="library">Open</button>')}
+    <p class="faint" style="font-size:11px;margin-top:10px;line-height:1.5">The Library keeps cue words, MIDI presets and click sounds to use in any show. Settings, caches and logs stay on this computer.</p>
+    <div class="cfa"><button class="btn line" data-a="logs" style="margin-right:auto">Open the logs</button><button class="btn pri" data-a="ok">Done</button></div></div>`;
+  document.body.appendChild(bg); const close=()=>{ bg.remove(); document.removeEventListener('keydown',key,true); };
+  const key=e=>{ if(e.key==='Escape'||e.key==='Enter'){ e.stopPropagation(); close(); } };
+  document.addEventListener('keydown',key,true); bg.onclick=e=>{ if(e.target===bg) close(); };
+  bg.querySelectorAll('[data-a]').forEach(b=>{ const a=b.dataset.a; b.onclick=()=>{ if(a==='ok'){ close(); return; } if(a!=='library'&&a!=='logs') close(); act(a); }; }); }
 // Save / Don't save / Cancel. choice("save" | "discard"); Cancel and Esc do nothing.
 function saveBox(title,body,choice){ const bg=document.createElement('div'); bg.className='cfbg';
   bg.innerHTML=`<div class="cfbox"><b>${title}</b><p>${body}</p><div class="cfa"><button class="btn line" data-a="no">Cancel</button><button class="btn line" data-a="discard">Don’t save</button><button class="btn pri" data-a="save">Save</button></div></div>`;
@@ -2279,7 +2303,7 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
     $('listenDev').textContent=LISTEN.current||LISTEN.device||'this computer'; $('listenWhat').textContent=LISTEN.on?' · '+(what||'everything')+(LISTEN.click===false?' · no click':'')+(LISTEN.cues===false?' · no cues':'')+(LISTEN.midi===false?' · MIDI held back':''):''; },
   copyStatus(p){ const m=$('copyMk'); if(!m) return; if(p.finished){ m.hidden=true; if(p.error) toast('The audio copy stopped: '+p.error); else if(p.files) toast(`Audio copied into the show (${p.files} file${p.files>1?'s':''})`); return; }
     m.hidden=false; $('copyTxt').textContent=`Copying audio… ${p.filesDone||0} of ${p.files||0}`; $('copyBar').style.width=(p.total>0?100*p.done/p.total:0)+'%'; },
-  menu:(e,items)=>ctxMenu(e,items), saveBox:(t,b,c)=>saveBox(t,b,c), about:info=>aboutBox(info),
+  menu:(e,items)=>ctxMenu(e,items), saveBox:(t,b,c)=>saveBox(t,b,c), about:info=>aboutBox(info), nameBox:(o,d)=>nameBox(o,d), prefsBox:(f,a)=>prefsBox(f,a),
   // a new show: the set's cue voice starts fresh (Kokoro Heart once downloaded, else the computer's)
   freshShow(){ CUEV={voice:'',name:'',speed:1}; cuevFresh=true; CLICKT={}; PRON={}; UNKNOWN=[]; CUEWORDS=[]; if(VMODEL.state==='ready'){ CUEV={...KOKORO_DEFAULT}; cuevFresh=false; } },
   confirm(title,body,ok,fn){ confirmBox(title,body,ok,fn); },
@@ -2403,7 +2427,7 @@ $('tglL').onclick=()=>setPanel('L',!isOpen('L')); $('tglR').onclick=()=>setPanel
 $('closeL').onclick=()=>setPanel('L',false); $('closeR').onclick=()=>setPanel('R',false);
 try{ if(localStorage.getItem('setline.panelL')==='0') setPanel('L',false); if(localStorage.getItem('setline.panelR')==='0') setPanel('R',false); }catch(e){}
 document.addEventListener('keydown',e=>{ if(/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
-  if(e.metaKey||e.ctrlKey){ const k=e.key.toLowerCase(); if(k==='s'){ e.preventDefault(); if(window.SLE) SLE.save(e.shiftKey); return; } if(k==='o'){ e.preventDefault(); if(window.SLE) SLE.open(); return; } if(k==='n'){ e.preventDefault(); if(window.SLE) SLE.newSession(); return; } if(k==='z'){ e.preventDefault(); e.shiftKey?redo():undo(); return; } if(k==='y'){ e.preventDefault(); redo(); return; }
+  if(e.metaKey||e.ctrlKey){ const k=e.key.toLowerCase(); if(k===','){ e.preventDefault(); if(window.SLE) SLE.preferences(); return; } if(k==='s'){ e.preventDefault(); if(window.SLE) SLE.save(e.shiftKey); return; } if(k==='o'){ e.preventDefault(); if(window.SLE) SLE.open(); return; } if(k==='n'){ e.preventDefault(); if(window.SLE) SLE.newSession(); return; } if(k==='z'){ e.preventDefault(); e.shiftKey?redo():undo(); return; } if(k==='y'){ e.preventDefault(); redo(); return; }
     if(k==='c'){ e.preventDefault(); doCopy(); return; } if(k==='x'){ e.preventDefault(); doCut(); return; } if(k==='v'){ e.preventDefault(); doPaste(); return; } if(k==='d'){ e.preventDefault(); doDup(); return; } }
   if(pick&&(e.key==='Delete'||e.key==='Backspace')){ e.preventDefault(); doDelete(); return; }
   if(pick&&e.key==='Escape'){ setPick(null); return; }

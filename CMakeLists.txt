@@ -154,6 +154,7 @@ if(SETLINE_WITH_JUCE)
       app-gui/Cues.cpp
       app-gui/Splash.cpp
       app-gui/Log.cpp
+      app-gui/Folders.cpp
       app-gui/Kokoro.cpp
       app-gui/Ort.cpp
       app-gui/SpeechWin.cpp

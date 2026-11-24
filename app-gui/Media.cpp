@@ -1,4 +1,5 @@
 #include "Media.h"
+#include "Folders.h"
 #include <map>
 #include <mutex>
 #include <thread>
@@ -288,7 +289,9 @@ void Media::pick(const juce::var& arg, Done done)
 {
     const double rate = arg["rate"];
     const bool multiple = arg.hasProperty("multiple") ? (bool) arg["multiple"] : true;
-    chooser = std::make_unique<juce::FileChooser>(multiple ? "Choose stem files" : "Choose an audio file", startFolder(), audioWildcard);
+    // recorded cue words start in the Library (Documents/set.Line/Library/Cue Words)
+    const auto start = arg["from"].toString() == "cueWords" ? folders::libraryCueWords() : startFolder();
+    chooser = std::make_unique<juce::FileChooser>(arg["from"].toString() == "cueWords" ? "Choose recorded cue words" : multiple ? "Choose stem files" : "Choose an audio file", start, audioWildcard);
     auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
     if (multiple) flags |= juce::FileBrowserComponent::canSelectMultipleItems;
     chooser->launchAsync(flags, [this, rate, done](const juce::FileChooser& fc) {

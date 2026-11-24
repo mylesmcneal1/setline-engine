@@ -1,5 +1,6 @@
 #include "Kokoro.h"
 #include "Ort.h"
+#include "Folders.h"
 #include <onnxruntime_c_api.h>
 #include <juce_cryptography/juce_cryptography.h>
 #include <algorithm>
@@ -267,13 +268,7 @@ juce::File folder()
 {
     const auto env = juce::SystemStats::getEnvironmentVariable("SETLINE_MODELS_DIR", {});
     if (env.isNotEmpty()) return juce::File(env);
-   #if JUCE_MAC
-    return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory).getChildFile("Application Support/set.Line/Models");
-   #elif JUCE_WINDOWS
-    return juce::File::getSpecialLocation(juce::File::windowsLocalAppData).getChildFile("set.Line/Models");
-   #else
-    return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory).getChildFile("set.Line/Models");
-   #endif
+    return folders::models(); // %LOCALAPPDATA%/set.Line/Models, ~/Library/Caches/set.Line/Models (Folders.h)
 }
 
 juce::String stateName(State s)

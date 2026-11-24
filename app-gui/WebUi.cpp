@@ -1,4 +1,5 @@
 #include "WebUi.h"
+#include "Folders.h"
 #include <SetLineUi.h>
 #include <unordered_map>
 
@@ -35,8 +36,7 @@ juce::String mimeFor(const juce::String& file)
 
 WebUi::WebUi(bool devMode, const std::function<Options(Options)>& configure) : dev(devMode)
 {
-    const auto dataDir = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                             .getChildFile("set.Line").getChildFile("WebView2");
+    const auto dataDir = folders::webViewData(); // the page's own data (localStorage) with the caches (Folders.h)
     dataDir.createDirectory();
 
     Options o = Options {}

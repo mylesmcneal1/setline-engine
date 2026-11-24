@@ -23,6 +23,9 @@ public:
     // <chosen folder>/<name>/<name>.setline, creating the folder. Nothing is written yet.
     // -> {path, name} | {cancelled} | {error}
     void chooseLocation(Done done);
+    // Save into the Shows folder by name: <Shows>/<name>/<name>.setline (portable name). create: makes the folder.
+    // -> {path, name, folder, exists}
+    juce::var inShows(const juce::String& name, bool create);
     // Writes text to path (atomically) and makes it the current session. -> {name, path} | {error}
     juce::var writeTo(const juce::File& f, const juce::String& text) { return write(f, text); }
 
