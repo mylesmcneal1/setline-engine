@@ -753,7 +753,8 @@ function installDrop() {
   const hasFiles = (e: DragEvent) => !!e.dataTransfer && Array.from(e.dataTransfer.types).includes("Files");
   const highlight = (on: boolean) => page().dropZone().classList.toggle("over", on && page().modalOpen());
   // Capture phase: file drags never reach the page's own drag handlers (those move songs and clips).
-  window.addEventListener("dragenter", (e) => { if (hasFiles(e)) { e.preventDefault(); highlight(true); } }, true);
+  // Dropping only ever copies: the page says "copy" on enter, over and drop, so Explorer never moves the files.
+  window.addEventListener("dragenter", (e) => { if (hasFiles(e)) { e.preventDefault(); e.dataTransfer!.dropEffect = "copy"; highlight(true); } }, true);
   window.addEventListener("dragover", (e) => {
     if (!hasFiles(e)) return;
     e.preventDefault(); e.stopPropagation();
@@ -764,6 +765,7 @@ function installDrop() {
   window.addEventListener("drop", (e) => {
     if (!hasFiles(e)) return;
     e.preventDefault(); e.stopPropagation();
+    e.dataTransfer!.dropEffect = "copy";
     highlight(false);
     const files = e.dataTransfer!.files;
     if (!files.length) return;

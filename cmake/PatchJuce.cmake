@@ -104,3 +104,22 @@ if(NOT _src2 MATCHES "${_marker2}")
   file(WRITE "${_f2}" "${_src2}")
   message(STATUS "Patched JUCE WebBrowserComponent: linear escaping of results sent to the page")
 endif()
+
+# ---- 3. macOS: dropping files on set.Line only ever copies ----
+# JUCE's view answers NSDragOperationGeneric while files are dragged over it; set.Line says Copy explicitly, so
+# Finder shows the copy cursor and never treats a drop as a move.
+set(_f3 "${JUCE_SOURCE_DIR}/modules/juce_gui_basics/native/juce_NSViewComponentPeer_mac.mm")
+file(READ "${_f3}" _src3)
+set(_old3 [=[            if (owner->sendDragCallback (&NSViewComponentPeer::handleDragMove, sender))
+                return NSDragOperationGeneric;]=])
+set(_new3 [=[            if (owner->sendDragCallback (&NSViewComponentPeer::handleDragMove, sender))
+                return NSDragOperationCopy; // set.Line: drops only ever copy]=])
+if(NOT _src3 MATCHES "set.Line: drops only ever copy")
+  string(FIND "${_src3}" "${_old3}" _at3)
+  if(_at3 EQUAL -1)
+    message(FATAL_ERROR "PatchJuce: the macOS drag code moved in this JUCE version (juce_NSViewComponentPeer_mac.mm)")
+  endif()
+  string(REPLACE "${_old3}" "${_new3}" _src3 "${_src3}")
+  file(WRITE "${_f3}" "${_src3}")
+  message(STATUS "Patched JUCE macOS view: file drops are copies (NSDragOperationCopy)")
+endif()
