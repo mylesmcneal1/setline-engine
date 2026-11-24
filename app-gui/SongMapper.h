@@ -19,7 +19,8 @@ struct MappedSong {
     std::map<juce::String, TrackLevel> levels; // per track, from the song's mixer (gain / mute / solo)
 };
 
-// payload: { song: <one song from the Edit page>, outs: { trackName: [outputs, 1-based] } (the show's
+// payload: { song: <one song from the Edit page>, sessionFile: <the open .setline> (audio references are
+//            relative to its folder; added by the Bridge), outs: { trackName: [outputs, 1-based] } (the show's
 //            routing by track name, or this song's override), roles: { trackName: role } (finds the
 //            click and cue tracks), click: <click settings in use> }
 // resolvePort: Edit-page MIDI port name -> index of an opened MIDI output (-1 = not available).

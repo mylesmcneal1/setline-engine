@@ -1414,7 +1414,9 @@ const isAudio=(s,t)=>!isMidiTrack(s,t)&&!['click','cues'].includes(ROLE[t]);
 // How long the track's audio file is (imported stems); mockup tracks run the whole song.
 const fileLen=(s,t)=>{ const f=(s.files||{})[t]; return f&&f.len>0?f.len:s.audio; };
 function clipsOf(s,t){ s.clips=s.clips||{}; if(!s.clips[t]) s.clips[t]=[{id:clipSeq++,start:0,end:Math.min(s.audio,fileLen(s,t)),off:0,gain:0,fi:0,fo:0,mute:false}]; return s.clips[t]; }
-function clipEnv(cl,tt){ let v=1; if(cl.fi>0&&tt<cl.start+cl.fi) v*=Math.max(0,(tt-cl.start)/cl.fi); if(cl.fo>0&&tt>cl.end-cl.fo) v*=Math.max(0,(cl.end-tt)/cl.fo); return v; }
+// Fade gain: the curve drawn for fades (Bezier (0,0) (0.2,1) (1,1)); the engine uses the same formula (core/Clip.h).
+function fadeCurve(u){ if(u<=0) return 0; if(u>=1) return 1; const s=(Math.sqrt(.16+2.4*u)-.4)/1.2; return s*(2-s); }
+function clipEnv(cl,tt){ let v=1; if(cl.fi>0&&tt<cl.start+cl.fi) v*=fadeCurve((tt-cl.start)/cl.fi); if(cl.fo>0&&tt>cl.end-cl.fo) v*=fadeCurve((cl.end-tt)/cl.fo); return v; }
 function clipAt(s,t,time){ return clipsOf(s,t).find(c=>time>=c.start&&time<c.end); }
 function gridStep(s){ const b=s.bars[0], beat=b.dur/b.sig[0]; return beat*PXS>=8?'beat':'bar'; }
 function snapT(s,time,free){ if(free) return Math.round(time*1000)/1000; const g=gridStep(s); let best=time,bd=1e9;

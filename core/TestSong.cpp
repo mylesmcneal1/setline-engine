@@ -565,6 +565,114 @@ bool runSelfTest(bool verbose)
         check(started && jumps >= 2 && under == 0, "real-time: a 1-bar loop with 9 stems wraps " + std::to_string(jumps) + " times with no disk underruns");
     }
 
+    // ---- Step 2: audio clips (offset, gain, fades, gaps, mute, split, jump, loop) ----
+    {
+        // A mono file whose every sample is different and non-zero, so any misplaced sample shows.
+        const int64_t fileLen = 10 * (int64_t) sr;
+        auto src = std::make_shared<InMemorySource>(); src->sr = sr;
+        src->data.assign(1, std::vector<float>((size_t) fileLen));
+        for (int64_t i = 0; i < fileLen; ++i) {
+            const double f = std::fmod((double) i * 0.6180339887, 1.0);
+            src->data[0][(size_t) i] = (float) ((i & 1 ? -1 : 1) * (0.1 + 0.4 * f));
+        }
+        const auto& file = src->data[0];
+        auto songWith = [&](std::vector<ClipDef> clips) {
+            SongDef s; s.name = "Clips"; s.tempo = { { 1, 120, 4, 4 } };
+            StemDef d; d.name = "Clip stem"; d.source = src; d.outs = { 0 }; d.clips = std::move(clips);
+            s.stems.push_back(d);
+            return s;
+        };
+        // What the clips should produce at timeline sample t (one clip at a time here).
+        auto expectAt = [&](const std::vector<ClipDef>& clips, int64_t t) {
+            float v = 0.0f;
+            for (auto& c : clips) {
+                if (c.mute || t < c.start || t >= c.end) continue;
+                const int64_t i = c.offset + (t - c.start);
+                if (i < 0 || i >= fileLen) continue;
+                v += file[(size_t) i] * (float) clipGainAt(c, std::pow(10.0, c.gainDb / 20.0), t);
+            }
+            return v;
+        };
+        auto render = [&](const std::vector<ClipDef>& clips, int blk) {
+            auto r = std::make_unique<OfflineRun>(); r->load(songWith(clips), sr, 4, blk); r->start(0); r->runToEnd();
+            return r;
+        };
+        auto firstDiff = [&](const OfflineRun& r, const std::vector<ClipDef>& clips, int64_t from, int64_t to) -> int64_t {
+            for (int64_t t = from; t < to; ++t) if (r.at(0, t) != expectAt(clips, t)) return t;
+            return -1;
+        };
+
+        // 1) a clip starting mid-file at a non-zero offset
+        const std::vector<ClipDef> one = { { 12345, 60001, 7777, 0, 0, 0, false } };
+        bool okAll = true;
+        for (int blk : { 128, 97, 33, 1024 }) {
+            auto r = render(one, blk);
+            okAll &= r->at(0, 12344) == 0.0f && r->at(0, 12345) == file[7777] && firstDiff(*r, one, 0, 70000) < 0
+                  && r->e.lengthSamples() >= 60001;
+        }
+        check(okAll, "clips: a clip starting at sample 12345 with file offset 7777 lands on the exact sample (blocks 128, 97, 33, 1024)");
+
+        // 2) a split clip plays back identically to the unsplit clip (gain, fades included)
+        const int64_t fi = 4800, fo = 9600;
+        const std::vector<ClipDef> whole = { { 1000, 200000, 500, -3.0f, fi, fo, false } };
+        const int64_t cut = 77777;
+        const std::vector<ClipDef> split = { { 1000, cut, 500, -3.0f, fi, 0, false }, { cut, 200000, 500 + (cut - 1000), -3.0f, 0, fo, false } };
+        auto rw = render(whole, 97), rs = render(split, 97);
+        bool same = rw->out[0].size() == rs->out[0].size();
+        for (size_t i = 0; same && i < rw->out[0].size(); ++i) same = rw->out[0][i] == rs->out[0][i];
+        check(same && firstDiff(*rw, whole, 0, 210000) < 0, "clips: a clip split at sample 77777 plays back identically to the unsplit clip");
+
+        // 3) fades follow the curve the page draws (Bezier (0,0) (0.2,1) (1,1)), sample by sample
+        bool curveOk = true;
+        for (int k = 0; k <= 1000; ++k) { // the formula is the Bezier itself
+            const double s = k / 1000.0, x = 0.4 * s + 0.6 * s * s, y = 2 * s - s * s;
+            curveOk &= std::fabs(fadeCurve(x) - y) < 1e-9;
+        }
+        const float g3 = (float) std::pow(10.0, -3.0 / 20.0);
+        bool fadeOk = rw->at(0, 1000) == 0.0f;
+        for (int64_t t = 1000; t < 1000 + fi && fadeOk; ++t)
+            fadeOk = std::fabs(rw->at(0, t) - file[(size_t) (500 + t - 1000)] * (float) (g3 * fadeCurve((double) (t - 1000) / (double) fi))) < 1e-7f;
+        for (int64_t t = 200000 - fo; t < 200000 && fadeOk; ++t)
+            fadeOk = std::fabs(rw->at(0, t) - file[(size_t) (500 + t - 1000)] * (float) (g3 * fadeCurve((double) (200000 - t) / (double) fo))) < 1e-7f;
+        const int64_t mid = 1000 + fi / 2; // halfway through the fade-in: the curve's value there, not a straight line's 0.5
+        fadeOk &= std::fabs(rw->at(0, mid) / (file[(size_t) (500 + mid - 1000)] * g3) - (float) fadeCurve(0.5)) < 1e-5f && fadeCurve(0.5) > 0.7;
+        fadeOk &= rw->at(0, 1000 + fi) == file[(size_t) (500 + fi)] * g3; // full level (-3 dB) right after the fade
+        check(curveOk && fadeOk, "clips: fade-in and fade-out sample values match the page's curve (and -3 dB clip gain)");
+
+        // 4) a gap between clips is digital silence; 5) a muted clip is silent
+        const std::vector<ClipDef> gap = { { 1000, 20000, 0, 0, 0, 0, false }, { 30000, 50000, 100, 0, 0, 0, false }, { 60000, 90000, 200, 0, 0, 0, true } };
+        auto rg = render(gap, 128);
+        bool silent = true, mutedSilent = true;
+        for (int64_t t = 20000; t < 30000; ++t) silent &= rg->at(0, t) == 0.0f;
+        for (int64_t t = 0; t < 1000; ++t) silent &= rg->at(0, t) == 0.0f;
+        for (int64_t t = 60000; t < 90000; ++t) mutedSilent &= rg->at(0, t) == 0.0f;
+        check(silent && rg->at(0, 19999) != 0.0f && rg->at(0, 30000) == file[100], "clips: the gap between two clips (and before the first) is digital silence");
+        check(mutedSilent && firstDiff(*rg, gap, 0, 95000) < 0, "clips: a muted clip is silent");
+
+        // 6) jumping into the middle of a clip is sample-exact: starting there, and a jump armed while playing
+        const std::vector<ClipDef> two = { { 0, 50000, 3000, -2.0f, 2400, 2400, false }, { 50000, 150000, 90000, 1.5f, 1200, 4800, false } };
+        auto full = render(two, 97);
+        OfflineRun st; st.load(songWith(two), sr, 4, 97);
+        const int64_t from = 76543; // inside the second clip
+        bool jumpOk = st.start(from) && st.firstSample == from - (int64_t) std::lround(0.005 * sr);
+        st.runToEnd();
+        for (int64_t t = from; t < 150000 && jumpOk; ++t) jumpOk = st.at(0, t) == full->at(0, t);
+        OfflineRun jp; jp.load(songWith(two), sr, 4, 97); jp.start(0);
+        jp.e.setJump(20000, 101234, false); // from inside clip 1 to inside clip 2
+        while ((int64_t) jp.out[0].size() < 20000 + 40000) jp.step();
+        for (int64_t i = 0; i < 20000 + 40000 && jumpOk; ++i) jumpOk = jp.out[0][(size_t) i] == expectAt(two, i < 20000 ? i : 101234 + (i - 20000));
+        check(jumpOk && jp.e.stats.jumps.load() == 1, "clips: starting at, and jumping to, the middle of a clip is sample-exact");
+
+        // 7) looping across a clip boundary is sample-exact on every pass
+        const int64_t B = 40000, A = 70000, L = A - B; // loop 40000-70000 crosses the boundary at 50000
+        OfflineRun lp; lp.load(songWith(two), sr, 4, 97); lp.e.setLoop(B, A); lp.start(0);
+        const int64_t total = A + 4 * L;
+        while ((int64_t) lp.out[0].size() < total) lp.step();
+        bool loopOk = lp.e.stats.underruns.load() == 0;
+        for (int64_t i = 0; i < total && loopOk; ++i) loopOk = lp.out[0][(size_t) i] == expectAt(two, i < A ? i : B + (i - A) % L);
+        check(loopOk && lp.e.stats.jumps.load() >= 4, "clips: a loop across a clip boundary is sample-exact on every pass (" + std::to_string(lp.e.stats.jumps.load()) + " passes)");
+    }
+
     std::printf(ok ? "ALL CHECKS PASSED\n" : "SOME CHECKS FAILED\n");
     return ok;
 }

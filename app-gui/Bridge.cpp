@@ -74,7 +74,9 @@ Bridge::Options Bridge::addTo(Options o)
     });
     o = add(o, "getMidiOutputs", [this](const juce::var&) { return audio.midiOutputs(); });
     o = add(o, "loadSong", [this](const juce::var& a) {
-        if (! a.isObject() || ! a["song"].isObject()) return errorVar("loadSong: expected {song, routing, roles, click}");
+        if (! a.isObject() || ! a["song"].isObject()) return errorVar("loadSong: expected {song, outs, roles, click}");
+        // Stems are stored relative to the session's folder.
+        a.getDynamicObject()->setProperty("sessionFile", session.file() == juce::File() ? juce::String() : session.file().getFullPathName());
         return audio.loadSong(a);
     });
     o = add(o, "transport", [this](const juce::var& a) { return audio.transport(a); });

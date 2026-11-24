@@ -44,8 +44,8 @@ std::string Engine::load(const SongDef& song, const Config& c, std::vector<std::
                  + std::to_string((int) cfg.sampleRate) + " Hz. set.Line never resamples; export the stems at the show rate.";
         if (s.outs.empty()) { warnings.push_back("Stem \"" + s.name + "\" has no outputs; it will be silent."); }
         for (int o : s.outs) maxOut = std::max(maxOut, o);
-        songLen = std::max(songLen, s.source->length());
         auto st = std::make_unique<StemStreamer>(s, cfg.ringFrames, cfg.chunkFrames);
+        songLen = std::max(songLen, st->timelineLength()); // the file, or the end of its last clip
         st->setName(s.name);
         stems.push_back(std::move(st));
     }

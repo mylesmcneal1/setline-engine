@@ -2,6 +2,8 @@
 #include "../core/Engine.h"
 #include "../core/LiveGain.h"
 #include "../core/TempoMap.h"
+#include "Media.h"
+#include <juce_audio_formats/juce_audio_formats.h>
 #include <cmath>
 #include <set>
 
@@ -11,6 +13,28 @@ namespace {
 
 int toInt(const juce::var& v, int def = 0) { return v.isVoid() || v.isUndefined() ? def : (int) v; }
 double toDouble(const juce::var& v, double def = 0) { return v.isVoid() || v.isUndefined() ? def : (double) v; }
+// A stem file read through JUCE (WAV, AIFF, FLAC), one chunk at a time, on the engine's disk thread.
+struct FileSource : SampleSource {
+    std::unique_ptr<juce::AudioFormatReader> r;
+    explicit FileSource(juce::AudioFormatReader* reader) : r(reader) {}
+    int numChannels() const override { return (int) r->numChannels; }
+    int64_t length() const override { return (int64_t) r->lengthInSamples; }
+    double sampleRate() const override { return r->sampleRate; }
+    bool read(float* const* dest, int64_t start, int n) override
+    {
+        juce::AudioBuffer<float> b(dest, numChannels(), n);
+        return r->read(&b, 0, n, (juce::int64) start, true, numChannels() > 1);
+    }
+};
+
+juce::AudioFormatManager& formats()
+{
+    static juce::AudioFormatManager fm;
+    static const bool registered = [] { fm.registerBasicFormats(); return true; }();
+    juce::ignoreUnused(registered);
+    return fm;
+}
+
 uint8_t b7(int v) { return (uint8_t) juce::jlimit(0, 127, v); }
 juce::String quoted(const juce::String& s) { return juce::String::fromUTF8("\xe2\x80\x9c") + s + juce::String::fromUTF8("\xe2\x80\x9d"); }
 
@@ -81,7 +105,10 @@ MappedSong mapSong(const juce::var& payload, double sr, int numOutputs,
     auto roleOf = [&](const juce::String& t) { return roles[juce::Identifier(t.isEmpty() ? "_" : t)].toString(); };
 
     const juce::var tracks = s["tracks"], midiCfg = s["midiCfg"];
-    int audioTracks = 0;
+    const juce::File sessionFile(payload["sessionFile"].toString());
+    const double songSeconds = toDouble(s["audio"], 0);
+    auto toSamples = [&](const juce::var& seconds) { return (int64_t) std::llround(toDouble(seconds, 0) * sr); }; // one rounding rule
+    int noFile = 0;
     bool haveClick = false;
     if (auto* ts = tracks.getArray())
         for (auto& tv : *ts) {
@@ -103,11 +130,42 @@ MappedSong mapSong(const juce::var& payload, double sr, int numOutputs,
             } else if (role == "cues") {
                 out.engineTrack[t] = Engine::CueTrack;
             } else {
-                if (outsFor(t).empty()) warn(quoted(t) + " isn't routed (Outputs & MIDI page), so it plays nowhere.");
-                ++audioTracks;
+                const auto f = s["files"][tid];
+                const auto ref = f["path"].toString();
+                if (ref.isEmpty()) { ++noFile; continue; } // a track with no audio file yet (e.g. the demo songs)
+                const auto file = Media::resolve(ref, sessionFile);
+                auto* reader = file.existsAsFile() ? formats().createReaderFor(file) : nullptr;
+                if (reader == nullptr) {
+                    warn(quoted(t) + ": " + file.getFileName() + (file.existsAsFile() ? " can't be read" : " is missing") + ", so it plays silence.");
+                    continue;
+                }
+                StemDef d;
+                d.name = t.toStdString();
+                d.source = std::make_shared<FileSource>(reader);
+                d.outs = outsFor(t);
+                if (d.outs.empty()) warn(quoted(t) + " isn't routed (Outputs & MIDI page), so it plays nowhere.");
+                // Clips in seconds on the song's timeline (Edit page: s.clips[track]). None stored yet: the
+                // page's default, the whole file from 0 up to the end of the song.
+                std::vector<ClipDef> clips;
+                if (auto* cl = s["clips"][tid].getArray()) {
+                    for (auto& c : *cl) {
+                        ClipDef x;
+                        x.start = toSamples(c["start"]); x.end = toSamples(c["end"]); x.offset = toSamples(c["off"]);
+                        x.gainDb = (float) toDouble(c["gain"], 0);
+                        x.fadeIn = std::max<int64_t>(0, toSamples(c["fi"])); x.fadeOut = std::max<int64_t>(0, toSamples(c["fo"]));
+                        x.mute = (bool) c["mute"];
+                        if (x.end > x.start && x.offset >= 0) clips.push_back(x);
+                    }
+                } else {
+                    const int64_t len = (int64_t) reader->lengthInSamples;
+                    clips.push_back({ 0, songSeconds > 0 ? std::min(len, toSamples(songSeconds)) : len, 0, 0, 0, 0, false });
+                }
+                d.clips = std::move(clips);
+                def.stems.push_back(std::move(d));
+                out.engineTrack[t] = (int) def.stems.size() - 1;
             }
         }
-    if (audioTracks > 0) warn(juce::String(audioTracks) + " audio track" + (audioTracks > 1 ? "s aren't" : " isn't") + " played yet (audio arrives in step 2); click and MIDI play.");
+    if (noFile > 0) warn(juce::String(noFile) + " audio track" + (noFile > 1 ? "s have" : " has") + " no audio file yet, so " + (noFile > 1 ? "they" : "it") + " plays silence.");
     if (std::any_of(out.engineTrack.begin(), out.engineTrack.end(), [](auto& p) { return p.second == Engine::CueTrack; }) && s["cues"].size() > 0)
         warn("Spoken cues aren't played yet (they arrive with audio in step 2).");
 

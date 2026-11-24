@@ -1,5 +1,6 @@
 // Song description handed to the engine. Pure data; loading from song.json lives in the app layer.
 #pragma once
+#include "Clip.h"
 #include "TempoMap.h"
 #include <cstdint>
 #include <memory>
@@ -24,6 +25,9 @@ struct StemDef {
     std::shared_ptr<SampleSource> source;
     std::vector<int> outs; // 0-based device output channels (1 or 2 entries)
     float gainDb = 0;
+    // The clips on this track (step 2). Not set: the whole file from sample 0 (step 1, the test song).
+    // Set but empty: a track with no clips, silent.
+    std::optional<std::vector<ClipDef>> clips;
 };
 
 struct MidiEventDef {

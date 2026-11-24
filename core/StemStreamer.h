@@ -5,6 +5,11 @@
 // the armed jump (a loop's start). At the jump the audio thread just switches rings, so loops and
 // jumps land on the exact sample with no seek and no gap. After a switch the old ring is refilled
 // from the same target, ready for the next pass of a loop.
+//
+// Clips (step 2): the disk thread renders the track's timeline into the ring by compositing its clips
+// (file offset, clip gain, fades, muted clips, silence between them). The result depends only on the
+// timeline sample, never on where a chunk, seek or jump starts, so every path plays the same samples.
+// The audio thread still does a plain ring read with the live level ramp.
 #pragma once
 #include "AudioRing.h"
 #include "LiveGain.h"
@@ -27,7 +32,17 @@ public:
         for (auto& r : rings) r.setSize(ch, ringFrames);
         tmp.assign((size_t) ch, std::vector<float>((size_t) chunk, 0.0f));
         for (auto& t : tmp) tmpPtrs.push_back(t.data());
-        length = src->length();
+        srcLength = length = src->length();
+        if (def.clips) {
+            clips = *def.clips;
+            std::sort(clips.begin(), clips.end(), [](auto& a, auto& b) { return a.start < b.start; });
+            clipGain.clear();
+            length = 0;
+            for (auto& c : clips) { clipGain.push_back(std::pow(10.0, c.gainDb / 20.0)); length = std::max(length, c.end); }
+            useClips = true;
+            src2.assign((size_t) ch, std::vector<float>((size_t) chunk, 0.0f));
+            for (auto& t : src2) src2Ptrs.push_back(t.data());
+        }
         primeLevel = std::min(ringFrames / 2, ringFrames - chunk);
     }
 
@@ -97,6 +112,8 @@ public:
         return worked;
     }
     int readable() const { return rings[(size_t) active.load(std::memory_order_relaxed)].readable(); }
+    // Samples on the timeline: the file's length, or the end of the last clip.
+    int64_t timelineLength() const { return length; }
 
     // ---- audio thread ----
     // Adds n frames into the outputs at the stem's own gain times the live level (ramp).
@@ -155,6 +172,7 @@ private:
 
     void readChunk(int r)
     {
+        if (useClips) { renderClips(filePos[r]); filePos[r] += chunk; rings[(size_t) r].write(tmpPtrs.data(), chunk); return; }
         const int64_t remain = length - filePos[r];
         if (remain > 0) {
             const int n = (int) std::min<int64_t>(chunk, remain);
@@ -167,6 +185,30 @@ private:
         rings[(size_t) r].write(tmpPtrs.data(), chunk);
     }
 
+    // tmp = timeline samples [p, p + chunk): every unmuted clip that overlaps, from its file offset, with
+    // its gain and fades; silence elsewhere (and where a clip runs past the end of its file).
+    void renderClips(int64_t p)
+    {
+        for (auto& t : tmp) std::fill(t.begin(), t.end(), 0.0f);
+        const int64_t q = p + chunk;
+        for (size_t k = 0; k < clips.size(); ++k) {
+            const auto& c = clips[k];
+            if (c.start >= q) break; // sorted by start
+            if (c.mute || c.end <= p) continue;
+            int64_t a = std::max(p, c.start), b = std::min(q, c.end);
+            // only where the file has samples
+            a = std::max(a, c.start - c.offset);
+            b = std::min(b, c.start + (srcLength - c.offset));
+            if (b <= a) continue;
+            const int n = (int) (b - a);
+            if (! src->read(src2Ptrs.data(), c.offset + (a - c.start), n)) continue;
+            for (int i = 0; i < n; ++i) {
+                const float g = (float) clipGainAt(c, clipGain[k], a + i);
+                for (size_t ch = 0; ch < tmp.size(); ++ch) tmp[ch][(size_t) (a - p + i)] += src2[ch][(size_t) i] * g;
+            }
+        }
+    }
+
     static void addWithGain(float* d, const float* s, int n, float g, const GainRamp& r, int off)
     {
         if (r.len <= off) { const float gg = g * r.end; for (int i = 0; i < n; ++i) d[i] += s[i] * gg; return; }
@@ -177,8 +219,13 @@ private:
     std::vector<int> outs;
     float gain;
     int chunk, primeLevel = 0;
-    int64_t length = 0;
+    int64_t length = 0, srcLength = 0;
     std::string nameStr;
+    bool useClips = false;
+    std::vector<ClipDef> clips;
+    std::vector<double> clipGain;
+    std::vector<std::vector<float>> src2; // one clip's file samples (disk thread)
+    std::vector<float*> src2Ptrs;
 
     AudioRing rings[2];
     std::vector<std::vector<float>> tmp;
