@@ -29,7 +29,7 @@ std::string Engine::load(const SongDef& song, const Config& c, std::vector<std::
     diskRun = false;
     if (disk.joinable()) disk.join();
     cfg = c;
-    stems.clear(); clicks.clear(); midiEvents.clear(); cues.clear();
+    stems.clear(); clickLanes.clear(); midiEvents.clear(); cues.clear();
     rampSamples = std::max(1, (int) std::lround(0.010 * cfg.sampleRate));    // live level changes
     fadeOutSamples = std::max(1, (int) std::lround(0.010 * cfg.sampleRate)); // stop
 
@@ -51,8 +51,9 @@ std::string Engine::load(const SongDef& song, const Config& c, std::vector<std::
     }
     // Live levels: a new song starts at 0 dB, unmuted; the app sets its levels after loading.
     stemGains = std::make_unique<LiveGain[]>(stems.size());
-    clickLive.set(1.0f); cueLive.set(1.0f);
+    cueLive.set(1.0f);
     for (int o : song.clickOuts) maxOut = std::max(maxOut, o);
+    for (auto& c : song.moreClicks) for (int o : c.outs) maxOut = std::max(maxOut, o);
     if (maxOut < 0) maxOut = 1;
 
     // --- tempo map: long enough for the stems, the tempo changes and all the content ---
@@ -60,6 +61,7 @@ std::string Engine::load(const SongDef& song, const Config& c, std::vector<std::
     for (auto& t : song.tempo) { lastBar = std::max(lastBar, t.bar); if (t.ramp) warnings.push_back("Tempo ramp at bar " + std::to_string(t.bar) + " is played as a jump for now."); }
     for (auto& m : song.midi) lastBar = std::max(lastBar, m.bar);
     if (song.clickHits) for (auto& h : *song.clickHits) lastBar = std::max(lastBar, h.bar);
+    for (auto& c : song.moreClicks) for (auto& h : c.hits) lastBar = std::max(lastBar, h.bar);
     for (auto& c : song.cues) lastBar = std::max(lastBar, c.bar);
     tmap.build(song.tempo, cfg.sampleRate, songLen, lastBar);
     // With stems, the song is as long as its longest stem (as before). Without stems it lasts until the
@@ -67,26 +69,40 @@ std::string Engine::load(const SongDef& song, const Config& c, std::vector<std::
     if (stems.empty()) songLen = tmap.sampleAt(lastBar + 1, 1);
     else if (song.lengthBars > 0) songLen = std::max(songLen, tmap.sampleAt(song.lengthBars + 1, 1));
 
-    // --- click ---
-    clickOuts = song.clickOuts;
-    clickGain = LiveGain::dbToGain(song.clickGainDb);
-    if (! clickOuts.empty()) {
+    // --- click tracks: [0] the main click, then the song's other click tracks, each on its own outputs ---
+    // Exactly the hits the user entered, nothing generated (except the main click of the test song / spike).
+    auto hitsOf = [&](const std::vector<ClickHitDef>& defs) {
+        std::vector<ClickHit> v;
+        for (auto& h : defs) {
+            if (h.bar < 1 || h.beat < 1) continue;
+            const int64_t s = tmap.sampleAt(h.bar, h.beat);
+            if (s < songLen) v.push_back({ s, h.accent, LiveGain::dbToGain(h.gainDb) });
+        }
+        std::stable_sort(v.begin(), v.end(), [](auto& a, auto& b) { return a.sample < b.sample; });
+        // Two hits on the same sample play once (the louder / accented one).
+        std::vector<ClickHit> unique;
+        for (auto& h : v) {
+            if (! unique.empty() && unique.back().sample == h.sample) {
+                unique.back().accent |= h.accent; unique.back().gain = std::max(unique.back().gain, h.gain);
+            } else unique.push_back(h);
+        }
+        return unique;
+    };
+    clickLanes.resize(1 + song.moreClicks.size());
+    clickLanes[0].outs = song.clickOuts;
+    clickLanes[0].gain = LiveGain::dbToGain(song.clickGainDb);
+    for (size_t k = 0; k < song.moreClicks.size(); ++k) {
+        auto& c = clickLanes[k + 1];
+        c.outs = song.moreClicks[k].outs;
+        c.gain = LiveGain::dbToGain(song.moreClicks[k].gainDb);
+        if (! c.outs.empty()) c.hits = hitsOf(song.moreClicks[k].hits);
+    }
+    clickLives = std::make_unique<LiveGain[]>(clickLanes.size());
+    for (size_t k = 0; k < clickLanes.size(); ++k) clickLives[k].set(1.0f);
+    auto& clicks = clickLanes[0].hits;
+    if (! clickLanes[0].outs.empty()) {
         if (song.clickHits) {
-            // Exactly what the user entered, nothing generated.
-            for (auto& h : *song.clickHits) {
-                if (h.bar < 1 || h.beat < 1) continue;
-                const int64_t s = tmap.sampleAt(h.bar, h.beat);
-                if (s < songLen) clicks.push_back({ s, h.accent, LiveGain::dbToGain(h.gainDb) });
-            }
-            std::stable_sort(clicks.begin(), clicks.end(), [](auto& a, auto& b) { return a.sample < b.sample; });
-            // Two hits on the same sample play once (the louder / accented one).
-            std::vector<ClickHit> unique;
-            for (auto& h : clicks) {
-                if (! unique.empty() && unique.back().sample == h.sample) {
-                    unique.back().accent |= h.accent; unique.back().gain = std::max(unique.back().gain, h.gain);
-                } else unique.push_back(h);
-            }
-            clicks.swap(unique);
+            clicks = hitsOf(*song.clickHits);
         } else {
             // Every beat (test song / spike).
             for (int b = 1; b <= tmap.numBars(); ++b) {
@@ -124,7 +140,7 @@ std::string Engine::load(const SongDef& song, const Config& c, std::vector<std::
     std::stable_sort(midiEvents.begin(), midiEvents.end(), [](auto& a, auto& b) { return a.sample < b.sample; });
     midiLog.clear(); if (cfg.offline) midiLog.reserve(std::max<size_t>(midiEvents.size() * 4 + 64, 1 << 16)); // loops replay events
 
-    pos = 0; nextClick = 0; nextMidi = 0; voice = {};
+    pos = 0; nextMidi = 0; seekClicks(0);
     ctlJump = {}; publishJump(); rtJump = {}; rtSeq = jumpSeq.load(); rtDoneSeq = ~0ull; // a new song has no loop
     fadeInLeft = fadeInLen = fadeOutLeft = 0;
     if (! cfg.offline) { diskRun = true; disk = std::thread([this] { diskLoop(); }); }
@@ -136,11 +152,21 @@ void Engine::setDeviceTiming(int bufferSamples, int outputLatencySamples)
     latencyBase.store(bufferSamples + outputLatencySamples);
 }
 
+void Engine::seekClicks(int64_t p)
+{
+    for (auto& c : clickLanes) {
+        c.next = (size_t) (std::lower_bound(c.hits.begin(), c.hits.end(), p, [](const ClickHit& h, int64_t x) { return h.sample < x; }) - c.hits.begin());
+        c.voice = {};
+    }
+}
+
 void Engine::setTrackLevel(int track, float db, bool mute)
 {
     const float g = mute ? 0.0f : LiveGain::dbToGain(db);
-    if (track == ClickTrack) clickLive.set(g);
-    else if (track == CueTrack) cueLive.set(g); // cue audio arrives with step 2; the level is ready for it
+    if (track == ClickTrack || track <= -101) {
+        const int k = track == ClickTrack ? 0 : -100 - track;
+        if (clickLives && k < (int) clickLanes.size()) clickLives[(size_t) k].set(g);
+    } else if (track == CueTrack) cueLive.set(g); // cue audio arrives with step 2; the level is ready for it
     else if (track >= 0 && track < (int) stems.size() && stemGains) stemGains[(size_t) track].set(g);
 }
 
@@ -205,14 +231,14 @@ bool Engine::start(int64_t fromSample, int timeoutMs)
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
     }
-    nextClick = (size_t) (std::lower_bound(clicks.begin(), clicks.end(), fromSample, [](const ClickHit& h, int64_t s) { return h.sample < s; }) - clicks.begin());
+    seekClicks(fromSample);
     nextMidi = (size_t) (std::lower_bound(midiEvents.begin(), midiEvents.end(), fromSample, [](const MidiAt& m, int64_t s) { return m.sample < s; }) - midiEvents.begin());
-    voice = {};
     fadeInLeft = fadeInLen = (int) preroll;
     fadeOutLeft = 0;
     rtDoneSeq = ~0ull; // a one-shot jump that already happened is armed again for this run
     for (size_t i = 0; i < stems.size(); ++i) stemGains[i].snap(); // levels set while stopped apply at once
-    clickLive.snap(); cueLive.snap();
+    for (size_t k = 0; k < clickLanes.size(); ++k) clickLives[k].snap();
+    cueLive.snap();
     pos.store(audioFrom);
     finished = false;
     stopReq.store(false);
@@ -284,7 +310,7 @@ void Engine::process(float* const* outs, int numOuts, int n)
         if (armed && p == rtJump.at) {
             for (auto& s : stems) s->jumpTo(rtJump.to); // a stem that isn't ready yet counts underruns until it is
             p = rtJump.to;
-            nextClick = (size_t) (std::lower_bound(clicks.begin(), clicks.end(), p, [](const ClickHit& h, int64_t x) { return h.sample < x; }) - clicks.begin());
+            for (auto& c : clickLanes) c.next = (size_t) (std::lower_bound(c.hits.begin(), c.hits.end(), p, [](const ClickHit& h, int64_t x) { return h.sample < x; }) - c.hits.begin());
             nextMidi = (size_t) (std::lower_bound(midiEvents.begin(), midiEvents.end(), p, [](const MidiAt& m, int64_t x) { return m.sample < x; }) - midiEvents.begin());
             if (! rtJump.repeat) rtDoneSeq = rtSeq;
             stats.jumps.fetch_add(1, std::memory_order_relaxed);
@@ -348,25 +374,28 @@ void Engine::renderSegment(float* const* outs, int numOuts, int off, int count, 
         if (s->mixInto(seg, no, count, stemGains[k].next(count, rampSamples))) stats.underruns.fetch_add(1, std::memory_order_relaxed);
     }
 
-    // 2) click: a short decaying cosine burst starting exactly on the hit's sample
-    if (! clickOuts.empty()) {
-        const GainRamp live = clickLive.next(count, rampSamples);
+    // 2) clicks, per click track: a short decaying cosine burst starting exactly on the hit's sample
+    for (size_t k = 0; k < clickLanes.size(); ++k) {
+        auto& c = clickLanes[k];
+        if (c.outs.empty()) continue;
+        const GainRamp live = clickLives[k].next(count, rampSamples);
+        auto& voice = c.voice;
         for (int i = 0; i < count; ++i) {
             const int64_t s = p + i;
-            while (nextClick < clicks.size() && clicks[nextClick].sample < s) ++nextClick; // skip anything missed
-            if (nextClick < clicks.size() && clicks[nextClick].sample == s) {
-                const auto& h = clicks[nextClick];
+            while (c.next < c.hits.size() && c.hits[c.next].sample < s) ++c.next; // skip anything missed
+            if (c.next < c.hits.size() && c.hits[c.next].sample == s) {
+                const auto& h = c.hits[c.next];
                 voice.remaining = (int) (0.035 * cfg.sampleRate);
                 voice.phase = 0;
                 voice.inc = 2.0 * 3.14159265358979 * (h.accent ? 2000.0 : 1500.0) / cfg.sampleRate;
                 voice.env = 1.0;
                 voice.decay = std::exp(-1.0 / (0.008 * cfg.sampleRate));
-                voice.amp = clickGain * (h.accent ? 1.0f : 0.6f) * h.gain;
-                ++nextClick;
+                voice.amp = c.gain * (h.accent ? 1.0f : 0.6f) * h.gain;
+                ++c.next;
             }
             if (voice.remaining > 0) {
                 const float v = voice.amp * (float) (std::cos(voice.phase) * voice.env) * live.at(i);
-                for (int o : clickOuts) if (o >= 0 && o < no && seg[o]) seg[o][i] += v;
+                for (int o : c.outs) if (o >= 0 && o < no && seg[o]) seg[o][i] += v;
                 voice.phase += voice.inc; voice.env *= voice.decay; --voice.remaining;
             }
         }

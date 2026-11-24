@@ -111,6 +111,7 @@ MappedSong mapSong(const juce::var& payload, double sr, int numOutputs,
     auto toSamples = [&](const juce::var& seconds) { return (int64_t) std::llround(toDouble(seconds, 0) * sr); }; // one rounding rule
     int noFile = 0;
     bool haveClick = false;
+    std::vector<juce::String> moreClickNames; // click tracks other than "Click", in track order
     if (auto* ts = tracks.getArray())
         for (auto& tv : *ts) {
             const auto t = tv.toString();
@@ -123,11 +124,18 @@ MappedSong mapSong(const juce::var& payload, double sr, int numOutputs,
             if (midiCfg.isObject() && midiCfg.hasProperty(tid)) continue; // MIDI track, below
             const auto role = roleOf(t);
             if (role == "click") {
-                if (haveClick) continue;
-                haveClick = true;
-                def.clickOuts = outsFor(t);
-                if (def.clickOuts.empty()) warn("The click isn't routed to an output (Outputs & MIDI page), so it won't be heard.");
-                out.engineTrack[t] = Engine::ClickTrack;
+                const auto o = outsFor(t);
+                if (o.empty()) warn(quoted(t) + " isn't routed to an output (Outputs & MIDI page), so it won't be heard.");
+                if (t == "Click" && ! haveClick) {
+                    haveClick = true;
+                    def.clickOuts = o;
+                    out.engineTrack[t] = Engine::ClickTrack;
+                } else {
+                    ClickTrackDef c; c.name = t.toStdString(); c.outs = o;
+                    def.moreClicks.push_back(c);
+                    moreClickNames.push_back(t);
+                    out.engineTrack[t] = Engine::clickTrackId((int) def.moreClicks.size());
+                }
             } else if (role == "cues") {
                 out.engineTrack[t] = Engine::CueTrack;
                 if (def.cueOuts.empty()) {
@@ -187,15 +195,16 @@ MappedSong mapSong(const juce::var& payload, double sr, int numOutputs,
             }
     }
 
-    // ---- click: exactly the notes in the click clips ----
-    const float accentGain = (float) toDouble(click["accentGain"], 0), beatGain = (float) toDouble(click["beatGain"], -4),
-                subGain = (float) toDouble(click["subGain"], -14);
-    const bool useAccent = click.hasProperty("accent") ? (bool) click["accent"] : true;
-    def.clickGainDb = -6.0f + accentGain;                       // accent level (same reference as the spike's click)
+    // ---- click tracks: exactly the notes in each one's click clips, with its own sound settings ----
+    // cfg: accent / beat / off-beat levels; clips: the track's click clips. Returns the hits and its level.
     const float engineBeatDb = 20.0f * std::log10(0.6f);        // the engine plays non-accented hits at 0.6
-    std::vector<ClickHitDef> hits;
-    if (haveClick)
-        if (auto* clips = s["ck"].getArray())
+    auto clickHitsOf = [&](const juce::var& cfg, const juce::var& clipList, float& gainDb) {
+        const float accentGain = (float) toDouble(cfg["accentGain"], 0), beatGain = (float) toDouble(cfg["beatGain"], -4),
+                    subGain = (float) toDouble(cfg["subGain"], -14);
+        const bool useAccent = cfg.hasProperty("accent") ? (bool) cfg["accent"] : true;
+        gainDb = -6.0f + accentGain;                            // accent level (same reference as the spike's click)
+        std::vector<ClickHitDef> hits;
+        if (auto* clips = clipList.getArray())
             for (auto& r : *clips) {
                 const int rb = toInt(r["bar"], 1);
                 if (auto* notes = r["notes"].getArray())
@@ -215,13 +224,26 @@ MappedSong mapSong(const juce::var& payload, double sr, int numOutputs,
                         hits.push_back(h);
                     }
             }
-    def.clickHits = hits;
-    if (haveClick) {
-        static const std::map<juce::String, const char*> soundNames { { "wood", "Woodblock" }, { "clave", "Clave" }, { "rim", "Rimshot" }, { "cow", "Cowbell" },
-                                                                    { "hat", "Hi-hat tick" }, { "sine", "Soft sine" }, { "voice", "Spoken count" }, { "custom", "Your sample" } };
-        const auto snd = click["sound"].toString();
-        if (auto it = soundNames.find(snd); it != soundNames.end())
+        return hits;
+    };
+    static const std::map<juce::String, const char*> soundNames { { "wood", "Woodblock" }, { "clave", "Clave" }, { "rim", "Rimshot" }, { "cow", "Cowbell" },
+                                                                { "hat", "Hi-hat tick" }, { "sine", "Soft sine" }, { "voice", "Spoken count" }, { "custom", "Your sample" } };
+    auto soundNote = [&](const juce::var& cfg) {
+        if (auto it = soundNames.find(cfg["sound"].toString()); it != soundNames.end())
             warn("Click sound " + quoted(it->second) + " comes later; the engine plays its standard click for now.");
+    };
+    {
+        float g = -6;
+        def.clickHits = haveClick ? clickHitsOf(click, s["ck"], g) : std::vector<ClickHitDef> {};
+        def.clickGainDb = g;
+        if (haveClick) soundNote(click);
+    }
+    for (size_t k = 0; k < moreClickNames.size(); ++k) {
+        const juce::Identifier id(moreClickNames[k]);
+        const juce::var cfg = payload["clickTracks"][id].isObject() ? payload["clickTracks"][id] : click;
+        auto& c = def.moreClicks[k];
+        c.hits = clickHitsOf(cfg, s["cks"][id], c.gainDb);
+        soundNote(cfg);
     }
 
     // ---- MIDI: events of the alternate in use, inside its regions ----

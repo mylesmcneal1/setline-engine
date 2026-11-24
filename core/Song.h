@@ -48,6 +48,15 @@ struct ClickHitDef {
     float gainDb = 0;      // per-hit level on top of the click track level (e.g. quieter subdivisions)
 };
 
+// Another click track ("Click (drums)"...): its own hits, level and outputs. The song's main click is
+// clickOuts / clickGainDb / clickHits below; these play alongside it, each sample-exact.
+struct ClickTrackDef {
+    std::string name;
+    std::vector<int> outs; // 0-based
+    float gainDb = -6;
+    std::vector<ClickHitDef> hits;
+};
+
 // One spoken cue: audio rendered ahead of time (mono, at the engine's sample rate), started exactly on
 // its bar/beat. Never synthesized during playback.
 struct CueDef {
@@ -66,6 +75,7 @@ struct SongDef {
     // When set, the engine plays exactly these click hits and generates nothing else (even if empty).
     // When not set, it clicks every beat (the test song and the spike).
     std::optional<std::vector<ClickHitDef>> clickHits;
+    std::vector<ClickTrackDef> moreClicks; // more click tracks, each on its own outputs
     std::vector<MidiEventDef> midi;
     // Spoken cues: rendered audio played from each cue's bar on the Cues track's outputs (step 2).
     std::vector<CueDef> cues;

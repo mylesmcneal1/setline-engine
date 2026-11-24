@@ -1053,6 +1053,24 @@ function deleteSong(id){ const s=songs.find(x=>x.id===id), inLists=setlists.filt
 function confirmBox(title,body,okLabel,ok){ const bg=document.createElement('div'); bg.className='cfbg'; bg.innerHTML=`<div class="cfbox"><b>${title}</b><p>${body}</p><div class="cfa"><button class="btn line" data-a="no">Cancel</button><button class="btn dangerfill" data-a="ok">${okLabel}</button></div></div>`;
   document.body.appendChild(bg); const close=()=>{ bg.remove(); document.removeEventListener('keydown',key,true); }; const key=e=>{ if(e.key==='Escape'){ e.stopPropagation(); close(); } if(e.key==='Enter'){ e.stopPropagation(); e.preventDefault(); close(); ok(); } };
   document.addEventListener('keydown',key,true); bg.onclick=e=>{ if(e.target===bg) close(); }; bg.querySelector('[data-a=no]').onclick=close; bg.querySelector('[data-a=ok]').onclick=()=>{ close(); ok(); }; bg.querySelector('[data-a=ok]').focus(); }
+// Repeat… on a click clip: copies right after it, N times or until the next section starts (the last copy is cut to
+// fit). Copies stop at the next click clip on that track and at the song's end; each copy is a normal clip.
+function repeatClip(s,t,r,mode,n){ const L=ckOf(s,t), nextClip=Math.min(s.total+1,...L.filter(q=>q.bar>r.bar).map(q=>q.bar));
+  let limit=nextClip; if(mode==='section'){ const sb=s.secPos.map(p=>p.start).filter(b=>b>r.bar).sort((a,b)=>a-b)[0]; limit=Math.min(limit,sb??s.total+1); }
+  let at=r.bar+r.bars, made=0; while(at<limit&&(mode==='section'||made<n)){ const bars=Math.min(r.bars,limit-at); L.push({id:'r'+regSeq++,bar:at,bars,notes:r.notes.filter(x=>x.b<bars).map(x=>({...x}))}); at+=bars; made++; }
+  L.sort((a,b)=>a.bar-b.bar); return made; }
+function repeatBox(s,t,r){ const bg=document.createElement('div'); bg.className='cfbg';
+  bg.innerHTML=`<div class="cfbox"><b>Repeat the click clip</b><p>Bars ${r.bar}–${r.bar+r.bars-1} on ${esc(t)}, copied right after it. Copies stop at the next click clip and at the end of the song.</p>
+    <div style="display:grid;gap:10px;margin-top:14px;font-size:12.5px">
+      <label style="display:flex;align-items:center;gap:8px"><input type="radio" name="rpm" value="n" checked> <input type="number" id="rpN" min="1" max="999" value="3" style="width:64px"> more times</label>
+      <label style="display:flex;align-items:center;gap:8px"><input type="radio" name="rpm" value="section"> Until the next section</label></div>
+    <div class="cfa"><button class="btn line" data-a="no">Cancel</button><button class="btn pri" data-a="ok">Repeat</button></div></div>`;
+  document.body.appendChild(bg); const close=()=>{ bg.remove(); document.removeEventListener('keydown',key,true); };
+  const go=()=>{ const mode=bg.querySelector('input[name=rpm]:checked').value, n=Math.max(1,Math.min(999,Math.round(+$('rpN').value||1))); close(); snap(); const made=repeatClip(s,t,r,mode,n); refresh();
+    toast(made?`Repeated ${made} time${made>1?'s':''}`:'No room after this clip: the next clip or section starts right after it'); };
+  const key=e=>{ if(e.key==='Escape'){ e.stopPropagation(); close(); } if(e.key==='Enter'){ e.stopPropagation(); e.preventDefault(); go(); } };
+  document.addEventListener('keydown',key,true); bg.onclick=e=>{ if(e.target===bg) close(); }; $('rpN').onfocus=()=>{ bg.querySelector('input[value=n]').checked=true; };
+  bg.querySelector('[data-a=no]').onclick=close; bg.querySelector('[data-a=ok]').onclick=go; $('rpN').select(); }
 function toast(msg,undo){ let t=$('toastE'); if(!t){ t=document.createElement('div'); t.id='toastE'; t.className='toastE'; document.body.appendChild(t); }
   t.innerHTML=`<span></span>${undo?'<button>Undo</button>':''}`; t.firstChild.textContent=msg; t.classList.add('show'); clearTimeout(toast.h);
   if(undo) t.querySelector('button').onclick=()=>{ t.classList.remove('show'); undo(); }; toast.h=setTimeout(()=>t.classList.remove('show'),undo?7000:2600); }
@@ -1150,8 +1168,11 @@ function renderHero(){ const h=$('hero'), s=focusSong(); document.querySelector(
 // ---------- click sound (set.Line generates the click; this sets how it sounds) ----------
 const CLICK_SOUNDS={beep:{n:'Classic beep'},wood:{n:'Woodblock'},clave:{n:'Clave'},rim:{n:'Rimshot'},cow:{n:'Cowbell'},hat:{n:'Hi-hat tick'},sine:{n:'Soft sine'},voice:{n:'Spoken “one, two…”'},custom:{n:'Your sample…'}};
 let CLICK={sound:'beep',accentSound:'',pitch:0,accent:true,accentGain:0,beatGain:-4,sub:'off',subGain:-14};
+let CLICKT={}; // the set's sound for each click track other than "Click" (falls back to CLICK)
 let clickOpen=false, clickSample=null, actx=null;
-const clickCfg=s=>s&&s.click?{...CLICK,...s.click}:CLICK;
+// A click track's settings: "Click" from this song (s.click) or the set (CLICK); another click track from this song
+// (s.clickT[t]) or the set (CLICKT[t]), else the set's main click settings.
+const clickCfg=(s,t)=>{ if(!t||t==='Click') return s&&s.click?{...CLICK,...s.click}:CLICK; const base={...CLICK,...(CLICKT[t]||{})}; return s&&s.clickT&&s.clickT[t]?{...base,...s.clickT[t]}:base; };
 function audio(){ try{ if(!actx) actx=new (window.AudioContext||window.webkitAudioContext)(); if(actx.state==='suspended') actx.resume(); }catch(e){} return actx; }
 function voice(kind,when,vel,pitch,acc){ const a=audio(); if(!a) return; const t=Math.max(a.currentTime,when), out=a.createGain(); out.gain.value=vel; out.connect(a.destination); const P=Math.pow(2,pitch/12);
   const env=(g,peak,dec)=>{ g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(peak,t+.002); g.gain.exponentialRampToValueAtTime(0.0001,t+dec); };
@@ -1178,14 +1199,14 @@ try{ pickVoice(); speechSynthesis.onvoiceschanged=pickVoice; }catch(e){}
 function sayCue(text,vol){ if(window.SLC&&text){ const s=songs.find(x=>x.id===(pick&&pick.song)||x.id===selId); if(s){ SLC.preview(s,text); return; } } try{ if(!window.speechSynthesis||!text) return; speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(text); if(cueVoice) u.voice=cueVoice; u.rate=1.08; u.volume=Math.max(0,Math.min(1,vol??1)); speechSynthesis.speak(u); }catch(e){} }
 function cuesBetween(a,b){ const s=songs.find(x=>x.id===playId); if(!s||!s.tracks.includes('Cues')||isOff(s,'Cues')) return; const LEAD=.12; // speech engines start a little late
   cuesOf(s).forEach(c=>{ const bb=s.bars[c.bar-1]; if(!bb) return; const tt=Math.max(0,bb.t-LEAD), key=s.id+'|'+c.id+'|'+bb.t; if(tt>=a&&tt<b&&key!==lastCueKey){ lastCueKey=key; sayCue(c.text,linOf(gainOf(s,'Cues'))); } }); }
-function clickBetween(a,b){ const s=songs.find(x=>x.id===playId); if(!s||!actx) return; if(!$('clickBtn').classList.contains('on')||!s.tracks.includes('Click')||isOff(s,'Click')) return;
-  const cfg=clickCfg(s), lvl=Math.min(2,linOf(gainOf(s,'Click')));
-  ckOf(s).forEach(r=>r.notes.forEach(n=>{ const bb=s.bars[r.bar+n.b-1]; if(!bb) return; const tt=bb.t+bb.dur*n.st/ckSteps(bb.sig); if(tt>=a&&tt<b&&tt!==lastClickT){ lastClickT=tt; clickHit(cfg,n.acc,!n.acc&&n.st%(16/bb.sig[1])!==0,actx.currentTime+(tt-a),lvl); } })); }
-function openClickPanel(s){ clickOpen=true; cueOpen=false; selClip=null; selSec=null; if(selId!==s.id) select(s.id,false); if(isOpen&&!isOpen('R')) setPanel('R',true); renderInsp(); $('insp').scrollTop=0; }
-function clickPanel(s){ if(!clickOpen) return ''; const c=clickCfg(s), own=!!s.click, opts=(cur,none)=>(none?`<option value="" ${!cur?'selected':''}>${none}</option>`:'')+Object.entries(CLICK_SOUNDS).map(([k,v])=>`<option value="${k}" ${cur===k?'selected':''}>${v.n}</option>`).join('');
+function clickBetween(a,b){ const s=songs.find(x=>x.id===playId); if(!s||!actx) return; if(!$('clickBtn').classList.contains('on')) return;
+  clickTracks(s).filter(t=>!isOff(s,t)).forEach(t=>{ const cfg=clickCfg(s,t), lvl=Math.min(2,linOf(gainOf(s,t)));
+  ckOf(s,t).forEach(r=>r.notes.forEach(n=>{ const bb=s.bars[r.bar+n.b-1]; if(!bb) return; const tt=bb.t+bb.dur*n.st/ckSteps(bb.sig); if(tt>=a&&tt<b&&tt!==lastClickT){ lastClickT=tt; clickHit(cfg,n.acc,!n.acc&&n.st%(16/bb.sig[1])!==0,actx.currentTime+(tt-a),lvl); } })); }); }
+function openClickPanel(s,t){ clickOpen=t||'Click'; cueOpen=false; selClip=null; selSec=null; if(selId!==s.id) select(s.id,false); if(isOpen&&!isOpen('R')) setPanel('R',true); renderInsp(); $('insp').scrollTop=0; }
+function clickPanel(s){ if(!clickOpen) return ''; const T=clickOpen, c=clickCfg(s,T), own=ownClick(s,T), opts=(cur,none)=>(none?`<option value="" ${!cur?'selected':''}>${none}</option>`:'')+Object.entries(CLICK_SOUNDS).map(([k,v])=>`<option value="${k}" ${cur===k?'selected':''}>${v.n}</option>`).join('');
   const sl=(id,v,min,max,st,u)=>`<div style="display:flex;align-items:center;gap:8px"><input type="range" class="fad wide" id="${id}" min="${min}" max="${max}" step="${st}" value="${v}" style="--p:${((v-min)/(max-min)*100).toFixed(1)}%"><span class="db" id="${id}V">${v>0&&u==='dB'?'+':''}${v}${u==='st'?' st':''}</span></div>`;
   return `<div class="secpanel ckp"><div class="kicker">CLICK SOUND</div>
-    <div class="sph"><span class="cd" style="background:#9aa0aa"></span><b style="font-size:16px;flex:1">Click</b><button class="ibtn" id="ckClose" title="Done">✕</button></div>
+    <div class="sph"><span class="cd" style="background:#9aa0aa"></span><b style="font-size:16px;flex:1">${esc(T)}</b><button class="ibtn" id="ckClose" title="Done">✕</button></div>
     <div class="seg3" id="ckScope" style="margin:6px 0 12px"><button data-v="all" class="${own?'':'on'}">All songs</button><button data-v="song" class="${own?'on':''}">Only ${esc(s.name)}</button></div>
     <div class="kv"><label>Sound</label><select id="ckSound">${opts(c.sound)}</select></div>
     ${c.sound==='custom'?`<div class="kv"><label></label><label class="btn line" style="justify-content:center;cursor:pointer">${clickSample?'Replace sample…':'Choose a sample…'}<input type="file" id="ckFile" accept="audio/*" style="display:none"></label></div>`:''}
@@ -1196,19 +1217,23 @@ function clickPanel(s){ if(!clickOpen) return ''; const c=clickCfg(s), own=!!s.c
     <div class="kv"><label>Off-beats</label>${sl('ckSubG',c.subGain,-30,0,1,'dB')}</div>
     <div class="acts" style="margin-top:10px"><button class="btn pri" id="ckPrev">▶ Preview a bar</button>${own?'<button class="btn" id="ckReset">Use the set’s click</button>':''}</div>
     <p class="faint" style="font-size:11px;margin-top:10px;line-height:1.5">These settings decide how the click sounds. Where it clicks comes from the click clips you put on the Click track: double-click a clip to edit its beats. Off-beats are notes between the beats.</p></div>`; }
-function wireClickPanel(s){ if(!$('ckClose')) return; const own=()=>!!s.click, set=(k,v)=>{ if(own()) s.click[k]=v; else CLICK[k]=v; }, rr=()=>{ renderInsp(); renderFolders(); };
+// Click settings: "Click" uses s.click (this song) / CLICK (the set); another click track s.clickT[t] / CLICKT[t].
+function ownClick(s,t){ return t==='Click'?!!s.click:!!(s.clickT&&s.clickT[t]); }
+function wireClickPanel(s){ if(!$('ckClose')) return; const T=clickOpen, main=T==='Click', own=()=>ownClick(s,T), cfg=()=>clickCfg(s,T),
+    set=(k,v)=>{ if(own()) (main?s.click:s.clickT[T])[k]=v; else if(main) CLICK[k]=v; else (CLICKT[T]||(CLICKT[T]={...CLICK}))[k]=v; }, rr=()=>{ renderInsp(); renderFolders(); };
   $('ckClose').onclick=()=>{ clickOpen=false; renderInsp(); };
-  $('ckScope').querySelectorAll('button').forEach(b=>b.onclick=()=>{ if(b.dataset.v==='song'&&!s.click) s.click={...CLICK}; if(b.dataset.v==='all') delete s.click; rr(); });
-  $('ckSound').onchange=e=>{ set('sound',e.target.value); clickHit(clickCfg(s),false,false); rr(); };
-  if($('ckFile')) $('ckFile').onchange=e=>{ const f=e.target.files[0]; if(!f) return; f.arrayBuffer().then(buf=>audio().decodeAudioData(buf)).then(b=>{ clickSample=b; set('name',f.name.replace(/\.[^.]+$/,'')); clickHit(clickCfg(s),false,false); rr(); }).catch(()=>alert('That file could not be read as audio.')); };
-  if($('ckAccSound')) $('ckAccSound').onchange=e=>{ set('accentSound',e.target.value); clickHit(clickCfg(s),true,false); };
+  $('ckScope').querySelectorAll('button').forEach(b=>b.onclick=()=>{ if(b.dataset.v==='song'&&!own()){ if(main) s.click={...CLICK}; else (s.clickT||(s.clickT={}))[T]={...cfg()}; }
+    if(b.dataset.v==='all'){ if(main) delete s.click; else if(s.clickT) delete s.clickT[T]; } rr(); });
+  $('ckSound').onchange=e=>{ set('sound',e.target.value); clickHit(cfg(),false,false); rr(); };
+  if($('ckFile')) $('ckFile').onchange=e=>{ const f=e.target.files[0]; if(!f) return; f.arrayBuffer().then(buf=>audio().decodeAudioData(buf)).then(b=>{ clickSample=b; set('name',f.name.replace(/\.[^.]+$/,'')); clickHit(cfg(),false,false); rr(); }).catch(()=>alert('That file could not be read as audio.')); };
+  if($('ckAccSound')) $('ckAccSound').onchange=e=>{ set('accentSound',e.target.value); clickHit(cfg(),true,false); };
   [['ckPitch','pitch','st'],['ckAccG','accentGain','dB'],['ckBeatG','beatGain','dB'],['ckSubG','subGain','dB']].forEach(([id,k,u])=>{ const el=$(id); if(!el) return;
     el.oninput=()=>{ const v=+el.value; set(k,v); el.style.setProperty('--p',((v-el.min)/(el.max-el.min)*100).toFixed(1)+'%'); $(id+'V').textContent=(v>0&&u==='dB'?'+':'')+v+(u==='st'?' st':''); };
-    el.onchange=()=>clickHit(clickCfg(s),k==='accentGain',k==='subGain'); });
+    el.onchange=()=>clickHit(cfg(),k==='accentGain',k==='subGain'); });
   $('ckAcc').querySelectorAll('button').forEach(b=>b.onclick=()=>{ set('accent',b.dataset.v==='1'); rr(); });
-  $('ckPrev').onclick=()=>{ const a=audio(); if(!a) return; const c=clickCfg(s), bpm=bpmAt(s,1), sig=s.tmap[0].sig, beat=60/bpm*4/sig[1], div=1;
+  $('ckPrev').onclick=()=>{ const a=audio(); if(!a) return; const c=cfg(), bpm=bpmAt(s,1), sig=s.tmap[0].sig, beat=60/bpm*4/sig[1], div=1;
     for(let k=0;k<sig[0];k++) for(let d=0;d<div;d++) clickHit(c,k===0&&d===0,d>0,a.currentTime+.05+k*beat+d*beat/div); };
-  if($('ckReset')) $('ckReset').onclick=()=>{ delete s.click; rr(); }; }
+  if($('ckReset')) $('ckReset').onclick=()=>{ if(main) delete s.click; else if(s.clickT) delete s.clickT[T]; rr(); }; }
 
 // ---------- cue voice (a copy of the click panel): one voice for the set, or this song's own ----------
 // Voices: in the app the system's installed voices (window.SLPage.setVoices); in a browser its own speech voices.
@@ -1359,8 +1384,8 @@ function renderFolders(){
       const mid=isMidiTrack(s,t), role=ROLE[t], route=mid?`${PORT_SHORT[s.midiCfg[t].port]} · Ch ${s.midiCfg[t].ch}`:(routeOf(s,t)?esc(routeOf(s,t))+(routeOvr(s,t)?' <span style="color:var(--cyan)" title="This song only (set in the inspector)">· this song</span>':''):''), c=mid?'var(--blue)':(TCOL[t]||'#999');
       const off=!mid&&isOff(s,t), solo=!!(s.solo||{})[t];
       h+=`<div class="row trk ${mid?'midi':''} ${off?'muted':''}"><div class="lh"><span class="c" style="background:${c}"></span><span class="tno">${ti+1}</span>
-        <span class="tx"><span class="tn">${esc(t)}</span><span class="rt">${route||'<span style="color:var(--accent)">not routed</span>'}${role==='click'?` · <span style="color:var(--muted)">${esc(clickCfg(s).sound==='custom'&&clickCfg(s).name?clickCfg(s).name:CLICK_SOUNDS[clickCfg(s).sound].n)}</span>`:''}${role==='cues'?` · <span style="color:${(cueCfg(s).voice||cueCfg(s).name)&&!voiceFound(cueCfg(s))?'var(--amber)':'var(--muted)'}">${esc(voiceLabel(cueCfg(s)))}</span>`:''}${mid?` · ${altSelect(s,t)}`:''}</span></span>
-        ${role==='click'?`<button class="cgear" data-song="${id}" title="Click sound">⚙</button>`:''}${role==='cues'?`<button class="cgear" data-song="${id}" data-kind="cues" title="Cue voice">⚙</button>`:''}
+        <span class="tx"><span class="tn">${esc(t)}</span><span class="rt">${route||'<span style="color:var(--accent)">not routed</span>'}${role==='click'?` · <span style="color:var(--muted)">${esc(clickCfg(s,t).sound==='custom'&&clickCfg(s,t).name?clickCfg(s,t).name:CLICK_SOUNDS[clickCfg(s,t).sound].n)}</span>`:''}${role==='cues'?` · <span style="color:${(cueCfg(s).voice||cueCfg(s).name)&&!voiceFound(cueCfg(s))?'var(--amber)':'var(--muted)'}">${esc(voiceLabel(cueCfg(s)))}</span>`:''}${mid?` · ${altSelect(s,t)}`:''}</span></span>
+        ${role==='click'?`<button class="cgear" data-song="${id}" data-track="${esc(t)}" title="Click sound">⚙</button>`:''}${role==='cues'?`<button class="cgear" data-song="${id}" data-kind="cues" title="Cue voice">⚙</button>`:''}
         ${!mid&&!routeOf(s,t)?'<span class="newr" data-tip="Not routed yet: plays nowhere. Route this track name once on the Outputs page"></span>':''}
         ${mid?`<button class="edm" data-song="${id}" data-track="${esc(t)}">Edit MIDI</button>`:`<span class="ms"><button class="mb ${(s.mute||{})[t]?'on':''}" data-song="${id}" data-track="${esc(t)}" title="Mute">M</button><button class="sb ${solo?'on':''}" data-song="${id}" data-track="${esc(t)}" title="Solo (Alt-click: solo only this)">S</button></span>${volCtl(s,t,false).replace(/<button class="mb[^>]*>M<\/button>/,'')}<span class="hm"><b data-m="${id}|${esc(t)}"></b></span>`}</div>
         <div class="lane" style="width:${W}px"><canvas data-song="${id}" data-t="${ti}" data-w="${W}" width="1" height="${TH}" style="width:1px;height:${TH}px"></canvas></div></div>`;
@@ -1371,7 +1396,7 @@ function renderFolders(){
   });
   sc.scrollTop=keepT; sc.scrollLeft=keepL; viewM=null;
   wireVerSelects(sc); wireAltSelects(sc);
-  sc.querySelectorAll('.cgear').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const so=songs.find(x=>x.id===b.dataset.song); b.dataset.kind==='cues'?openCuePanel(so):openClickPanel(so); });
+  sc.querySelectorAll('.cgear').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const so=songs.find(x=>x.id===b.dataset.song); b.dataset.kind==='cues'?openCuePanel(so):openClickPanel(so,b.dataset.track); });
   sc.querySelectorAll('.fh').forEach(hd=>hd.oncontextmenu=e=>{ e.preventDefault(); songMenu(e,hd.closest('.folder').dataset.id,'list'); });
   sc.querySelectorAll('.fh').forEach(hd=>hd.onclick=e=>{ if(e.target.closest('.fplay')) return; const id=hd.closest('.folder').dataset.id; open.has(id)?open.delete(id):open.add(id); select(id,false); renderFolders(); });
   sc.querySelectorAll('.fmore').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const r=b.getBoundingClientRect(); songMenu({clientX:r.left,clientY:r.bottom+4},b.dataset.song,'list'); });
@@ -1383,7 +1408,10 @@ function renderFolders(){
   sc.querySelectorAll('.addTempo').forEach(b=>b.onclick=()=>{ const s=songs.find(x=>x.id===b.dataset.song); addPoint(s,{bar:Math.min(s.total,Math.max(...s.tmap.map(e=>e.bar))+8),bpm:Math.round(bpmAt(s,s.total))}); });
   sc.querySelectorAll('.addTrk').forEach(b=>b.onclick=e=>{ const s=songs.find(x=>x.id===b.dataset.song), r=b.getBoundingClientRect();
     ctxMenu({clientX:r.left,clientY:r.bottom+4},[{label:'Audio (import stems)…',icon:'♪',act:()=>{ if(NATIVE&&window.SLE) SLE.addStems(s); else toast('In the app this opens a file picker; stems land on new audio tracks'); }},{label:'MIDI track',icon:'⎍',act:()=>{ snap(); newMidiTrack(s.id); }},
-      {label:'Click track',icon:'♩',dis:s.tracks.includes('Click'),act:()=>{ snap(); s.tracks.unshift('Click'); s.ck=[]; refresh(); toast('Click track added. Double-click it to add a click clip.'); }},
+      {label:s.tracks.includes('Click')?'Another click track':'Click track',icon:'♩',act:()=>{ snap(); if(!s.tracks.includes('Click')){ s.tracks.unshift('Click'); s.ck=[]; refresh(); toast('Click track added. Double-click it to add a click clip.'); return; }
+        let n=2, name='Click ('+n+')'; while(s.tracks.includes(name)) name='Click ('+(++n)+')'; const last=Math.max(...clickTracks(s).map(x=>s.tracks.indexOf(x)));
+        s.tracks.splice(last+1,0,name); (s.troles||(s.troles={}))[name]='Click'; regRoles(s); ckOf(s,name); refresh();
+        toast(`“${name}” added: its own clips, sound (⚙), level and outputs. Right-click its name to rename it (e.g. Click (drums)), then route it on Outputs & MIDI.`); }},
       {label:'Cues track',icon:'“',dis:s.tracks.includes('Cues'),act:()=>{ snap(); s.tracks.splice(s.tracks.includes('Click')?1:0,0,'Cues'); s.cues=[]; refresh(); toast('Cues track added. Double-click it to add a cue.'); }}]); });
   sc.querySelectorAll('.trk .lh').forEach(lh=>lh.oncontextmenu=e=>{ e.preventDefault(); const cv=lh.parentElement.querySelector('canvas'); const s=songs.find(x=>x.id===cv.dataset.song), i=+cv.dataset.t, t=s.tracks[i];
     ctxMenu(e,[{label:'Rename…',icon:'✎',dis:['Click','Cues'].includes(t),act:()=>{ const r=lh.querySelector('.tn').getBoundingClientRect(); floatInput(r.left,r.top-2,160,24,t,v=>{ if(!v||v===t||s.tracks.includes(v)) return; snap(); renameTrack(s,t,v); refresh(); }); }},
@@ -1432,7 +1460,7 @@ function drawLane(cv){
   const y0=clip(g,0,AW,H,role==='click'||role==='cues'?'#7d8696':c,role==='midi'?t:role==='click'?'Click (generated)':role==='cues'?'Cues (generated)':t,off), y1=H-4, mid=(y0+y1)/2, half=(y1-y0)/2-1;
   const secAtT=sec=>{ for(const p of s.secPos){ const a=s.bars[p.start-1].t,b=s.bars[p.start-1+p.bars].t; if(sec>=a&&sec<b) return p; } return null; };
   const xOf=bar=>s.bars[Math.min(bar,s.total+1)-1].t*PXS, isPick=(k,id)=>pick&&pick.kind===k&&pick.song===s.id&&pick.track===t&&pick.id===id;
-  if(role==='click'){ g.clearRect(0,0,W,H); const regs=ckOf(s);
+  if(role==='click'){ g.clearRect(0,0,W,H); const regs=ckOf(s,t);
     regs.forEach(r=>{ const x0=xOf(r.bar), x1=xOf(r.bar+r.bars); const y0=clip(g,x0,x1-x0,H,'#9aa0aa',r.notes.length?'':'Empty',off), y1=H-4, mid=(y0+y1)/2, half=(y1-y0)/2-1;
       r.notes.forEach(n=>{ const bb=s.bars[r.bar+n.b-1]; if(!bb) return; const X=(bb.t+bb.dur*n.st/ckSteps(bb.sig))*PXS; g.fillStyle=off?'#3a3f48':(n.acc?'#f0f2f5':'#8a909b'); const hh=n.acc?half:half*.55; g.fillRect(X,mid-hh,1.5,hh*2); });
       if(isPick('ck',r.id)){ g.strokeStyle='#fff'; g.lineWidth=1.5; g.beginPath(); g.roundRect(x0+.75,3.75,x1-x0-1.5,H-7.5,4); g.stroke(); } });
@@ -1500,7 +1528,10 @@ const hash01=n=>{ n=(n^61)^(n>>>16); n=Math.imul(n,9); n^=n>>>4; n=Math.imul(n,0
 let regSeq=1, pick=null, CB=null;
 function regsOf(s,t){ const a=curAlt(s,t); if(!a.regions){ const bars=[...new Set(a.events.map(e=>e.bar))].sort((x,y)=>x-y); a.regions=bars.map((b,i)=>({id:'r'+regSeq++,bar:b,bars:Math.max(1,(bars[i+1]||Math.min(b+8,s.total+1))-b)})); } return a.regions; }
 const evIn=(evs,r)=>evs.filter(e=>e.bar>=r.bar&&e.bar<r.bar+r.bars);
-function ckOf(s){ return s.ck||(s.ck=[]); }
+// Click clips per click track: "Click" (the main one) in s.ck, any other ("Click (drums)") in s.cks[name]. A click
+// track other than "Click" is marked with s.troles[name]='Click', so it has the click role everywhere (regRoles).
+function ckOf(s,t){ if(!t||t==='Click') return s.ck||(s.ck=[]); const m=s.cks||(s.cks={}); return m[t]||(m[t]=[]); }
+const clickTracks=s=>s.tracks.filter(t=>ROLE[t]==='click');
 function cuesOf(s){ return s.cues||(s.cues=[]); }
 function ckSteps(sig){ return Math.max(1,Math.round(sig[0]*16/sig[1])); }
 function fillCk(s,r,div){ r.notes=[]; for(let i=0;i<r.bars;i++){ const sig=sigAt(s,r.bar+i), per=16/sig[1]; for(let k=0;k<sig[0];k++) for(let d=0;d<div;d++){ const st=Math.round(k*per+d*per/div); if(d>0&&per/div<1) continue; r.notes.push({b:i,st,acc:k===0&&d===0}); } } }
@@ -1546,7 +1577,7 @@ function splitClip(s,t,cl,time){ if(!(time>cl.start+0.05&&time<cl.end-0.05)) ret
   const nb={...cl,id:clipSeq++,start:time,off:cl.off+(time-cl.start),fi:0}; cl.end=time; cl.fo=0; list.splice(i+1,0,nb); selClip={song:s.id,track:t,id:nb.id}; redrawTrack(s,t); renderInsp(); return true; }
 function delClip(s,t,cl){ snap(); const list=clipsOf(s,t); list.splice(list.indexOf(cl),1); selClip=null; redrawTrack(s,t); renderInsp(); }
 function laneMenuFor(s,t){ return ROLE[t]==='click'?'ck':isMidiTrack(s,t)?'mreg':ROLE[t]==='cues'?'cue':null; }
-function regList(s,t,k){ return k==='ck'?ckOf(s):regsOf(s,t); }
+function regList(s,t,k){ return k==='ck'?ckOf(s,t):regsOf(s,t); }
 function redrawSong(s){ s.tracks.forEach((tt,i)=>document.querySelectorAll(`canvas[data-song="${s.id}"][data-t="${i}"]`).forEach(drawLane)); }
 function setPick(p){ const prev=pick; pick=p; if(p){ selClip=null; selSec=null; clickOpen=false; } [prev,p].forEach(q=>{ if(q){ const so=songs.find(x=>x.id===q.song); if(so) redrawSong(so); } }); if(p&&selId!==p.song) select(p.song,false); else renderInsp(); }
 function wireRegLane(cv){ const s=songs.find(x=>x.id===cv.dataset.song), t=s.tracks[+cv.dataset.t], k=laneMenuFor(s,t); if(!k) return false; cv.onclick=null;
@@ -1573,25 +1604,25 @@ function wireRegLane(cv){ const s=songs.find(x=>x.id===cv.dataset.song), t=s.tra
       else { const nb=Math.max(lo,Math.min(o.bar+o.bars-1,nearestBoundary(s,(x0+dx)/PXS))); if(k==='ck'){ const d=nb-r.bar; r.notes=r.notes.map(n=>({...n,b:n.b-d})).filter(n=>n.b>=0); } r.bar=nb; r.bars=o.bar+o.bars-nb; }
       drawLane(cv); showTip(`bars ${r.bar}–${r.bar+r.bars-1} (${r.bars})`,m); };
     cv.onpointerup=()=>{ cv.onpointermove=null; hideTip(); if(mv){ undoS.push(pre); redoS=[]; if(k==='ck'&&mode==='r'&&r.bars>o.bars){ const extra={...r,notes:[]}; fillCk(s,extra,1); r.notes=[...r.notes,...extra.notes.filter(n=>n.b>=o.bars)]; drawLane(cv); } } }; };
-  cv.ondblclick=e=>{ const r=at(lx(cv,e)); if(r){ if(k==='mreg') openMidi(s.id,t); else openCkEd(s,r); return; }
+  cv.ondblclick=e=>{ const r=at(lx(cv,e)); if(r){ if(k==='mreg') openMidi(s.id,t); else openCkEd(s,r,t); return; }
     const b=barAtTime(s,lx(cv,e)/PXS), others=list(), nx=Math.min(s.total+1,...others.filter(q=>q.bar>b).map(q=>q.bar)); if(others.some(q=>b>=q.bar&&b<q.bar+q.bars)) return; snap();
-    const r2={id:'r'+regSeq++,bar:b,bars:Math.max(1,Math.min(k==='ck'?s.total+1-b:4,nx-b))}; if(k==='ck') fillCk(s,r2,1); list().push(r2); list().sort((a,b)=>a.bar-b.bar); setPick({kind:k,song:s.id,track:t,id:r2.id}); };
+    const r2={id:'r'+regSeq++,bar:b,bars:Math.max(1,Math.min(k==='ck'?1:4,nx-b))}; /* a new click clip is one bar: Repeat… or drag its edge for more */ if(k==='ck') fillCk(s,r2,1); list().push(r2); list().sort((a,b)=>a.bar-b.bar); setPick({kind:k,song:s.id,track:t,id:r2.id}); };
   cv.oncontextmenu=e=>{ e.preventDefault(); const r=at(lx(cv,e)); if(!r) return; setPick({kind:k,song:s.id,track:t,id:r.id});
-    ctxMenu(e,[...(k==='ck'?[{label:'Edit beats…',icon:'▦',act:()=>openCkEd(s,r)},{label:'Fill with quarter notes',icon:'♩',act:()=>{ snap(); fillCk(s,r,1); drawLane(cv); }},{label:'Fill with 8ths',icon:'♫',act:()=>{ snap(); fillCk(s,r,2); drawLane(cv); }},{label:'Fill with 16ths',icon:'♬',act:()=>{ snap(); fillCk(s,r,4); drawLane(cv); }},{label:'Clear beats',icon:'○',act:()=>{ snap(); r.notes=[]; drawLane(cv); }},'-']:[{label:'Edit MIDI…',icon:'✎',act:()=>openMidi(s.id,t)},'-']),
+    ctxMenu(e,[...(k==='ck'?[{label:'Edit beats…',icon:'▦',act:()=>openCkEd(s,r,t)},{label:'Repeat…',icon:'↻',act:()=>repeatBox(s,t,r)},{label:'Fill with quarter notes',icon:'♩',act:()=>{ snap(); fillCk(s,r,1); drawLane(cv); }},{label:'Fill with 8ths',icon:'♫',act:()=>{ snap(); fillCk(s,r,2); drawLane(cv); }},{label:'Fill with 16ths',icon:'♬',act:()=>{ snap(); fillCk(s,r,4); drawLane(cv); }},{label:'Clear beats',icon:'○',act:()=>{ snap(); r.notes=[]; drawLane(cv); }},'-']:[{label:'Edit MIDI…',icon:'✎',act:()=>openMidi(s.id,t)},'-']),
       {label:'Copy',icon:'⧉',act:()=>doCopy()},{label:'Duplicate',icon:'⊕',act:()=>doDup()},{label:'Delete',icon:'⌫',danger:true,act:()=>doDelete()}]); };
   return true; }
 // click beat editor (one row per bar, a cell per 16th; tap: off → beat → accent)
 let ckEd=null;
-function openCkEd(s,r){ ckEd={song:s.id,id:r.id}; if(ed.song) closeMidi(); if(mixOpen) setMixer(false); renderCkEd(); }
-function renderCkEd(){ const box=$('ckEd'); if(!ckEd){ box.classList.remove('open'); box.innerHTML=''; return; } const s=songs.find(x=>x.id===ckEd.song), r=s&&ckOf(s).find(x=>x.id===ckEd.id); if(!r){ ckEd=null; return renderCkEd(); }
+function openCkEd(s,r,t){ ckEd={song:s.id,id:r.id,track:t||clickTracks(s).find(x=>ckOf(s,x).includes(r))||'Click'}; if(ed.song) closeMidi(); if(mixOpen) setMixer(false); renderCkEd(); }
+function renderCkEd(){ const box=$('ckEd'); if(!ckEd){ box.classList.remove('open'); box.innerHTML=''; return; } const s=songs.find(x=>x.id===ckEd.song), r=s&&ckOf(s,ckEd.track).find(x=>x.id===ckEd.id); if(!r){ ckEd=null; return renderCkEd(); }
   box.classList.add('open'); let rows='';
   for(let i=0;i<r.bars;i++){ const sig=sigAt(s,r.bar+i), n=ckSteps(sig), per=16/sig[1]; rows+=`<div class="ckr"><span class="ckb">${r.bar+i}<em>${sig.join('/')}</em></span><div class="ckc" style="grid-template-columns:repeat(${n},1fr)">${Array.from({length:n},(_,st)=>{ const nt=r.notes.find(q=>q.b===i&&q.st===st); return `<i data-b="${i}" data-st="${st}" class="${nt?(nt.acc?'acc':'on'):''} ${st%per===0?'beat':''}"></i>`; }).join('')}</div></div>`; }
-  box.innerHTML=`<div class="dhead"><span class="lbl" style="color:var(--text)">Click beats</span><span class="dsub">${esc(s.name)} · bars ${r.bar}–${r.bar+r.bars-1} · tap a cell: off → beat → accent</span>
+  box.innerHTML=`<div class="dhead"><span class="lbl" style="color:var(--text)">${esc(ckEd.track)} beats</span><span class="dsub">${esc(s.name)} · bars ${r.bar}–${r.bar+r.bars-1} · tap a cell: off → beat → accent</span>
     <div class="seg" style="margin-left:auto"><button data-f="1">Quarters</button><button data-f="2">8ths</button><button data-f="4">16ths</button><button data-f="0">Clear</button></div><button class="ibtn" id="ckX" title="Close  Esc">✕</button></div><div class="ckg">${rows}</div>`;
   $('ckX').onclick=()=>{ ckEd=null; renderCkEd(); };
   box.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{ snap(); +b.dataset.f?fillCk(s,r,+b.dataset.f):(r.notes=[]); redrawSong(s); renderCkEd(); });
   box.querySelectorAll('.ckc i').forEach(c=>c.onpointerdown=()=>{ snap(); const b=+c.dataset.b, st=+c.dataset.st, nt=r.notes.find(q=>q.b===b&&q.st===st); if(!nt){ r.notes.push({b,st,acc:false}); } else if(!nt.acc) nt.acc=true; else r.notes=r.notes.filter(q=>q!==nt);
-    const k=r.notes.find(q=>q.b===b&&q.st===st); c.className=(k?(k.acc?'acc':'on'):'')+(c.classList.contains('beat')?' beat':''); redrawSong(s); if(k) clickHit(clickCfg(s),k.acc,false); }); }
+    const k=r.notes.find(q=>q.b===b&&q.st===st); c.className=(k?(k.acc?'acc':'on'):'')+(c.classList.contains('beat')?' beat':''); redrawSong(s); if(k) clickHit(clickCfg(s,ckEd.track),k.acc,false); }); }
 // ---------- clipboard: copy / cut / paste / duplicate / delete ----------
 function curItem(){ if(selClip){ const s=songs.find(x=>x.id===selClip.song), cl=s&&clipsOf(s,selClip.track).find(c=>c.id===selClip.id); return cl?{kind:'audio',s,t:selClip.track,o:cl}:null; }
   if(pick){ const s=songs.find(x=>x.id===pick.song); if(!s) return null; const L=pick.kind==='cue'?cuesOf(s):regList(s,pick.track,pick.kind), o=L.find(x=>x.id===pick.id); return o?{kind:pick.kind,s,t:pick.track,o}:null; }
@@ -1611,7 +1642,7 @@ function pasteAt(s,t,at){ if(!CB) return; const k=CB.kind, o=JSON.parse(JSON.str
     out.push(o); out.sort((a,b)=>a.start-b.start); s.clips[t]=out; selClip={song:s.id,track:t,id:o.id}; pick=null; locate(s,o.end); }
   else if(k==='sec'){ const bar=nearestBoundary(s,at), r=freeRange(s,bar); if(!r||r[1]-bar<1){ toast('No room for the section there'); return; } snap(); o.id=sid++; o.start=bar; o.bars=Math.min(o.bars,r[1]-bar); s.secs.push(o); buildBars(s); selSec={song:s.id,id:o.id}; locate(s,s.bars[Math.min(o.start+o.bars,s.total+1)-1].t); }
   else if(k==='cue'){ if(!s.tracks.includes('Cues')){ toast(`${s.name} has no Cues track`); return; } snap(); o.id='c'+regSeq++; o.bar=nearestBoundary(s,at); cuesOf(s).push(o); pick={kind:'cue',song:s.id,track:'Cues',id:o.id}; }
-  else { const tt=k==='ck'?'Click':t; if(!s.tracks.includes(tt)||(k==='mreg'&&!isMidiTrack(s,tt))){ toast(`No “${tt}” track in ${s.name}`); return; } snap(); const bar=nearestBoundary(s,at), L=regList(s,tt,k);
+  else { const tt=k==='ck'?(s.tracks.includes(t)&&ROLE[t]==='click'?t:'Click'):t; if(!s.tracks.includes(tt)||(k==='mreg'&&!isMidiTrack(s,tt))){ toast(`No “${tt}” track in ${s.name}`); return; } snap(); const bar=nearestBoundary(s,at), L=regList(s,tt,k);
     const ne=bar+o.bars; for(const q of [...L]){ if(q.bar+q.bars<=bar||q.bar>=ne) continue; if(q.bar>=bar&&q.bar+q.bars<=ne){ L.splice(L.indexOf(q),1); if(k==='mreg'){ const ev=evIn(s.midi[tt],q); s.midi[tt].splice(0,s.midi[tt].length,...s.midi[tt].filter(e=>!ev.includes(e))); } } else if(q.bar<bar) q.bars=bar-q.bar; else { const d=ne-q.bar; q.bar=ne; q.bars-=d; } }
     const n={id:'r'+regSeq++,bar,bars:o.bars}; if(k==='ck') n.notes=o.notes; else o.events.forEach(e=>{ const c={...e,id:evId++,bar:bar+e.rel,anchor:'free'}; delete c.rel; s.midi[tt].push(c); }); L.push(n); L.sort((a,b)=>a.bar-b.bar); buildBars(s);
     pick={kind:k,song:s.id,track:tt,id:n.id}; selClip=null; locate(s,s.bars[Math.min(n.bar+n.bars,s.total+1)-1].t); }
@@ -1790,7 +1821,7 @@ function pickPanel(s){ if(!pick||pick.song!==s.id) return ''; const it=curItem()
     ${isCk?`<div class="kv"><label>Fill with</label><div class="seg3" id="pkFill"><button data-f="1">Quarters</button><button data-f="2">8ths</button><button data-f="4">16ths</button><button data-f="0">Clear</button></div></div>`:''}
     <div class="acts"><button class="btn pri" data-pk="edit">${isCk?'Edit beats…':'Edit MIDI…'}</button><button class="btn line" data-pk="dup">Duplicate</button><button class="btn danger" data-pk="del">Delete</button></div></div>`; }
 function wirePickPanel(s){ const it=curItem(); if(!it||!pick) return; const p=$('insp');
-  p.querySelectorAll('[data-pk]').forEach(b=>b.onclick=()=>{ const a=b.dataset.pk; if(a==='del') doDelete(); else if(a==='dup') doDup(); else if(a==='edit'){ it.kind==='ck'?openCkEd(s,it.o):openMidi(s.id,it.t); } });
+  p.querySelectorAll('[data-pk]').forEach(b=>b.onclick=()=>{ const a=b.dataset.pk; if(a==='del') doDelete(); else if(a==='dup') doDup(); else if(a==='edit'){ it.kind==='ck'?openCkEd(s,it.o,it.t):openMidi(s.id,it.t); } });
   if($('pkText')) $('pkText').onchange=e=>{ snap(); it.o.text=e.target.value.trim()||it.o.text; sayCue(it.o.text); redrawSong(s); renderInsp(); };
   if($('pkBar')) $('pkBar').onchange=e=>{ const v=parseInt(e.target.value); if(!(v>=1)) return; snap(); const d=v-it.o.bar; if(it.kind==='mreg') evIn(s.midi[it.t],it.o).forEach(ev=>ev.bar+=d); it.o.bar=v; buildBars(s); refresh(); };
   if($('pkLen')) $('pkLen').onchange=e=>{ const v=parseInt(e.target.value); if(!(v>=1)) return; snap(); it.o.bars=v; if(it.kind==='ck') it.o.notes=it.o.notes.filter(n=>n.b<v); buildBars(s); refresh(); };
@@ -1863,7 +1894,7 @@ const drawer=$('drawer');
 function openMidi(songId,track){ Object.assign(ed,{song:songId,track,sel:null,tab:'events',pSel:null}); selId=songId; open.add(songId); drawer.classList.add('open'); refresh();
   setTimeout(()=>{ const s=songs.find(x=>x.id===songId); const i=s.tracks.indexOf(track); document.querySelector(`canvas[data-song="${songId}"][data-t="${i}"]`)?.scrollIntoView({block:'nearest'}); },0); }
 function closeMidi(){ ed.song=null; drawer.classList.remove('open'); drawer.innerHTML=''; setTimeout(()=>$('scroller').style.setProperty('--vw',$('scroller').clientWidth+'px'),0); }
-function renameTrack(s,a,b){ s.tracks[s.tracks.indexOf(a)]=b; ['midiCfg','midi','secMap','malts','muse','gain','mute','solo','clips','files','troles','outs'].forEach(k=>{ if(s[k]&&s[k][a]!==undefined){ s[k][b]=s[k][a]; delete s[k][a]; } }); if(ROLE[b]===undefined&&ROLE[a]!==undefined&&s.files&&s.files[b]){ (s.troles||(s.troles={}))[b]=s.troles[b]||a; regRoles(s); } }
+function renameTrack(s,a,b){ s.tracks[s.tracks.indexOf(a)]=b; ['midiCfg','midi','secMap','malts','muse','gain','mute','solo','clips','files','troles','outs','cks','clickT'].forEach(k=>{ if(s[k]&&s[k][a]!==undefined){ s[k][b]=s[k][a]; delete s[k][a]; } }); if(ROLE[b]===undefined&&ROLE[a]!==undefined&&s.files&&s.files[b]){ (s.troles||(s.troles={}))[b]=s.troles[b]||a; regRoles(s); } if(s.troles&&s.troles[b]==='Click'){ regRoles(s); if(CLICKT[a]){ CLICKT[b]=CLICKT[a]; delete CLICKT[a]; } } }
 function newMidiTrack(songId){ const s=songs.find(x=>x.id===songId); let n=1,name='MIDI '+n; while(s.tracks.includes(name)) name='MIDI '+(++n);
   s.tracks.push(name); s.midiCfg[name]={port:PORTS[3],ch:16,profile:'gen',early:'0'}; s.midi[name]=[]; s.secMap[name]={}; ed.settings=true; openMidi(songId,name); }
 const curSong=()=>songs.find(x=>x.id===ed.song);
@@ -2133,8 +2164,8 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
   setPos(t){ pos=t; }, setPlayId(id){ playId=id; document.querySelectorAll('.folder').forEach(f=>f.classList.toggle('playing',f.dataset.id===playId)); }, setPlaying(b){ playing=b; $('playBtn').classList.toggle('on',b); last=performance.now(); requestAnimationFrame(tick); },
   redraw(){ lcd(); },
   // Everything a .setline session holds.
-  sessionData(){ const o=JSON.parse(ser()); o.presets=presets.filter(p=>!p.built); o.click=CLICK; o.cueVoice=CUEV; if(Object.keys(PRON).length) o.pron=PRON; return o; },
-  loadSession(o){ if(Array.isArray(o.presets)){ presets=[...presets.filter(p=>p.built),...o.presets]; } if(o.click) CLICK={...CLICK,...o.click}; CUEV={voice:'',name:'',speed:1,...(o.cueVoice||{})}; cuevFresh=false; PRON={...(o.pron||{})}; UNKNOWN=[];
+  sessionData(){ const o=JSON.parse(ser()); o.presets=presets.filter(p=>!p.built); o.click=CLICK; if(Object.keys(CLICKT).length) o.clickT=CLICKT; o.cueVoice=CUEV; if(Object.keys(PRON).length) o.pron=PRON; return o; },
+  loadSession(o){ if(Array.isArray(o.presets)){ presets=[...presets.filter(p=>p.built),...o.presets]; } if(o.click) CLICK={...CLICK,...o.click}; CLICKT={...(o.clickT||{})}; CUEV={voice:'',name:'',speed:1,...(o.cueVoice||{})}; cuevFresh=false; PRON={...(o.pron||{})}; UNKNOWN=[];
     restore(JSON.stringify({songs:o.songs||[],setlists:o.setlists&&o.setlists.length?o.setlists:[{id:'L1',name:'Setlist 1',order:[]}],curSet:o.curSet||'L1'}));
     // ids made from now on must not collide with the loaded ones
     let num=0; const pre={}; const walk=v=>{ if(Array.isArray(v)) v.forEach(walk); else if(v&&typeof v==='object'){ if(typeof v.id==='number') num=Math.max(num,v.id); else if(typeof v.id==='string'){ const m=v.id.match(/^([a-zA-Z])(\d+)$/); if(m) pre[m[1]]=Math.max(pre[m[1]]||0,+m[2]); } Object.values(v).forEach(walk); } };
@@ -2144,6 +2175,8 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
   setSessionName(n){ $('crumbAll').textContent=n||'Untitled session'; },
   confirm(title,body,ok,fn){ confirmBox(title,body,ok,fn); },
   // step 2: stems
+  // phase 6b: click tracks (tests)
+  ck:{ of:(s,t)=>ckOf(s,t), cfg:(s,t)=>clickCfg(s,t), repeat:(s,t,r,m,n)=>repeatClip(s,t,r,m,n), box:(s,t,r)=>repeatBox(s,t,r), dup:()=>doDup(), pick:(s,t,r)=>setPick({kind:'ck',song:s.id,track:t,id:r.id}), copy:()=>doCopy(), pasteAt:(s,t,at)=>pasteAt(s,t,at), openPanel:(s,t)=>openClickPanel(s,t) },
   // phase 6b: the grid (tests)
   grid:{ snapT:(s,t,f)=>snapT(s,t,f), barGrid:(s,b)=>barGrid(s,b), name:s=>gridName(s), barBeatAt:(s,t)=>barBeatAt(s,t), evTime:(s,e)=>evTime(s,e), nearestBeat:(s,t)=>nearestBeat(s,t), set:v=>{ GRID=v; renderFolders(); }, snap:b=>{ SNAP=b; $("snapB").classList.toggle("on",b); }, zoom:z=>setZoom(z), get pxs(){ return PXS; } },
   cueCfg:s=>cueCfg(s), cueVoiceAll:()=>CUEV, pron:()=>PRON, setVoiceModel:st=>{ const was=VMODEL.state; VMODEL={...VMODEL,...st};
@@ -2168,7 +2201,7 @@ function locate(s,t){ if(!s) return; if(playId!==s.id){ playId=s.id; document.qu
   if(selId!==s.id){ select(s.id,false); } pos=Math.max(0,Math.min(s.audio-.01,t)); lcd(); if(NATIVE&&playing&&window.SLE) SLE.playFrom(s,pos); }
 const ROLE_E={drums:1,bass:.8,keys:.6,guitars:.75,bgvs:.5,synth:.45,fx:.4,strings:.55}; const mv={};
 function levelOf(s,t){ if(!playing||s.id!==playId||isMidiTrack(s,t)||isOff(s,t)) return 0; if(NATIVE) return window.SLE?SLE.trackLevel(s,t):0; const role=ROLE[t], gl=linOf(gainOf(s,t)); const b=barAtPos(s);
-  if(role==='click'){ let best=null; ckOf(s).forEach(r=>r.notes.forEach(n=>{ const bb=s.bars[r.bar+n.b-1]; if(!bb) return; const tt=bb.t+bb.dur*n.st/ckSteps(bb.sig); if(pos>=tt&&pos-tt<.07) best=n; })); return best?gl*(best.acc?.9:.6):0; }
+  if(role==='click'){ let best=null; ckOf(s,t).forEach(r=>r.notes.forEach(n=>{ const bb=s.bars[r.bar+n.b-1]; if(!bb) return; const tt=bb.t+bb.dur*n.st/ckSteps(bb.sig); if(pos>=tt&&pos-tt<.07) best=n; })); return best?gl*(best.acc?.9:.6):0; }
   const sec=secOfBar(s,b.bar)||{type:'outro'};
   if(role==='cues'){ const c=cuesOf(s).find(c=>c.bar===b.bar); return c?gl*.45*(.6+.4*Math.random()):0; }
   if(isAudio(s,t)){ const cl=clipAt(s,t,pos); if(!cl||cl.mute) return 0; const src=pos-cl.start+cl.off, sb=s.bars.find((bb,i)=>src>=bb.t&&src<s.bars[i+1]?.t)||s.bars[0], ss=secOfBar(s,sb.bar)||{type:'verse'};
@@ -2195,7 +2228,7 @@ function stepSong(d){ const L=order(); if(!L.length) return; const cur=L.findInd
 $('prevSong').onclick=()=>stepSong(-1); $('nextSong').onclick=()=>stepSong(1);
 function setLoop(on){ loopOn=on; $('loopBtn').classList.toggle('on',on); renderFolders(); }
 $('loopBtn').onclick=()=>setLoop(!loopOn);
-function setClick(on){ $('clickBtn').classList.toggle('on',on); songs.forEach(s=>{ if(s.tracks.includes('Click')) (s.mute||(s.mute={})).Click=!on; }); if(NATIVE&&window.SLE){ const ps=songs.find(x=>x.id===playId); if(ps) SLE.levels(ps); } renderFolders(); renderInsp(); }
+function setClick(on){ $('clickBtn').classList.toggle('on',on); songs.forEach(s=>{ clickTracks(s).forEach(t=>{ (s.mute||(s.mute={}))[t]=!on; }); }); if(NATIVE&&window.SLE){ const ps=songs.find(x=>x.id===playId); if(ps) SLE.levels(ps); } renderFolders(); renderInsp(); }
 $('clickBtn').oncontextmenu=e=>{ e.preventDefault(); const s=songs.find(x=>x.id===(playId||selId)); if(s) openClickPanel(s); };
 $('clickBtn').onclick=()=>setClick(!$('clickBtn').classList.contains('on'));
 function setTool(t){ tool=t; document.querySelectorAll('.tl').forEach(b=>b.classList.toggle('on',b.dataset.tool===t)); document.body.classList.toggle('t-split',t==='split'); }

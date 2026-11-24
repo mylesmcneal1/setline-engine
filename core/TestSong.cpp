@@ -818,6 +818,50 @@ bool runSelfTest(bool verbose)
               "together: a loop over bars 5-6 keeps stem, click, cue and MIDI on the downbeats on every pass (" + std::to_string(g) + "/" + std::to_string(n) + ")");
     }
 
+    // ---- Phase 6b: two click tracks ("Click (band)" on output 1, "Click (drums)" on output 2), each with its own
+    // hits and level, both sample-exact across a meter change, at any block size, from a start mid-song.
+    {
+        SongDef s; s.name = "Two clicks";
+        s.tempo = { { 1, 120, 4, 4 }, { 3, 97, 7, 8 } };
+        s.lengthBars = 5;
+        TempoMap tm; tm.build(s.tempo, sr, 0, 7);
+        std::vector<ClickHitDef> band, drums;
+        for (int b = 1; b <= 5; ++b) band.push_back({ b, 1, true, 0 });                           // downbeats
+        for (int b = 1; b <= 5; ++b) for (double bt : { 1.5, 2.5, 3.5 }) drums.push_back({ b, bt, false, 0 }); // off-beats
+        s.clickOuts = { 0 };
+        s.clickHits = band;
+        ClickTrackDef d; d.name = "Click (drums)"; d.outs = { 1 }; d.gainDb = -12; d.hits = drums;
+        s.moreClicks.push_back(d);
+        auto onsets = [](const std::vector<float>& x, int64_t first) {
+            std::vector<int64_t> v;
+            for (size_t i = 0; i < x.size(); ++i) if (x[i] != 0.0f && (i == 0 || x[i - 1] == 0.0f)) v.push_back(first + (int64_t) i);
+            return v;
+        };
+        std::vector<int64_t> wantBand, wantDrums;
+        for (auto& h : band) wantBand.push_back(tm.sampleAt(h.bar, h.beat));
+        for (auto& h : drums) wantDrums.push_back(tm.sampleAt(h.bar, h.beat));
+        bool exact = true; std::string why;
+        float peakBand = 0, peakDrums = 0;
+        for (int blk : { 128, 97, 33, 1024 }) {
+            OfflineRun r; r.load(s, sr, 2, blk); r.start(0); r.runToEnd();
+            const auto a = onsets(r.out[0], 0), b = onsets(r.out[1], 0);
+            if (a != wantBand || b != wantDrums || r.e.numClickTracks() != 2) { exact = false; why += " block " + std::to_string(blk) + ": " + std::to_string(a.size()) + "/" + std::to_string(b.size()) + " onsets"; }
+            for (float x : r.out[0]) peakBand = std::max(peakBand, std::fabs(x));
+            for (float x : r.out[1]) peakDrums = std::max(peakDrums, std::fabs(x));
+        }
+        check(exact, "two click tracks: each plays only its own hits on its own output, sample-exact across a meter change (blocks 128/97/33/1024)" + why);
+        // per-track level: drums are 6 dB below the band's -6 and unaccented (x0.6)
+        check(std::fabs(peakDrums / peakBand - 0.5012f * 0.6f) < 0.01f, "two click tracks: each at its own level (" + std::to_string(peakDrums / peakBand) + ")");
+        // from a start mid-song, and muting one track leaves the other untouched
+        OfflineRun m; m.load(s, sr, 2, 97);
+        m.e.setTrackLevel(Engine::clickTrackId(1), 0, true);
+        const int64_t from = tm.sampleAt(3, 2);
+        m.start(from); m.runToEnd();
+        std::vector<int64_t> bandFrom; for (auto x : wantBand) if (x >= from) bandFrom.push_back(x);
+        bool silent = true; for (float x : m.out[1]) if (x != 0.0f) silent = false;
+        check(onsets(m.out[0], m.firstSample) == bandFrom && silent, "two click tracks: from bar 3 beat 2 the band click is still exact while the muted drums click is silent");
+    }
+
     std::printf(ok ? "ALL CHECKS PASSED\n" : "SOME CHECKS FAILED\n");
     return ok;
 }

@@ -69,6 +69,8 @@ public:
     // Live levels (any thread, glitch-free: ramped over 10 ms in the callback).
     // track: 0..numStems()-1 for stems, or ClickTrack / CueTrack.
     static constexpr int ClickTrack = -1, CueTrack = -2;
+    // Click track k (0 = the main click, 1.. = SongDef::moreClicks[k-1]) for setTrackLevel.
+    static constexpr int clickTrackId(int k) { return k == 0 ? ClickTrack : -100 - k; }
     void setTrackLevel(int track, float db, bool mute);
     int numStems() const { return (int) stems.size(); }
 
@@ -91,7 +93,8 @@ public:
     std::vector<LoggedMidi> midiLog; // offline mode only (pre-reserved)
     struct ClickHit { int64_t sample; bool accent; float gain = 1; };
     struct MidiAt { int64_t sample; int port; uint8_t d[3]; int len; };
-    const std::vector<ClickHit>& clickList() const { return clicks; }
+    const std::vector<ClickHit>& clickList(int k = 0) const { static const std::vector<ClickHit> none; return k < (int) clickLanes.size() ? clickLanes[(size_t) k].hits : none; }
+    int numClickTracks() const { return (int) clickLanes.size(); }
     const std::vector<MidiAt>& midiList() const { return midiEvents; }
     struct CueAt { int64_t sample; std::shared_ptr<const std::vector<float>> audio; };
     const std::vector<CueAt>& cueList() const { return cues; }
@@ -107,15 +110,12 @@ private:
     Config cfg;
     TempoMap tmap;
     std::vector<std::unique_ptr<StemStreamer>> stems;
-    std::vector<ClickHit> clicks;
     std::vector<MidiAt> midiEvents;
-    std::vector<int> clickOuts;
     std::vector<CueAt> cues;   // sorted by sample; audio preloaded (never rendered during playback)
     std::vector<int> cueOuts;
     int64_t longestCue = 0;
-    float clickGain = 0.5f;
     std::unique_ptr<LiveGain[]> stemGains; // one per stem (allocated in load)
-    LiveGain clickLive, cueLive;
+    LiveGain cueLive;
     std::array<std::atomic<float>, MaxMeters> meters {};
     int rampSamples = 480, fadeOutSamples = 480;
     int64_t songLen = 0;
@@ -123,8 +123,14 @@ private:
 
     // audio-thread state
     std::atomic<int64_t> pos { 0 };
-    size_t nextClick = 0, nextMidi = 0;
-    struct Voice { int remaining = 0; double phase = 0, inc = 0, env = 0, decay = 0; float amp = 0; } voice;
+    size_t nextMidi = 0;
+    struct Voice { int remaining = 0; double phase = 0, inc = 0, env = 0, decay = 0; float amp = 0; };
+    // Click tracks: [0] the main click, then SongDef::moreClicks. Built in load, never resized while playing;
+    // next / voice are audio-thread state.
+    struct ClickLane { std::vector<ClickHit> hits; std::vector<int> outs; float gain = 0.5f; size_t next = 0; Voice voice; };
+    std::vector<ClickLane> clickLanes;
+    std::unique_ptr<LiveGain[]> clickLives; // one per click lane (allocated in load)
+    void seekClicks(int64_t p); // audio thread (or idle)
     int fadeInLeft = 0, fadeInLen = 0, fadeOutLeft = 0;
 
     // jump / loop: the control side publishes {at, to, repeat} under a sequence number; the audio

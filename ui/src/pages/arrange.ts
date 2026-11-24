@@ -11,7 +11,7 @@ interface Page {
   songs: Song[]; playId: string | null; selId: string | null; pos: number; playing: boolean;
   isOff(s: Song, t: string): boolean; loopRange(s: Song): [number, number] | null;
   toast(msg: string): void; ROLE: Record<string, string>; PORTS: string[];
-  clickCfg(s: Song): Record<string, unknown>; gainOf(s: Song, t: string): number;
+  clickCfg(s: Song, t?: string): Record<string, unknown>; gainOf(s: Song, t: string): number;
   setPos(t: number): void; setPlayId(id: string): void; setPlaying(b: boolean): void; redraw(): void;
   sessionData(): Record<string, any>; loadSession(o: Record<string, any>): void; setSessionName(n: string): void;
   confirm(title: string, body: string, ok: string, fn: () => void): void;
@@ -164,7 +164,10 @@ function payload(s: Song) {
   // The show's pronunciations go with the cue voice (the song's own, or the set's), as the app keys cues by them.
   const pron = p.pron();
   if (song.cueVoice) song.cueVoice = { ...song.cueVoice, pron };
-  return { song, outs, roles, click: p.clickCfg(s), cueVoice: { ...p.cueVoiceAll(), pron } };
+  // each click track other than "Click" with its own settings (the app plays every click track, sample-exact)
+  const clickTracks: Record<string, Record<string, unknown>> = {};
+  s.tracks.forEach((t) => { if (p.ROLE[t] === "click" && t !== "Click") clickTracks[t] = p.clickCfg(s, t); });
+  return { song, outs, roles, click: p.clickCfg(s), clickTracks, cueVoice: { ...p.cueVoiceAll(), pron } };
 }
 // What forces a reload: everything except the mixer levels, which change live (setTrackLevel).
 function loadKey(body: ReturnType<typeof payload>): string {
