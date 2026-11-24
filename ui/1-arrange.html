@@ -1708,7 +1708,8 @@ function wireClipLane(cv){ const s=songs.find(x=>x.id===cv.dataset.song), t=s.tr
       else if(mode==='fi'){ cl.fi=Math.max(0,Math.min((cl.end-cl.start)/2,snapT(s,o.start+o.fi+dx,free)-cl.start)); showTip(`Fade in · ${Math.round(cl.fi*1000)} ms${free?' · free':''}`,m); }
       else if(mode==='fo'){ cl.fo=Math.max(0,Math.min((cl.end-cl.start)/2,cl.end-snapT(s,o.end-o.fo+dx,free))); showTip(`Fade out · ${Math.round(cl.fo*1000)} ms${free?' · free':''}`,m); }
       drawLane(cv); };
-    cv.onpointerup=()=>{ cv.onpointermove=null; hideTip(); if(moved){ undoS.push(pre); redoS=[]; renderInsp(); } }; };
+    // A click without a drag on the waveform: the playhead goes there (on the grid; Alt: exactly), so S splits right there.
+    cv.onpointerup=u=>{ cv.onpointermove=null; hideTip(); if(moved){ undoS.push(pre); redoS=[]; renderInsp(); } else if(mode==='move') locate(s,snapT(s,time,!!(u&&u.altKey)||e.altKey)); }; };
   return true; }
 function clipPanel(s){ if(!selClip||selClip.song!==s.id) return ''; const t=selClip.track, list=clipsOf(s,t), cl=list.find(c=>c.id===selClip.id); if(!cl){ selClip=null; return ''; } const n=list.indexOf(cl)+1;
   return `<div class="secpanel"><div class="kicker">AUDIO CLIP ${n} OF ${list.length}</div>
