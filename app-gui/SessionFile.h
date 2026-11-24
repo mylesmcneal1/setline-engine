@@ -29,6 +29,10 @@ public:
     // Open Recent: the last sessions opened or saved, newest first -> [{name, path, exists}].
     juce::var recent() const;
     void clearRecent() { settings.setValue("recentSessions", juce::String()); }
+    // The show open when set.Line last closed (reopened at start-up).
+    juce::String lastSession() const { return settings.getValue("lastSession"); }
+    // New / Close: nothing to reopen next time.
+    void forgetLast() { settings.setValue("lastSession", juce::String()); }
     // Opens a session by path (Open Recent) -> {name, path, text} | {error}
     juce::var openPath(const juce::File& f);
     // Close / New: no current file (the next Save asks where).

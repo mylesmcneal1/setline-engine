@@ -29,6 +29,9 @@ public:
     // Test: --test-script <in.js> <out.json> runs a script in the Edit page (see ui/src/pages/arrange.ts),
     // writes what it returns and quits. No dialogs, keyboard or mouse needed.
     juce::File testScript, testOut;
+    bool reopenLast = true;      // start-up reopens the last show (test runs only with --reopen-last)
+    bool startShowTaken = false;
+    bool reopenLastInTests = false; // ... once per run (pages reload when switching tabs)
 
     // The page reports the session's name and whether it has unsaved changes (window title, quit check).
     std::function<void(const juce::String& name, bool dirty)> onDocument;

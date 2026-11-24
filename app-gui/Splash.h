@@ -16,6 +16,8 @@ namespace setline::gui {
 
 class Splash : public juce::Component, private juce::Timer {
 public:
+    // Closing it (taskbar, Alt+F4) quits set.Line, like the main window.
+    void userTriedToCloseWindow() override { juce::JUCEApplication::getInstance()->systemRequestedQuit(); }
     enum class State { pending, running, done, failed };
     enum Step { audio = 0, show, waveforms, cues, numSteps };
 

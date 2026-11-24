@@ -59,7 +59,19 @@ bool osCopy(const juce::File& src, const juce::File& dst, std::atomic<bool>& can
     return false;
    #elif JUCE_MAC
     if (cancel.load()) { error = "Copy cancelled"; return false; }
-    if (copyfile(src.getFullPathName().toRawUTF8(), dst.getFullPathName().toRawUTF8(), nullptr, COPYFILE_ALL | COPYFILE_CLONE) == 0) { bytes(src.getSize()); return true; }
+    // Progress and cancel mid-file (quitting never waits for a big stem to finish copying).
+    struct Ctx { std::atomic<bool>* cancel; const std::function<void(juce::int64)>* bytes; copyfile_state_t state; } ctx { &cancel, &bytes, copyfile_state_alloc() };
+    copyfile_callback_t cb = [](int what, int stage, copyfile_state_t st, const char*, const char*, void* p) -> int {
+        auto* c = static_cast<Ctx*>(p);
+        if (what == COPYFILE_COPY_DATA && stage == COPYFILE_PROGRESS) { off_t n = 0; if (copyfile_state_get(st, COPYFILE_STATE_COPIED, &n) == 0) (*c->bytes)((juce::int64) n); }
+        return c->cancel->load() ? COPYFILE_QUIT : COPYFILE_CONTINUE;
+    };
+    copyfile_state_set(ctx.state, COPYFILE_STATE_STATUS_CB, (const void*) cb);
+    copyfile_state_set(ctx.state, COPYFILE_STATE_STATUS_CTX, &ctx);
+    const int rc = copyfile(src.getFullPathName().toRawUTF8(), dst.getFullPathName().toRawUTF8(), ctx.state, COPYFILE_ALL | COPYFILE_CLONE);
+    copyfile_state_free(ctx.state);
+    if (rc == 0) { bytes(src.getSize()); return true; }
+    if (cancel.load()) { dst.deleteFile(); error = "Copy cancelled"; return false; }
     error = "Couldn't copy " + src.getFileName() + " (" + juce::String(strerror(errno)) + ")";
     return false;
    #else

@@ -630,12 +630,38 @@ const BLANK = JSON.stringify({ songs: [], setlists: [{ id: "L1", name: "Setlist 
 function newSession(verb = "Starting a new session closes this one.") {
   askSave(verb, async () => {
     await SL.call("closeSession");
+    await SL.call("forgetLastShow").catch(() => {}); // a new / closed show: nothing to reopen next time
     doc = { name: "", savedText: "" };
     page().freshShow();
     applySession(BLANK);
     doc.savedText = sessionText();
     remember();
   });
+}
+// Start-up: open the last show quietly; "" when it opened, else why not (the loading window offers Retry).
+let startPath = "";
+async function openAtStart(path: string): Promise<string> {
+  startPath = path;
+  const name = path.split(/[\\/]/).pop()!.replace(/\.[^.]+$/, "");
+  const r = await SL.call<FileResult>("openSessionPath", { path }).catch((e) => ({ error: String(e) } as FileResult));
+  if (r.error || !r.text) return `“${name}” (${path}) couldn't be opened: ${r.error || "it's empty"}.`;
+  try {
+    doc = { name: r.name || "", savedText: "" };
+    applySession(r.text);
+    doc.savedText = sessionText();
+    page().setSessionName(doc.name);
+    remember();
+  } catch (e) {
+    loadRouting(null); doc = { name: "", savedText: sessionText() }; page().rerender();
+    return `“${name}” couldn't be read (${String((e as Error)?.message || e)}).`;
+  }
+  if (r.path) checkAudio(r.path);
+  return "";
+}
+async function retryStartShow() {
+  const why = startPath ? await openAtStart(startPath) : "There's no show to try again.";
+  const n = page().songs.length;
+  await SL.call("loadingStep", why ? { id: "show", state: "failed", detail: why } : { id: "show", state: "done", detail: `${doc.name} · ${n} song${n === 1 ? "" : "s"}` });
 }
 async function openPath(path: string) {
   const r = await SL.call<FileResult>("openSessionPath", { path });
@@ -850,7 +876,7 @@ async function reportLoading(showProblem: string, quick: boolean) {
   const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
   try {
     const n = page().songs.length;
-    if (showProblem) await step("show", "failed", `It couldn't be read (${showProblem}).`);
+    if (showProblem) await step("show", "failed", showProblem);
     else await step("show", "done", `${doc.name || "Untitled session"} · ${n} song${n === 1 ? "" : "s"}`);
     // waveforms
     const cur = await SL.call<FileResult>("getSessionFile");
@@ -911,20 +937,21 @@ async function main() {
   SL.on("menu", (m: { cmd: string }) => {
     if (m.cmd === "open") openSession(); else if (m.cmd === "save") saveSession(false); else if (m.cmd === "saveAs") saveSession(true);
     else if (m.cmd === "about") showAbout();
+    else if (m.cmd === "retryShow") retryStartShow();
     else if (m.cmd === "copyDiagnostics") diagnostics("copy"); else if (m.cmd === "saveDiagnostics") diagnostics("save");
     else if (m.cmd === "new") newSession(); else if (m.cmd === "close") newSession("Closing the session.");
     else if (m.cmd === "quit") { SL.call("quitAnswered").catch(() => {}); askSave("Quitting set.Line.", () => { SL.call("quitNow").catch(() => {}); }); }
   });
 
   // Session: carry on with the one from before a page switch, else this is a new, unsaved session.
-  let showProblem = "";
+  let showProblem = "", keptSession = false;
   try {
     const kept = JSON.parse(sessionStorage.getItem("setline.session") || "null");
-    if (kept && kept.text) { doc = kept.doc; applySession(kept.text); }
+    if (kept && kept.text) { doc = kept.doc; applySession(kept.text); keptSession = true; }
     else { loadRouting(oldLocalRouting()); doc = { name: "", savedText: sessionText() }; }
   } catch (e) {
     console.warn("set.Line: session", e);
-    showProblem = String((e as Error)?.message || e);
+    showProblem = `It couldn't be read (${String((e as Error)?.message || e)}).`;
     loadRouting(null); doc = { name: "", savedText: sessionText() };
   }
   page().rerender();
@@ -944,6 +971,12 @@ async function main() {
     return;
   }
 
+  // Start-up: the show that was open when set.Line closed (if it can't be opened, the loading window asks:
+  // Retry / Open another / New show).
+  if (!keptSession && !showProblem) {
+    const st = await SL.call<{ path?: string }>("takeStartShow").catch(() => ({} as { path?: string }));
+    if (st.path) showProblem = await openAtStart(st.path);
+  }
   try { listen = await SL.call<ListenState>("getListen"); page().setListen(listen, listenWhat()); } catch (e) { console.warn("set.Line: listen", e); }
   onSetup(await SL.call<Setup>("getAudioSetup"));
   try { page().setVoices(await SL.call<VoiceInfo[]>("getVoices")); } catch (e) { console.warn("set.Line: voices", e); }
@@ -975,7 +1008,7 @@ async function main() {
     try {
       const AsyncFn = Object.getPrototypeOf(async () => {}).constructor;
       const hooks = { SLE, page, importStems, probe, audioFiles, applyRefMap, checkAudio, onFileDrag, sessionText, applySession,
-        getRate: () => sessionRate, saveTo: (path: string) => saveSession(false, path), cueList: () => cueList(), setListen: (r: Partial<ListenState>) => setListen(r), SLR, SLW, waves, SLC, prepareCues, remember, payload, getRoute: () => route, isDirty: () => sessionText() !== doc.savedText, setDoc: (n: string) => { doc = { name: n, savedText: "" }; } };
+        getRate: () => sessionRate, retryStartShow: () => retryStartShow(), docName: () => doc.name, saveTo: (path: string) => saveSession(false, path), cueList: () => cueList(), setListen: (r: Partial<ListenState>) => setListen(r), SLR, SLW, waves, SLC, prepareCues, remember, payload, getRoute: () => route, isDirty: () => sessionText() !== doc.savedText, setDoc: (n: string) => { doc = { name: n, savedText: "" }; } };
       out = await new AsyncFn("SL", "hooks", info.testScript)(SL, hooks);
     } catch (e) { out = { error: String((e as Error)?.stack || e) }; }
     if (out !== undefined) await SL.call("testDone", { text: JSON.stringify(out, null, 1) }); // undefined: it went to another page

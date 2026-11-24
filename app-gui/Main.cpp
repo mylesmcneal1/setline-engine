@@ -164,6 +164,7 @@ public:
             bridge->testScript = juce::File::getCurrentWorkingDirectory().getChildFile(args[ts + 1].unquoted());
             bridge->testOut = juce::File::getCurrentWorkingDirectory().getChildFile(args[ts + 2].unquoted());
         }
+        bridge->reopenLastInTests = args.contains("--reopen-last");
         bridge->onLoadingStep = [this](const juce::var& a) {
             if (! splash) return;
             const auto id = a["id"].toString();
@@ -173,6 +174,7 @@ public:
             splash->setStep(step, st == "done" ? Splash::State::done : st == "failed" ? Splash::State::failed : Splash::State::running,
                             a["detail"].toString(), (float) (double) a["fraction"]);
             if (step == Splash::show && st == "failed") askShow(a["detail"].toString());
+            if (step == Splash::show && st == "done") finishLoading(); // e.g. after Retry
         };
         bridge->onLoadingDone = [this] { pageReady = true; finishLoading(); };
         window = std::make_unique<MainWindow>(*settings, *bridge, dev, page, splash == nullptr);
@@ -180,7 +182,7 @@ public:
         else {
             splash->setStep(Splash::show, Splash::State::running);
             // Never stuck behind the loading window: after 45 s the main window shows anyway.
-            juce::Timer::callAfterDelay(45000, [this] { if (splash && ! splash->finished()) { pageReady = true; showError = false; finishLoading(); } });
+            juce::Timer::callAfterDelay(45000, [this] { if (splash && ! splash->finished() && ! showError) { pageReady = true; finishLoading(); } });
         }
         // Window title: "<session> — set.Line", with a dot while there are unsaved changes.
         bridge->onDocument = [this](const juce::String& name, bool dirty) {
@@ -202,8 +204,9 @@ public:
     {
         applog::line("Start-up: the show couldn't be opened: " + why);
         showError = true;
-        splash->showError("This show couldn't be opened", why + " Open another show, or start a new one.",
-            { { juce::String::fromUTF8("Open another show\xe2\x80\xa6"), [this] { showError = false; if (! bridge) openMain(startPage); sendMenu("open"); finishLoading(); } },
+        splash->showError("This show couldn't be opened", why + " Try again, open another show, or start a new one.",
+            { { "Retry", [this] { showError = false; splash->setStep(Splash::show, Splash::State::running); sendMenu("retryShow"); } },
+              { juce::String::fromUTF8("Open another show\xe2\x80\xa6"), [this] { showError = false; if (! bridge) openMain(startPage); sendMenu("open"); finishLoading(); } },
               { "Start a new show", [this] { showError = false; if (! bridge) openMain(startPage); sendMenu("new"); finishLoading(); } } });
     }
     void sendMenu(const char* cmd)

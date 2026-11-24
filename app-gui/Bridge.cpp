@@ -155,6 +155,17 @@ Bridge::Options Bridge::addTo(Options o)
         if (testScript != juce::File()) r->setProperty("testScript", testScript.loadFileAsString());
         return juce::var(r);
     });
+    // Start-up: the show to reopen (the last one), once per run. {path} or {}.
+    o = add(o, "takeStartShow", [this](const juce::var&) {
+        auto* r = new juce::DynamicObject();
+        if (! startShowTaken && reopenLast && (testScript == juce::File() || reopenLastInTests)) {
+            const auto p = session.lastSession();
+            if (p.isNotEmpty()) r->setProperty("path", p);
+        }
+        startShowTaken = true;
+        return juce::var(r);
+    });
+    o = add(o, "forgetLastShow", [this](const juce::var&) { session.forgetLast(); return juce::var(true); });
     o = add(o, "getAudioSetup", [this](const juce::var& a) { return audio.getSetup(a.isObject() && (bool) a["rescan"]); });
     o = add(o, "setAudioSetup", [this](const juce::var& a) {
         if (! a.isObject()) return errorVar("setAudioSetup: expected {driver, device, rate, buffer}");
