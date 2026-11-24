@@ -9,18 +9,32 @@ namespace {
 constexpr char magic[4] = { 'S', 'L', 'P', 'K' };
 constexpr int version = 1;
 
-juce::File fallbackFolder()
+} // namespace
+
+juce::File Peaks::appCacheFolder()
 {
    #if JUCE_MAC
     return juce::File::getSpecialLocation(juce::File::userHomeDirectory).getChildFile("Library/Caches/set.Line/Peaks");
+   #elif JUCE_WINDOWS
+    return juce::File::getSpecialLocation(juce::File::windowsLocalAppData).getChildFile("set.Line/Cache/Peaks");
    #else
     return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory).getChildFile("set.Line/Peaks");
    #endif
 }
-juce::File fallbackFor(const juce::File& audio)
+
+juce::File Peaks::cacheFileFor(const juce::File& audio, const juce::File& sessionFile)
 {
-    return fallbackFolder().getChildFile(juce::String::toHexString(audio.getFullPathName().hashCode64()) + ".peaks");
+    if (sessionFile != juce::File()) {
+        const auto folder = sessionFile.getParentDirectory(), audioDir = folder.getChildFile("Audio");
+        if (audio.isAChildOf(audioDir))
+            return folder.getChildFile("Cache/Peaks").getChildFile(audio.getRelativePathFrom(audioDir) + ".peaks");
+    }
+    const auto key = audio.getFullPathName() + "|" + juce::String(audio.getSize()) + "|" + juce::String(audio.getLastModificationTime().toMilliseconds());
+    return appCacheFolder().getChildFile(audio.getFileNameWithoutExtension().retainCharacters("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -_").substring(0, 40)
+                                         + "-" + juce::String::toHexString(key.hashCode64()) + ".peaks");
 }
+
+namespace {
 
 std::shared_ptr<Peaks::Data> readCache(const juce::File& f, const juce::File& audio)
 {
@@ -87,7 +101,6 @@ Peaks::~Peaks()
     for (auto& t : threads) t.join();
 }
 
-juce::File Peaks::cacheFileFor(const juce::File& audio) { return audio.getSiblingFile(audio.getFileName() + ".peaks"); }
 
 std::shared_ptr<Peaks::Data> Peaks::compute(const juce::File& audio, juce::AudioFormatManager& fm, juce::String& error)
 {
@@ -130,15 +143,18 @@ std::shared_ptr<Peaks::Data> Peaks::compute(const juce::File& audio, juce::Audio
     return d;
 }
 
-std::shared_ptr<const Peaks::Data> Peaks::load(const juce::File& audio, juce::AudioFormatManager& fm, juce::String& error, bool* fromCache)
+std::shared_ptr<const Peaks::Data> Peaks::load(const juce::File& audio, const juce::File& cache, juce::AudioFormatManager& fm,
+                                               juce::String& error, bool* fromCache)
 {
     if (fromCache) *fromCache = false;
     if (! audio.existsAsFile()) { error = "File not found"; return nullptr; }
-    for (auto& f : { cacheFileFor(audio), fallbackFor(audio) })
+    // A show folder that can't be written (e.g. read-only media) keeps its cache in the app's data folder.
+    const auto fallback = cacheFileFor(audio, {});
+    for (auto& f : { cache, fallback })
         if (auto d = readCache(f, audio)) { if (fromCache) *fromCache = true; return d; }
     auto d = compute(audio, fm, error);
     if (d == nullptr) return nullptr;
-    if (! writeCache(cacheFileFor(audio), audio, *d)) writeCache(fallbackFor(audio), audio, *d);
+    if (! writeCache(cache, audio, *d) && cache != fallback) writeCache(fallback, audio, *d);
     return d;
 }
 
@@ -147,18 +163,18 @@ void Peaks::run()
     juce::AudioFormatManager fm; // one per thread
     fm.registerBasicFormats();
     for (;;) {
-        juce::File f;
+        Item it;
         {
             std::unique_lock<std::mutex> g(lock);
             wake.wait(g, [this] { return quit || ! queue.empty(); });
             if (quit) return;
-            f = queue.front();
+            it = queue.front();
             queue.pop_front();
         }
         juce::String error;
-        auto d = load(f, fm, error);
+        auto d = load(it.audio, it.cache, fm, error);
         auto alive_ = alive;
-        const auto path = f.getFullPathName();
+        const auto path = it.audio.getFullPathName();
         juce::MessageManager::callAsync([this, alive_, path, d, error] { if (*alive_) finish(path, d, error); });
     }
 }
@@ -173,7 +189,7 @@ void Peaks::finish(const juce::String& path, std::shared_ptr<const Data> d, cons
     for (auto& w : list) w(d, error);
 }
 
-void Peaks::get(const juce::File& audio, Ready done)
+void Peaks::get(const juce::File& audio, const juce::File& sessionFile, Ready done)
 {
     const auto path = audio.getFullPathName();
     if (auto it = memo.find(path); it != memo.end()) {
@@ -185,17 +201,17 @@ void Peaks::get(const juce::File& audio, Ready done)
     w.push_back(std::move(done));
     std::lock_guard<std::mutex> g(lock);
     for (auto it = queue.begin(); it != queue.end(); ++it)
-        if (*it == audio) { queue.erase(it); break; }
-    queue.push_front(audio);
+        if (it->audio == audio) { queue.erase(it); break; }
+    queue.push_front({ audio, cacheFileFor(audio, sessionFile) });
     wake.notify_one();
 }
 
-void Peaks::prepare(const juce::Array<juce::File>& audio)
+void Peaks::prepare(const juce::Array<juce::File>& audio, const juce::File& sessionFile)
 {
     std::lock_guard<std::mutex> g(lock);
     for (auto& f : audio) {
-        if (memo.count(f.getFullPathName()) || std::find(queue.begin(), queue.end(), f) != queue.end()) continue;
-        queue.push_back(f);
+        if (memo.count(f.getFullPathName()) || std::any_of(queue.begin(), queue.end(), [&](const Item& i) { return i.audio == f; })) continue;
+        queue.push_back({ f, cacheFileFor(f, sessionFile) });
     }
     wake.notify_all();
 }
