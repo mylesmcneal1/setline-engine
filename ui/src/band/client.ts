@@ -24,11 +24,15 @@ const now = () => performance.timeOrigin + performance.now();
 const hostNow = () => clock.hostNow(now());
 
 // ---------------------------------------------------------------- connection
+// 7d: the hosts to try: this page's own, then a backup rig's (sent by the primary), in turn while reconnecting
+let tries = 0;
+const hosts = () => [location.host, ...((JSON.parse(localStorage.getItem("setline.band.alt") || "[]") as string[]).filter((h) => h && h !== location.host))];
 function connect() {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
-  try { ws = new WebSocket(`${proto}//${location.host}/ws`); } catch { retry(); return; }
+  const list = hosts(), host = list[tries++ % list.length];
+  try { ws = new WebSocket(`${proto}//${host}/ws`); } catch { retry(); return; }
   ws.onopen = () => {
-    connected = true; everConnected = true; backoff = 500;
+    connected = true; everConnected = true; backoff = 500; tries = 0;
     send({ t: "hello", screen: store.screen, pin: store.pin, device: navigator.userAgent.replace(/^.*?\(([^)]*)\).*$/, "$1").slice(0, 60) });
     for (let i = 0; i < 5; i++) setTimeout(ping, i * 150); // a quick first estimate
     overlay();
@@ -37,7 +41,7 @@ function connect() {
   ws.onclose = () => { connected = false; ws = null; overlay(); retry(); };
   ws.onerror = () => { try { ws && ws.close(); } catch {} };
 }
-function retry() { setTimeout(connect, backoff); backoff = Math.min(8000, backoff * 2); }
+function retry() { setTimeout(connect, backoff); backoff = hosts().length > 1 ? Math.min(1500, backoff * 1.5) : Math.min(8000, backoff * 2); } // with a backup: try it quickly
 function send(o: unknown) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
 function ping() { send({ t: "ping", c: now() }); }
 setInterval(ping, 3000);
@@ -58,6 +62,7 @@ function onMessage(text: string) {
       statuses = statuses.filter((x) => x.screen !== m.screen);
       if (m.on) statuses.push({ from: m.from, label: m.label, screen: m.screen });
       break;
+    case "alt": localStorage.setItem("setline.band.alt", JSON.stringify(Array.isArray(m.hosts) ? m.hosts : [])); break;
     case "ack": if (!m.ok) { acks[m.w] = m.why || "Not allowed"; setTimeout(() => { delete acks[m.w]; }, 3000); } break;
   }
 }

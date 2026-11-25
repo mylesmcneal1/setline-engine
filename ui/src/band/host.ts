@@ -32,10 +32,20 @@ export function startBandHost(SL: SetLineBridge, page: Page) {
     for (const c of clients.values()) if (c.screen) m[c.screen] = (m[c.screen] || 0) + 1;
     B().online(m, devices());
   };
+  // 7d: a paired backup's band server: the screens keep its address and switch to it if this computer goes away
+  let alt: string[] = [];
   const welcome = (id: number) => {
     const c = clients.get(id)!;
     send(id, { t: "welcome", screens: screenList(), screen: c.screen ? B().screen(c.screen) : null, show: B().show(), network: B().data.network || "" });
+    if (alt.length) send(id, { t: "alt", hosts: alt });
   };
+  setInterval(async () => {
+    try {
+      const ri = await SL.call<any>("rigInfo"), bi = await SL.call<any>("bandInfo");
+      const next = ri && ri.role === "primary" && ri.paired && bi && bi.running ? [`${ri.peer}:${bi.port}`] : [];
+      if (JSON.stringify(next) !== JSON.stringify(alt)) { alt = next; if (clients.size) bcast({ t: "alt", hosts: alt }); }
+    } catch {}
+  }, 3000);
 
   SL.on("bandClient", (e: { client: number; connected: boolean; address: string }) => {
     if (e.connected) clients.set(e.client, { screen: null, address: e.address, ok: false, device: "" });
