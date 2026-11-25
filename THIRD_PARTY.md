@@ -12,6 +12,8 @@ by the app. Each entry gives the licence and where the exact version is pinned.
 | Microsoft WebView2 SDK (Windows) | 1.0.3485.44 | Microsoft's BSD-style WebView2 SDK licence | `.github/workflows/build.yml`, `docs/building-the-app.md` |
 | Steinberg ASIO SDK (Windows, optional) | user-supplied | Steinberg proprietary licence or GPLv3 (see README "Shipping note") | not in git |
 | Inter, JetBrains Mono fonts (web UI) | see `ui/package.json` | SIL Open Font License 1.1 | `ui/package-lock.json` |
+| CivetWeb (the band server: HTTP + WebSocket for the band's phones and tablets) | 1.16 | MIT | `CMakeLists.txt` (`FetchContent_Declare(civetweb`, tag v1.16) |
+| qrcode-generator (the join QR code on the Band page) | 1.4.4 | MIT | `ui/package.json`, `ui/package-lock.json` |
 
 Before the first public release, two licences still need a decision: JUCE (closed source needs a JUCE
 licence) and ASIO (see the README).

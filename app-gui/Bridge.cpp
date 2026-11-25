@@ -2,6 +2,7 @@
 #include "AudioHost.h"
 #include "Log.h"
 #include "Package.h"
+#include "WebUi.h"
 #include <set>
 
 namespace {
@@ -35,6 +36,14 @@ Bridge::Bridge(AudioHost& host, juce::PropertiesFile& settings) : audio(host), s
 {
     audio.onSetupChanged = [this] { emit("audioSetupChanged", audio.getSetup()); };
     audio.emit = [this](const juce::Identifier& id, const juce::var& v) { emit(id, v); };
+    band.serveFile = [](const juce::String& path, juce::MemoryBlock& out, juce::String& mime) {
+        auto r = WebUi::serve(path);
+        if (! r) return false;
+        out.replaceAll(r->data.data(), r->data.size()); mime = r->mimeType; return true;
+    };
+    band.onMessage = [this](int id, const juce::String& text) { auto* o = new juce::DynamicObject(); o->setProperty("client", id); o->setProperty("text", text); emit("bandMessage", juce::var(o)); };
+    band.onClient = [this](int id, bool on, const juce::String& addr) { auto* o = new juce::DynamicObject(); o->setProperty("client", id); o->setProperty("connected", on); o->setProperty("address", addr); emit("bandClient", juce::var(o)); };
+    audio.onMidiReconnected = [this](const juce::StringArray& names) { juce::Array<juce::var> l; for (auto& n : names) l.add(n); auto* o = new juce::DynamicObject(); o->setProperty("reconnected", l); emit("midiReconnected", juce::var(o)); };
     media.emit = [this](const juce::Identifier& id, const juce::var& v) { emit(id, v); };
     // Kokoro voices download when the user asks: progress to the page ("voiceDownload": {state, done, total, error}).
     kokoro::setListener([alive_ = alive](const kokoro::Status& st) {
@@ -133,7 +142,7 @@ void Bridge::syncShow() { cues.setShowFolder(session.file() == juce::File() ? ju
 
 Bridge::~Bridge() {
     exportCancel->store(true);
-    if (exporter.joinable()) exporter.join(); kokoro::setListener(nullptr); *alive = nullptr; audio.onSetupChanged = nullptr; audio.emit = nullptr; audio.cueAudio = nullptr; media.emit = nullptr; }
+    if (exporter.joinable()) exporter.join(); band.stop(); kokoro::setListener(nullptr); *alive = nullptr; audio.onSetupChanged = nullptr; audio.emit = nullptr; audio.cueAudio = nullptr; media.emit = nullptr; }
 
 Bridge::Options Bridge::add(Options o, const char* name, Fn fn)
 {
@@ -297,6 +306,10 @@ Bridge::Options Bridge::addTo(Options o)
         return audio.setSetup(a);
     });
     o = add(o, "getMidiOutputs", [this](const juce::var&) { return audio.midiOutputs(); });
+    // 6g: MIDI clock per port (this computer) and sending the setlist's sync point
+    o = add(o, "midiPorts", [this](const juce::var&) { return audio.midiPorts(); });
+    o = add(o, "setMidiPort", [this](const juce::var& a) { audio.setMidiPort(a["name"].toString(), (bool) a["clock"], (bool) a["transport"]); return audio.midiPorts(); });
+    o = add(o, "sendMidiNow", [this](const juce::var& a) { return audio.sendMidiNow(a["port"].toString(), a["msgs"]); });
     // Listen on this computer (AudioHost.h): the state, change it, the computer's output devices at a rate.
     // Diagnostics (About / Help): text only, no audio or show contents.
     o = add(o, "diagnostics", [this](const juce::var&) { auto* r = new juce::DynamicObject(); r->setProperty("text", diagnostics()); return juce::var(r); });
@@ -356,6 +369,41 @@ Bridge::Options Bridge::addTo(Options o)
         pdfChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles | juce::FileBrowserComponent::warnAboutOverwriting,
                                 [done, write](const juce::FileChooser& fc) { done(write(fc.getResult())); });
     });
+    // ---- the band screens (6g): the server, its address, messages both ways ----
+    o = add(o, "bandStart", [this](const juce::var& a) {
+        const int port = a.hasProperty("port") ? (int) a["port"] : settings.getIntValue("bandPort", 8080);
+        auto* r = new juce::DynamicObject(); juce::var rv(r);
+        if (! (band.running() && band.port() == port)) {
+            const auto err = band.start(port);
+            if (err.isNotEmpty()) r->setProperty("error", err);
+            else if (! a.hasProperty("test")) { settings.setValue("bandPort", port); settings.saveIfNeeded(); }
+        }
+        r->setProperty("running", band.running()); r->setProperty("port", band.port());
+        juce::Array<juce::var> ips; for (auto& x : BandServer::addresses()) ips.add(x);
+        r->setProperty("addresses", ips); r->setProperty("mdns", band.mdnsState()); r->setProperty("clients", band.clientCount());
+        r->setProperty("platform", juce::SystemStats::getOperatingSystemName());
+        return rv;
+    });
+    o = add(o, "bandStop", [this](const juce::var&) { band.stop(); return juce::var(true); });
+    o = add(o, "bandInfo", [this](const juce::var&) {
+        auto* r = new juce::DynamicObject();
+        r->setProperty("running", band.running()); r->setProperty("port", band.running() ? band.port() : settings.getIntValue("bandPort", 8080));
+        juce::Array<juce::var> ips; for (auto& x : BandServer::addresses()) ips.add(x);
+        r->setProperty("addresses", ips); r->setProperty("mdns", band.mdnsState()); r->setProperty("clients", band.clientCount());
+        return juce::var(r);
+    });
+    // {text, to?, state?}: a state message gets the host time and the engine's transport, taken right now
+    o = add(o, "bandSend", [this](const juce::var& a) {
+        juce::String text = a["text"].toString();
+        if ((bool) a["state"] && text.startsWith("{")) {
+            const auto tr = juce::JSON::toString(audio.transportState(), true);
+            text = "{\"t\":\"state\",\"h\":" + juce::String(juce::Time::getMillisecondCounterHiRes(), 3) + ",\"tr\":" + tr + (text.length() > 2 ? "," + text.substring(1) : "}");
+        }
+        if (a.hasProperty("to")) band.sendTo((int) a["to"], text); else band.broadcast(text);
+        return juce::var(true);
+    });
+    o = add(o, "bandClose", [this](const juce::var& a) { band.closeClient((int) a["client"]); return juce::var(true); });
+    o = add(o, "hostTime", [](const juce::var&) { return juce::var(juce::Time::getMillisecondCounterHiRes()); });
     // ---- the Library (6f): one master bank of songs and setlists, autosaved, replacing Shows ----
     o = add(o, "libraryOpen", [this](const juce::var& a) { return libraryOpened(lib.open(a["name"].toString())); });
     o = add(o, "libraryList", [this](const juce::var&) { return lib.list(); });
@@ -463,11 +511,15 @@ Bridge::Options Bridge::addTo(Options o)
             }
             juce::MessageManager::callAsync([alive_, err, copied, tmpCues, done] {
                 if (*alive_ == nullptr) return;
-                if (tmpCues.isDirectory()) { (*alive_)->cues.mergeStore(tmpCues); }
-                auto* r = new juce::DynamicObject();
-                if (err.isNotEmpty()) r->setProperty("error", err); else r->setProperty("copied", copied);
-                applog::line("Imported a package: " + juce::String(copied) + " audio file(s)" + (err.isNotEmpty() ? ", " + err : juce::String()));
-                done(juce::var(r));
+                auto finish = [alive_, err, copied, done] {
+                    if (*alive_ == nullptr) return;
+                    auto* r = new juce::DynamicObject();
+                    if (err.isNotEmpty()) r->setProperty("error", err); else r->setProperty("copied", copied);
+                    applog::line("Imported a package: " + juce::String(copied) + " audio file(s)" + (err.isNotEmpty() ? ", " + err : juce::String()));
+                    done(juce::var(r));
+                };
+                // the package's cues are in before the songs are (no cue is spoken with this computer's voice first)
+                if (tmpCues.isDirectory()) (*alive_)->cues.mergeStore(tmpCues, finish); else finish();
             });
         }).detach();
     });
@@ -500,7 +552,7 @@ Bridge::Options Bridge::addTo(Options o)
         return juce::var(r);
     });
     // a show's stored cues join the library's (copied; the show folder isn't touched)
-    o = add(o, "mergeCues", [this](const juce::var& a) { const juce::File d(a["from"].toString()); if (d.isDirectory()) cues.mergeStore(d); return juce::var(true); });
+    o = addAsync(o, "mergeCues", [this](const juce::var& a, auto done) { const juce::File d(a["from"].toString()); if (d.isDirectory()) cues.mergeStore(d, [done] { done(juce::var(true)); }); else done(juce::var(true)); });
     o = add(o, "migrationLog", [this](const juce::var& a) {
         const auto f = lib.folder().getChildFile("migration-log.txt");
         f.appendText(juce::Time::getCurrentTime().formatted("%Y-%m-%d %H:%M:%S") + "\n" + a["text"].toString() + "\n\n");

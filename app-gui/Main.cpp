@@ -79,7 +79,7 @@ public:
         platform::enableHighResolutionTimers();
         const auto args = getCommandLineParameterArray();
         const bool dev = args.contains("--dev");
-        const int pi = args.indexOf("--page"); // open another page first (testing), e.g. --page 3-satellite.html?mac
+        const int pi = args.indexOf("--page"); // open another page first (testing), e.g. --page band.html
         const juce::String page = pi >= 0 ? args[pi + 1] : juce::String();
         if (const int kt = args.indexOf("--kokoro-test"); kt >= 0 && kt + 1 < args.size()) {
             kokoroTest(juce::File::getCurrentWorkingDirectory().getChildFile(args[kt + 1].unquoted()));

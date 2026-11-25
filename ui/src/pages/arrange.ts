@@ -3,11 +3,14 @@
 // Positions cross the bridge as bar/beat, so the playhead stays on the page's bar grid even where the
 // engine plays a tempo ramp as a jump. Loops run inside the engine (sample-exact); this module only
 // tells it which range to loop.
+import { startBandHost } from "../band/host";
 import { SL } from "../bridge";
 
 interface Bar { bar: number; t: number; dur: number; sig: [number, number]; beatT: number[] }
 interface Song { id: string; name: string; tracks: string[]; bars: Bar[]; total: number; audio: number; [k: string]: any }
 interface Page {
+  // 6g: the band's screens (see 1-arrange.html, BAND)
+  band: any; midiReconnected(names: string[]): void; setlistOpened(): void;
   // 6f: the Library
   setlistCmd(cmd: "new" | "dup"): void; curSetId(): string; setSaveState(st: "saving" | "saved" | "error", why?: string): void;
   importPlan(pkg: any): { differ: any[]; same: number; added: number }; importBox(name: string, plan: any, note: string): Promise<Record<string, string> | null>;
@@ -623,6 +626,7 @@ async function openLibrary(name = "", startEmpty?: boolean): Promise<string> {
   libBackup("on launch");
   page().setSessionName(lib.name);
   remember();
+  page().setlistOpened(); // its MIDI sync point, if it's set to go out when the setlist opens
   return "";
 }
 // ---- Export / Import (.setline packages) ----
@@ -697,10 +701,10 @@ async function migrateShows(paths: string[]) {
     };
     await doImport([...refs]);
     await doImport([...wordRefs], "Cues/Words");
+    await SL.call("mergeCues", { from: r.folder + "/Cues" }); // its stored cues first: nothing is spoken again with this computer's voice
     const res = page().mergeShow(o, name, map);
     if (missing.length) log.push(`${name}: ${missing.length} audio file(s) missing (they play as silence): ${missing.slice(0, 8).join(", ")}`);
     log.push(`${name} (${path}): setlist${res.setlists.length > 1 ? "s" : ""} ${res.setlists.map((x: string) => "“" + x + "”").join(", ")}; ${res.added} new song(s), ${res.merged} merged with songs already in the library${res.notes.length ? "; " + res.notes.join("; ") : ""}`);
-    await SL.call("mergeCues", { from: r.folder + "/Cues" });
     made++;
   }
   const where = await SL.call<string>("migrationLog", { text: `Brought ${made} show(s) into the library “${lib ? lib.name : ""}”.\n` + log.join("\n") + "\nThe original show folders weren't changed; you can delete them yourself once you're happy." });
@@ -742,6 +746,7 @@ async function restoreBackup(path: string, into: "replace" | "new") {
 }
 
 let lastSetSent = "";
+let bandHost: ReturnType<typeof startBandHost> | null = null;
 
 function applySession(text: string) {
   const o = JSON.parse(text);
@@ -1283,6 +1288,11 @@ async function main() {
     p.PORTS.splice(0, p.PORTS.length, ...real, ...[...used].filter((u) => !real.includes(u)));
   } catch (e) { console.warn("set.Line: MIDI outputs", e); }
   // The loading window (app start): show, waveforms, cues; then the main window appears. Tests don't wait for it.
+  // 6g: the band's screens (tests start the server themselves, on their own port: hooks.bandStart)
+  bandHost = startBandHost(SL, page);
+  (window as any).SLBandHost = bandHost;
+  SL.on("midiReconnected", (m: { reconnected: string[] }) => page().midiReconnected(m.reconnected || []));
+  if (!info.testScript) SL.call<{ error?: string }>("bandStart", {}).then((r) => { if (r && r.error) SL.call("logLine", { text: "Band server: " + r.error }); page().band.info(r); }).catch(() => {});
   await reportLoading(showProblem, !!info.testScript);
   if (!info.testScript && lib) offerMigration().catch((e) => console.warn("set.Line: migration", e));
   // Test hook (--test-script): run an async script with the page and this module's functions; write its result.
@@ -1294,6 +1304,7 @@ async function main() {
         getRate: () => sessionRate, openPath: (p: string) => openPath(p), retryStartShow: () => retryStartShow(), docName: () => doc.name, saveTo: (path: string) => saveSession(false, path), cueList: () => cueList(), setListen: (r: Partial<ListenState>) => setListen(r), SLR: window.SLR, SLW, waves, SLC, prepareCues, remember, payload, toBarBeat, toTime, getNext: () => nextMeta, getLoaded: () => ({ id: loadedSongId, ver: curVerId, map: curMap }), isDirty: () => (lib ? sessionText() !== libText : sessionText() !== doc.savedText), setDoc: (n: string) => { doc = { name: n, savedText: "" }; },
         // 6f: the Library
         openLibrary: (n = "", empty?: boolean) => openLibrary(n, empty), libSave: () => libSave(), lib: () => lib, libFiles, exportSetlist: (id?: string, to?: string) => exportSetlist(id, to), exportText,
+        bandStart: (port: number) => SL.call("bandStart", { port, test: true }), bandHost: () => bandHost,
         importPackage: (p: string, choose?: any) => importPackage(p, choose), migrateShows: (paths: string[]) => migrateShows(paths), restoreBackup: (p: string, how: "replace" | "new") => restoreBackup(p, how), switchLibrary: (n: string) => switchLibrary(n), offerMigration: () => offerMigration() };
       out = await new AsyncFn("SL", "hooks", info.testScript)(SL, hooks);
     } catch (e) { out = { error: String((e as Error)?.stack || e) }; }

@@ -74,7 +74,9 @@ public:
     // The open show's folder (empty: not saved yet, nothing stored). Message thread.
     void setShowFolder(const juce::File& folder);
     // 6f: another store's cues (a package's Cues/, an old show's) join this one: copied, the originals untouched.
-    void mergeStore(const juce::File& fromCuesDir);
+    // Runs ahead of any render waiting (urgent), so nothing is spoken with this computer's voice first; done (message
+    // thread) once the cues are in.
+    void mergeStore(const juce::File& fromCuesDir, std::function<void()> done = {});
     // Saving: stores every cue of the show (rendering what's missing) and removes stored cues it no longer
     // uses; calls back with how many are stored. [{text, voice, name, speed, pron, recPath}]
     void storeShow(const juce::var& list, double rate, std::function<void(int stored, int removed)> done);

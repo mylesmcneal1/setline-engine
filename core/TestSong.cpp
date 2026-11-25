@@ -6,6 +6,7 @@
 #include "Wav.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -273,14 +274,17 @@ bool runSelfTest(bool verbose)
         check(b10 - b9 == std::llround(expectBar9Len), "the 7/8 bar is exactly 1.500 s");
     }
 
-    // 3) Real-time simulation: a fake device thread calls the engine every 128 samples for 6 s.
-    {
+    // 3) Real-time simulation: a fake device thread calls the engine every 128 samples for 6 s; then again with the MIDI
+    //    clock on two ports (6g: the clock must not degrade the MIDI timing).
+    for (int withClock = 0; withClock < 2; ++withClock) {
+        const std::string rt = withClock ? "real-time (MIDI clock on): " : "real-time: ";
         SongDef song = makeTestSong(8, 8, sr);
         Engine e; FakeSink sink;
         Engine::Config cfg; cfg.sampleRate = sr; cfg.numOutputs = 4;
         std::vector<std::string> warn;
         e.load(song, cfg, warn);
         e.setMidiSink(&sink);
+        e.setMidiClock(withClock ? 0x3u : 0u, 0u, withClock ? 2 : 0);
         e.setDeviceTiming(128, 64);
         e.setDeviceRunning(true);
         std::atomic<bool> run { true };
@@ -296,16 +300,16 @@ bool runSelfTest(bool verbose)
         e.setDeviceRunning(false);
         e.stop();
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        check(started, "real-time: preroll finished and playback started");
-        check(e.stats.underruns.load() == 0, "real-time: no disk underruns with 9 stems streaming");
-        check(e.midi.dropped.load() == 0, "real-time: no MIDI events dropped");
+        check(started, rt + "preroll finished and playback started");
+        check(e.stats.underruns.load() == 0, rt + "no disk underruns with 9 stems streaming");
+        check(e.midi.dropped.load() == 0, rt + "no MIDI events dropped");
         const int64_t n = e.midi.sent.load();
         char line[200];
-        std::snprintf(line, sizeof line, "real-time: %lld MIDI sends, lateness avg %.3f ms, max %.3f ms (informational on shared CI machines)",
-                      (long long) n, n ? e.midi.lateSumUs.load() / 1000.0 / n : 0.0, e.midi.lateMaxUs.load() / 1000.0);
+        std::snprintf(line, sizeof line, "%s%lld MIDI sends, lateness avg %.3f ms, max %.3f ms (informational on shared CI machines)",
+                      rt.c_str(), (long long) n, n ? e.midi.lateSumUs.load() / 1000.0 / n : 0.0, e.midi.lateMaxUs.load() / 1000.0);
         check(n >= 5, line);
         if (e.midi.lateMaxUs.load() > 2000) std::printf("  [warn] MIDI was over 2 ms late at least once. If this repeats on a real --soak run, MIDI timing fails.\n");
-        std::snprintf(line, sizeof line, "real-time: worst callback %.3f ms of a 2.667 ms budget", e.stats.cbMaxUs.load() / 1000.0);
+        std::snprintf(line, sizeof line, "%sworst callback %.3f ms of a 2.667 ms budget", rt.c_str(), e.stats.cbMaxUs.load() / 1000.0);
         check(true, line);
     }
 
@@ -1014,6 +1018,53 @@ bool runSelfTest(bool verbose)
         check(o[(size_t) (endOfThird - 1)] == (float) (3 * bar - 1) * 1e-6f && o[(size_t) endOfThird] == (float) (3 * bar) * 1e-6f
               && o[(size_t) (bar + 2 * bar)] == (float) bar * 1e-6f,
               "loop: repeats while armed; Exit loop leaves at the end of the pass (then plays on into bar 4)");
+    }
+    // ---- Phase 6g: MIDI clock ----
+    std::printf("Phase 6g MIDI clock\n");
+    {
+        // 2 bars of 4/4 at 120, then 2 bars of 7/8 at 90: 96 ticks per 4/4 bar, 84 per 7/8 bar, each at the bar's tempo
+        SongDef s; s.name = "Clock"; s.tempo = { { 1, 120, 4, 4 }, { 3, 90, 7, 8 } };
+        const int64_t len = 2 * 96000 + 2 * 112000;
+        s.stems.push_back(rampStem(len, 0.0f, 0));
+        OfflineRun r; r.load(s, sr, 1, 128);
+        r.e.setMidiClock(1u, 1u, 1);
+        r.start(0); r.runToEnd();
+        const auto& tm = r.e.tempoMap();
+        std::vector<int64_t> ticks; int starts = 0, stops = 0, spp = -1; int64_t startAt = -1;
+        for (auto& m : r.e.midiLog) {
+            if (m.d[0] == 0xF8) ticks.push_back(m.sample);
+            else if (m.d[0] == 0xFA) { ++starts; startAt = m.sample; }
+            else if (m.d[0] == 0xFC) ++stops;
+            else if (m.d[0] == 0xF2) spp = m.d[1] | (m.d[2] << 7);
+        }
+        int perBar[5] = { 0, 0, 0, 0, 0 };
+        for (auto t : ticks) for (int b = 1; b <= 4; ++b) if (t >= tm.sampleAt(b, 1) && t < tm.sampleAt(b + 1, 1)) ++perBar[b];
+        char line[200];
+        std::snprintf(line, sizeof line, "MIDI clock: ticks per bar follow the tempo map (4/4 120: %d, %d; 7/8 90: %d, %d)", perBar[1], perBar[2], perBar[3], perBar[4]);
+        check(perBar[1] == 96 && perBar[2] == 96 && perBar[3] == 84 && perBar[4] == 84 && (int) ticks.size() == 360, line);
+        bool even = ticks.size() > 200 && std::llabs(ticks[1] - ticks[0] - 1000) <= 1 && std::llabs(ticks[200] - ticks[199] - 1333) <= 1;
+        check(even && ticks[0] == 0 && ticks[192] == 192000, "MIDI clock: 1000 samples per tick at 120, 1333 at 90; the first tick on bar 1 and on the 7/8 bar line");
+        check(starts == 1 && startAt == 0 && spp == 0 && stops == 1, "MIDI clock: Song Position 0 + Start at the top, Stop at the end (transport ports)");
+        // stopped: free-running at the loaded song's starting tempo (120: a tick every 1000 samples)
+        r.e.midiLog.clear();
+        for (int k = 0; k < 375; ++k) r.e.process(r.ptrs.data(), 1, 128); // 48000 samples
+        std::vector<int64_t> idle; for (auto& m : r.e.midiLog) if (m.d[0] == 0xF8) idle.push_back(m.sample);
+        std::snprintf(line, sizeof line, "MIDI clock: while stopped it keeps running at the song's starting tempo (%d ticks in 1 s at 120)", (int) idle.size());
+        check(idle.size() == 48 && idle[1] - idle[0] == 1000, line);
+        // the next song waiting (90 BPM): the stopped clock follows its tempo
+        { SongDef n; n.name = "Next"; n.tempo = { { 1, 90, 4, 4 } }; n.stems.push_back(rampStem(96000, 0.0f, 0)); std::vector<std::string> w2; r.e.prepareNext(n, w2);
+          r.e.midiLog.clear(); for (int k = 0; k < 375; ++k) r.e.process(r.ptrs.data(), 1, 128);
+          std::vector<int64_t> nx; for (auto& m : r.e.midiLog) if (m.d[0] == 0xF8) nx.push_back(m.sample);
+          check(nx.size() >= 35 && nx.size() <= 37 && std::llabs(nx[2] - nx[1] - 1333) <= 1, "MIDI clock: stopped with the next song waiting, it runs at the next song's tempo (90)");
+          r.e.clearNext(); }
+        // Continue + Song Position from inside the song (bar 2 = 16 sixteenths)
+        r.e.midiLog.clear(); r.start(96000); r.step(); r.e.stop();
+        int cont = 0, pos = -1; for (auto& m : r.e.midiLog) { if (m.d[0] == 0xFB) ++cont; if (m.d[0] == 0xF2) pos = m.d[1] | (m.d[2] << 7); }
+        check(cont == 1 && pos == 16, "MIDI clock: starting at bar 2 sends Song Position 16 + Continue");
+        // clock off: nothing
+        r.e.setMidiClock(0u, 0u, 1); r.e.midiLog.clear(); r.start(0); for (int k = 0; k < 50; ++k) r.step();
+        int any = 0; for (auto& m : r.e.midiLog) if (m.d[0] >= 0xF2) ++any;
+        check(any == 0, "MIDI clock: off sends nothing");
     }
     std::printf(ok ? "ALL CHECKS PASSED\n" : "SOME CHECKS FAILED\n");
     return ok;

@@ -46,6 +46,22 @@ if(SETLINE_WITH_JUCE)
     GIT_TAG        ${SETLINE_JUCE_TAG}
     GIT_SHALLOW    TRUE)
   FetchContent_MakeAvailable(JUCE)
+  # The band server (6g): CivetWeb 1.16 (MIT), HTTP + WebSocket in one small C file. Only its source is used
+  # (SOURCE_SUBDIR points nowhere, so its own CMake project isn't configured).
+  FetchContent_Declare(civetweb
+    GIT_REPOSITORY https://github.com/civetweb/civetweb.git
+    GIT_TAG        v1.16
+    GIT_SHALLOW    TRUE
+    SOURCE_SUBDIR  setline-not-a-dir)
+  FetchContent_MakeAvailable(civetweb)
+  add_library(setline_civetweb STATIC "${civetweb_SOURCE_DIR}/src/civetweb.c")
+  target_include_directories(setline_civetweb PUBLIC "${civetweb_SOURCE_DIR}/include")
+  target_compile_definitions(setline_civetweb PUBLIC NO_SSL USE_WEBSOCKET PRIVATE NO_CGI NO_CACHING)
+  if(WIN32)
+    target_link_libraries(setline_civetweb PUBLIC ws2_32)
+  else()
+    target_link_libraries(setline_civetweb PUBLIC Threads::Threads)
+  endif()
   # Sources are compiled at build time, so patching after add_subdirectory is fine.
   set(JUCE_SOURCE_DIR "${juce_SOURCE_DIR}")
   include(cmake/PatchJuce.cmake)
@@ -162,7 +178,8 @@ if(SETLINE_WITH_JUCE)
       app-gui/WebUi.cpp
       app-gui/WinIcon.cpp
       app-gui/LibraryStore.cpp
-      app-gui/Package.cpp)
+      app-gui/Package.cpp
+      app-gui/BandServer.cpp)
     if(APPLE)
       target_sources(setline PRIVATE app-gui/MacDrop.mm app-gui/SpeechMac.mm)
       # Objective-C++ without changing how JUCE's own sources compile.
@@ -178,7 +195,7 @@ if(SETLINE_WITH_JUCE)
       JUCE_APPLICATION_NAME_STRING="$<TARGET_PROPERTY:setline,JUCE_PRODUCT_NAME>"
       JUCE_APPLICATION_VERSION_STRING="$<TARGET_PROPERTY:setline,JUCE_VERSION>")
     target_link_libraries(setline
-      PRIVATE setline_core setline_ui setline_brand
+      PRIVATE setline_core setline_ui setline_brand setline_civetweb
               juce::juce_gui_extra juce::juce_audio_devices juce::juce_audio_formats juce::juce_cryptography
       PUBLIC  juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
     setline_enable_asio(setline)

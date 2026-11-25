@@ -8,6 +8,8 @@ namespace setline::gui {
 
 class WebUi : public juce::Component, public juce::FileDragAndDropTarget {
 public:
+    // A file of the embedded web UI (also served to the band screens, 6g; thread-safe).
+    static std::optional<juce::WebBrowserComponent::Resource> serve(const juce::String& path);
     using Options = juce::WebBrowserComponent::Options;
 
     static constexpr const char* devServer = "http://localhost:5173/";
@@ -40,7 +42,6 @@ private:
         WebUi& owner;
     };
 
-    static std::optional<juce::WebBrowserComponent::Resource> serve(const juce::String& path);
 
     bool dev;
     std::unique_ptr<Browser> web;

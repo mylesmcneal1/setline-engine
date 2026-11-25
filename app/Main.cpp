@@ -253,6 +253,8 @@ static int play(const Args& args)
     Engine::Config cfg; cfg.sampleRate = rate; cfg.numOutputs = needOuts; cfg.midiOffsetMs = args.get("--midi-offset", "0").getDoubleValue();
     if (auto err = engine.load(song, cfg, warn); ! err.empty()) { say("Error: " + juce::String(err)); return 2; }
     engine.setMidiSink(&midiSink);
+    // --midi-clock: 24 ppqn on every MIDI port in use (6g); --midi-transport adds Start/Stop/Continue + Song Position
+    if (args.has("--midi-clock")) engine.setMidiClock(0xffffffffu, args.has("--midi-transport") ? 0xffffffffu : 0u, midiSink.names.size());
     Callback cb(engine);
     dm.addAudioCallback(&cb);
 
@@ -370,7 +372,7 @@ static void usage()
         "  setline-spike --selftest\n"
         "  setline-spike --make-test <folder> [--stems 8] [--seconds 120] [--rate 48000]\n"
         "  setline-spike --play <folder> [--device \"<part of name>\"] [--driver ASIO] [--buffer 128] [--midi-port \"Quad\"] [--midi-offset 0]\n"
-        "                [--autoplay] [--loops N] [--soak <minutes>]\n"
+        "                [--autoplay] [--loops N] [--soak <minutes>] [--midi-clock [--midi-transport]]\n"
         "  setline-spike --render <folder> [--out render.wav]");
 }
 

@@ -8,6 +8,7 @@
 #pragma once
 #include "LiveGain.h"
 #include "MidiScheduler.h"
+#include <algorithm>
 #include <array>
 #include "Song.h"
 #include "StemStreamer.h"
@@ -68,6 +69,14 @@ public:
     void setDeviceTiming(int bufferSamples, int outputLatencySamples);
     void setDeviceRunning(bool b) { deviceRunning.store(b); }
     void setMidiSink(MidiSink* s);
+
+    // MIDI clock (6g): 24 ppqn to every port in clockPorts (bit k = port k, of numPorts), following the tempo map
+    // exactly while playing; while stopped it keeps running at the next song's starting tempo. Ports in
+    // transportPorts also get Song Position + Start / Continue when playback starts, and Stop when it stops.
+    // Scheduled like every other MIDI event; a flush (stop, locate) never drops them.
+    void setMidiClock(uint32_t clockPorts, uint32_t transportPorts, int numPorts)
+    { clockMask.store(clockPorts, std::memory_order_relaxed); transportMask.store(transportPorts, std::memory_order_relaxed); clockPortCount.store(std::min(numPorts, 32), std::memory_order_relaxed); }
+    const std::vector<int64_t>& clockTicks() const { return cur().clockTicks; }
 
     // Transport (non-audio threads).
     // Starts playing from any sample: seeks every stem, skips click and MIDI events before that point,
@@ -143,6 +152,7 @@ private:
         std::vector<std::unique_ptr<StemStreamer>> stems;
         std::unique_ptr<LiveGain[]> stemGains;
         std::vector<MidiAt> midiEvents;
+        std::vector<int64_t> clockTicks; // MIDI clock: 24 per quarter note, from the tempo map
         std::vector<CueAt> cues;   // sorted by sample; audio preloaded (never rendered during playback)
         std::vector<int> cueOuts;
         int64_t longestCue = 0;
@@ -181,7 +191,13 @@ private:
 
     // audio-thread state
     std::atomic<int64_t> pos { 0 };
-    size_t nextMidi = 0;
+    size_t nextMidi = 0, nextTick = 0;
+    double idleAcc = 0; int64_t idleSample = 0; bool clockWasPlaying = false; int64_t startedFrom = 0;
+    std::atomic<uint32_t> clockMask { 0xffffffffu }, transportMask { 0 };
+    std::atomic<int> clockPortCount { 0 };
+    void sendAt(int port, uint8_t a, uint8_t b, uint8_t c, int len, int64_t logSample, int blockOffset, Clock::time_point t0, bool sys);
+    void clockIdle(int n, Clock::time_point t0);
+    void clockTransport(uint8_t status, int64_t logSample, int blockOffset, Clock::time_point t0);
     int fadeInLeft = 0, fadeInLen = 0, fadeOutLeft = 0;
 
     // jump / loop: the control side publishes {at, to, repeat} under a sequence number; the audio

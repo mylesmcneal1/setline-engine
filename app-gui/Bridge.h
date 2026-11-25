@@ -8,6 +8,7 @@
 #include "Peaks.h"
 #include "Cues.h"
 #include "LibraryStore.h"
+#include "BandServer.h"
 #include <atomic>
 #include <thread>
 
@@ -69,6 +70,7 @@ private:
     Peaks peaks;
     Cues cues;
     LibraryStore lib;
+    BandServer band; // 6g: the band screens
     std::thread exporter;                    // writing a .setline package (one at a time)
     std::shared_ptr<std::atomic<bool>> exportCancel = std::make_shared<std::atomic<bool>>(false);
     std::unique_ptr<juce::FileChooser> packChooser;

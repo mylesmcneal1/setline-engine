@@ -4,6 +4,7 @@
 // that moment and sends it. Lateness of every send is measured.
 #pragma once
 #include "Platform.h"
+#include <algorithm>
 #include <array>
 #include <memory>
 #include <atomic>
@@ -23,7 +24,8 @@ struct MidiSink {
 
 class MidiScheduler {
 public:
-    struct Item { int port; uint8_t d[3]; int len; Clock::time_point target; };
+    // sys: MIDI clock and transport (Start / Stop / Continue / Song Position): a flush (stop, locate) keeps them
+    struct Item { int port; uint8_t d[3]; int len; Clock::time_point target; bool sys = false; };
 
     ~MidiScheduler() { stop(); }
 
@@ -63,7 +65,13 @@ private:
         platform::makeThisThreadTimeCritical();
         std::vector<Item> pending; pending.reserve(Q);
         while (running) {
-            if (flushReq.exchange(false)) { pending.clear(); r.store(w.load(std::memory_order_acquire), std::memory_order_release); }
+            if (flushReq.exchange(false)) {
+                pending.erase(std::remove_if(pending.begin(), pending.end(), [](const Item& x) { return ! x.sys; }), pending.end());
+                const uint64_t wp = w.load(std::memory_order_acquire);
+                for (uint64_t rp = r.load(std::memory_order_relaxed); rp != wp; ++rp)
+                    if (q[rp % Q].sys) { auto at = pending.end(); while (at != pending.begin() && (at - 1)->target > q[rp % Q].target) --at; pending.insert(at, q[rp % Q]); }
+                r.store(wp, std::memory_order_release);
+            }
             for (uint64_t rp = r.load(std::memory_order_relaxed); rp != w.load(std::memory_order_acquire); ++rp) {
                 const Item& it = q[rp % Q];
                 auto pos = pending.end(); // keep sorted by target (normally already in order)

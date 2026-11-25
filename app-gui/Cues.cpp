@@ -285,9 +285,11 @@ void Cues::setShowFolder(const juce::File& folder)
     for (auto& k : stored) memo.erase(k);
 }
 
-void Cues::mergeStore(const juce::File& from)
+void Cues::mergeStore(const juce::File& from, std::function<void()> done)
 {
-    post([this, from] {
+    auto alive_ = alive;
+    post([this, from, done, alive_] {
+        struct Done { std::function<void()> fn; std::shared_ptr<bool> a; ~Done() { if (fn) { auto f = fn; auto al = a; juce::MessageManager::callAsync([f, al] { if (*al) f(); }); } } } fin { done, alive_ };
         juce::File dir;
         { std::lock_guard<std::mutex> g(dataLock); if (showDir != juce::File()) dir = showDir.getChildFile("Cues"); }
         if (dir == juce::File() || ! dir.createDirectory()) return;
@@ -308,7 +310,7 @@ void Cues::mergeStore(const juce::File& from)
                 std::lock_guard<std::mutex> g(dataLock); memo.erase(key);
             }
         if (added) writeManifest(dir);
-    }, false);
+    }, true);
 }
 
 juce::var& Cues::manifest(const juce::File& dir)

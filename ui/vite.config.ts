@@ -17,9 +17,7 @@ export default defineConfig({
       onwarn(w, warn) { if (w.code === "EVAL" && String(w.id ?? "").includes("/juce/")) return; warn(w); },
       input: {
         arrange: page("1-arrange.html"),
-        satellite: page("3-satellite.html"),
-        users: page("4-users.html"),
-        band: page("5-band.html"),
+        band: page("band.html"), // the band's phones and tablets (6g), served by set.Line's band server
       },
     },
   },

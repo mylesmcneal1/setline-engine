@@ -147,6 +147,16 @@ std::string Engine::build(Program& P, const SongDef& song, std::vector<std::stri
         P.midiEvents.push_back(e);
     }
     std::stable_sort(P.midiEvents.begin(), P.midiEvents.end(), [](auto& a, auto& b) { return a.sample < b.sample; });
+    // --- MIDI clock: 24 ticks per quarter note through every bar (7/8 = 84 ticks), up to the end of the song ---
+    P.clockTicks.clear();
+    for (int b = 1; b <= P.tmap.numBars(); ++b) {
+        const auto& x = P.tmap.bar(b);
+        const double tick = 60.0 / x.bpm * cfg.sampleRate / 24.0;
+        const int nt = (int) std::lround(96.0 * x.num / x.den);
+        bool done = false;
+        for (int k = 0; k < nt; ++k) { const int64_t s = (int64_t) std::llround(x.start + k * tick); if (s >= P.songLen) { done = true; break; } P.clockTicks.push_back(s); }
+        if (done) break;
+    }
     seekClicks(P, 0);
     return {};
 }
@@ -168,9 +178,9 @@ std::string Engine::load(const SongDef& song, const Config& c, std::vector<std::
         if (reconfig) { progs[(size_t) (1 - curIdx.load())] = std::make_unique<Program>(); nextLoaded = false; } // built for the old setup
     }
     nextFresh = false;
-    midiLog.clear(); if (cfg.offline) midiLog.reserve(std::max<size_t>(cur().midiEvents.size() * 4 + 64, 1 << 16)); // loops replay events
+    midiLog.clear(); if (cfg.offline) midiLog.reserve(std::max<size_t>(cur().midiEvents.size() * 4 + cur().clockTicks.size() * 8 + 64, 1 << 16)); // loops replay events
 
-    pos = 0; nextMidi = 0;
+    pos = 0; nextMidi = 0; nextTick = 0;
     ctlJump = {}; publishJump(); rtJump = {}; rtSeq = jumpSeq.load(); rtDoneSeq = ~0ull; // a new song has no loop
     fadeInLeft = fadeInLen = fadeOutLeft = 0;
     ensureDisk();
@@ -234,7 +244,7 @@ bool Engine::promoteNext()
     segueArmed.store(false, std::memory_order_release);
     curIdx.store(1 - curIdx.load());
     nextFresh = true; // its stems are primed at sample 0: a start there doesn't seek again
-    pos = 0; nextMidi = 0;
+    pos = 0; nextMidi = 0; nextTick = 0;
     ctlJump = {}; publishJump(); rtJump = {}; rtSeq = jumpSeq.load(); rtDoneSeq = ~0ull;
     fadeInLeft = fadeInLen = fadeOutLeft = 0;
     return true;
@@ -270,6 +280,7 @@ void Engine::seekClicks(Program& P, int64_t p)
         c.next = (size_t) (std::lower_bound(c.hits.begin(), c.hits.end(), p, [](const ClickHit& h, int64_t x) { return h.sample < x; }) - c.hits.begin());
         c.voice = {};
     }
+    nextTick = (size_t) (std::lower_bound(P.clockTicks.begin(), P.clockTicks.end(), p) - P.clockTicks.begin());
 }
 
 void Engine::setTrackLevel(int track, float db, bool mute, bool next)
@@ -350,6 +361,7 @@ bool Engine::start(int64_t fromSample, int timeoutMs)
         }
     }
     seekClicks(P, fromSample);
+    startedFrom = fromSample; clockWasPlaying = false; // Song Position + Start / Continue go out on the first callback
     nextMidi = (size_t) (std::lower_bound(P.midiEvents.begin(), P.midiEvents.end(), fromSample, [](const MidiAt& m, int64_t s) { return m.sample < s; }) - P.midiEvents.begin());
     fadeInLeft = fadeInLen = (int) preroll;
     fadeOutLeft = 0;
@@ -409,7 +421,18 @@ void Engine::process(float* const* outs, int numOuts, int n)
     const auto t0 = Clock::now();
     for (int c = 0; c < numOuts; ++c) if (outs[c]) std::fill(outs[c], outs[c] + n, 0.0f);
     serial.fetch_add(1, std::memory_order_acq_rel);
-    if (! playing.load(std::memory_order_acquire)) return;
+    if (! playing.load(std::memory_order_acquire)) { clockIdle(n, t0); return; }
+    if (! clockWasPlaying) { // Song Position (in 16ths) + Start from the top / Continue from inside the song
+        clockWasPlaying = true;
+        const int64_t p0 = pos.load(std::memory_order_relaxed);
+        const int off = (int) std::clamp<int64_t>(startedFrom - p0, 0, n - 1);
+        const auto& ticks = cur().clockTicks;
+        const int spp = (int) ((std::lower_bound(ticks.begin(), ticks.end(), startedFrom) - ticks.begin()) / 6);
+        const uint32_t tm = transportMask.load(std::memory_order_relaxed);
+        for (int port = 0; port < clockPortCount.load(std::memory_order_relaxed); ++port)
+            if ((tm >> port) & 1u) sendAt(port, 0xF2, (uint8_t) (spp & 0x7f), (uint8_t) ((spp >> 7) & 0x7f), 3, startedFrom, off, t0, true);
+        clockTransport(startedFrom == 0 ? 0xFA : 0xFB, startedFrom, off, t0);
+    }
 
     // Pick up a new loop / jump (complete copies only).
     if (const uint64_t s1 = jumpSeq.load(std::memory_order_acquire); (s1 & 1) == 0 && s1 != rtSeq) {
@@ -435,6 +458,7 @@ void Engine::process(float* const* outs, int numOuts, int n)
             p = rtJump.to;
             for (auto& c : P.clickLanes) c.next = (size_t) (std::lower_bound(c.hits.begin(), c.hits.end(), p, [](const ClickHit& h, int64_t x) { return h.sample < x; }) - c.hits.begin());
             nextMidi = (size_t) (std::lower_bound(P.midiEvents.begin(), P.midiEvents.end(), p, [](const MidiAt& m, int64_t x) { return m.sample < x; }) - P.midiEvents.begin());
+            nextTick = (size_t) (std::lower_bound(P.clockTicks.begin(), P.clockTicks.end(), p) - P.clockTicks.begin());
             if (! rtJump.repeat) rtDoneSeq = rtSeq;
             stats.jumps.fetch_add(1, std::memory_order_relaxed);
         }
@@ -472,8 +496,8 @@ void Engine::process(float* const* outs, int numOuts, int n)
     }
 
     pos.store(p, std::memory_order_relaxed);
-    if (stopNow) { stopReq.store(false, std::memory_order_release); playing.store(false, std::memory_order_release); }
-    else if (p >= cur().songLen) { playing.store(false, std::memory_order_release); finished.store(true); }
+    if (stopNow) { stopReq.store(false, std::memory_order_release); playing.store(false, std::memory_order_release); clockTransport(0xFC, p, n - 1, t0); idleAcc = 0; }
+    else if (p >= cur().songLen) { playing.store(false, std::memory_order_release); finished.store(true); clockTransport(0xFC, p, n - 1, t0); idleAcc = 0; }
 
     // Timing stats.
     const double sr = cfg.sampleRate;
@@ -570,6 +594,54 @@ void Engine::renderSegment(Program& P, float* const* outs, int numOuts, int off,
             midi.push(it);
         }
     }
+    // 4) MIDI clock: the song's ticks in this segment, to every clock port
+    const uint32_t cm = clockMask.load(std::memory_order_relaxed);
+    const int np = clockPortCount.load(std::memory_order_relaxed);
+    while (nextTick < P.clockTicks.size() && P.clockTicks[nextTick] < p + count) {
+        const int64_t at = std::max<int64_t>(p, P.clockTicks[nextTick++]);
+        for (int port = 0; port < np; ++port) if ((cm >> port) & 1u) sendAt(port, 0xF8, 0, 0, 1, at, off + (int) (at - p), t0, true);
+    }
+}
+
+void Engine::sendAt(int port, uint8_t a, uint8_t b, uint8_t c, int len, int64_t logSample, int blockOffset, Clock::time_point t0, bool sys)
+{
+    if (cfg.offline) {
+        if (midiLog.size() < midiLog.capacity()) { LoggedMidi l; l.sample = logSample; l.port = port; l.len = len; l.d[0] = a; l.d[1] = b; l.d[2] = c; midiLog.push_back(l); }
+        return;
+    }
+    MidiScheduler::Item it;
+    it.port = port; it.len = len; it.d[0] = a; it.d[1] = b; it.d[2] = c; it.sys = sys;
+    const double secs = (latencyBase.load(std::memory_order_relaxed) + blockOffset) / cfg.sampleRate + cfg.midiOffsetMs / 1000.0;
+    it.target = t0 + std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(secs));
+    midi.push(it);
+}
+
+void Engine::clockTransport(uint8_t status, int64_t logSample, int blockOffset, Clock::time_point t0)
+{
+    const uint32_t tm = transportMask.load(std::memory_order_relaxed);
+    for (int port = 0; port < clockPortCount.load(std::memory_order_relaxed); ++port)
+        if ((tm >> port) & 1u) sendAt(port, status, 0, 0, 1, logSample, blockOffset, t0, true);
+}
+
+// Stopped: the clock keeps running at the next song's starting tempo (delays and modulation stay right). In offline
+// mode the ticks are logged against a running sample count of the stopped time.
+void Engine::clockIdle(int n, Clock::time_point t0)
+{
+    const uint32_t cm = clockMask.load(std::memory_order_relaxed);
+    const int np = clockPortCount.load(std::memory_order_relaxed);
+    if (np <= 0 || cm == 0 || cfg.sampleRate <= 0) { idleSample += n; return; }
+    // the next song (waiting in the next slot) if there is one, else the loaded one
+    const Program* nx = nextLoaded.load(std::memory_order_acquire) ? other() : nullptr;
+    const auto& tm = (nx && nx->tmap.numBars() > 0 ? *nx : cur()).tmap;
+    const double bpm = tm.numBars() > 0 && tm.bar(1).bpm > 0 ? tm.bar(1).bpm : 120.0;
+    const double tick = 60.0 / bpm * cfg.sampleRate / 24.0;
+    if (idleAcc > tick) idleAcc = tick; // the tempo went up: never wait longer than one tick
+    while (idleAcc < n) {
+        const int off = (int) idleAcc;
+        for (int port = 0; port < np; ++port) if ((cm >> port) & 1u) sendAt(port, 0xF8, 0, 0, 1, idleSample + off, off, t0, true);
+        idleAcc += tick;
+    }
+    idleAcc -= n; idleSample += n;
 }
 
 } // namespace setline

@@ -1,6 +1,7 @@
 // set.Line desktop app: the audio device, the engine and the MIDI outputs.
 // All public functions are called on the message thread.
 #pragma once
+#include <mutex>
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <juce_data_structures/juce_data_structures.h>
 #include "../core/Engine.h"
@@ -57,6 +58,14 @@ public:
     // Returns the new state, with "error" set if the device couldn't be opened as asked.
     juce::var setSetup(const juce::var& req);
     juce::var midiOutputs() const;
+    // 6g: every MIDI output with its clock settings (this computer): [{name, open, connected, clock, transport}]
+    juce::var midiPorts();
+    // Clock on/off and "Send Start/Stop/Continue + Song Position" for one port (by name).
+    void setMidiPort(const juce::String& name, bool clock, bool transport);
+    // Sends raw MIDI now (the setlist's sync point): msgs = [[status, d1, d2], ...]. -> {sent} | {error}
+    juce::var sendMidiNow(const juce::String& port, const juce::var& msgs);
+    // A MIDI output that came back (unplugged and plugged in again): names, reported to the page.
+    std::function<void(const juce::StringArray&)> onMidiReconnected;
 
     // ---- songs and transport ----
     // payload: see SongMapper.h. Returns {ok, warnings, seconds, epoch} or {error}.
@@ -107,11 +116,13 @@ private:
         std::array<juce::String, Max> names;
         std::atomic<int> count { 0 };
         std::atomic<bool>* enabled = nullptr; // "Listen on this computer" can hold MIDI back
+        std::array<std::mutex, Max> locks;    // a port reopened after a reconnect is swapped under its lock
         void sendNow(int port, const uint8_t* d, int len) override
         {
             if (enabled != nullptr && ! enabled->load(std::memory_order_relaxed)) return;
-            if (port >= 0 && port < count.load(std::memory_order_acquire) && outs[(size_t) port])
-                outs[(size_t) port]->sendMessageNow(juce::MidiMessage(d, len));
+            if (port < 0 || port >= count.load(std::memory_order_acquire)) return;
+            std::lock_guard<std::mutex> g(locks[(size_t) port]);
+            if (outs[(size_t) port]) outs[(size_t) port]->sendMessageNow(juce::MidiMessage(d, len));
         }
         int resolve(const juce::String& want, std::vector<std::string>& warnings);
     };
@@ -128,6 +139,9 @@ private:
     std::array<float*, scratchOuts> scratchPtrs {};
     std::atomic<int> listenOut1 { -1 }, listenOut2 { -1 }; // audio thread reads; -1 = not in "one output" mode
     std::atomic<bool> midiOn { true };
+    void refreshClock();   // the engine's clock / transport ports from this computer's settings
+    void scanMidiPorts();  // opens clock ports, reopens ports that came back (every 2 s)
+    juce::StringArray connectedPorts; int scanTick = 0;
     void save();
     void applyLevels();
     void changeListenerCallback(juce::ChangeBroadcaster*) override;

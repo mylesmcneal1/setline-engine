@@ -91,6 +91,34 @@
   .tr i{font-style:normal;width:12px;text-align:center}
   .tr.segue i{color:var(--green)} .tr.stop i{color:var(--red)} .tr.auto i{color:var(--blue)}
   .songs.dropzone{background:rgba(245,165,36,.04)}
+  /* 6g: the Band view (screens, dashboard canvas, widgets), the fields table, statuses, Sync MIDI */
+  .bandv{display:none;grid-template-columns:250px minmax(0,1fr) 300px;min-height:0;overflow:hidden}
+  body.bd .main,body.bd .perf{display:none!important} body.bd .bandv{display:grid}
+  .bandv .bl{background:var(--s1,#141415);border-right:1px solid var(--line);padding:10px 8px;overflow:auto}
+  .blh{display:flex;justify-content:space-between;align-items:center;padding:2px 6px 8px}
+  .bscr{display:flex;align-items:center;gap:9px;padding:8px;border-radius:7px;cursor:pointer} .bscr:hover{background:#1f1f22} .bscr.on{background:var(--s3,#2a2a2e)}
+  .bav{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#111;flex:none}
+  .bscr .bt{flex:1;min-width:0;display:flex;flex-direction:column} .bscr .bt small{color:var(--muted);font-size:11px}
+  .bdot{width:8px;height:8px;border-radius:50%;background:#3a3a40} .bdot.on{background:#30d158;box-shadow:0 0 6px #30d158}
+  .bjoin{margin:14px 6px 0;padding:12px;background:var(--s2,#1c1c1e);border-radius:10px;text-align:center} .bqr svg{width:150px;height:150px;background:#fff;border-radius:6px;padding:6px}
+  .bip{font:600 17px var(--mono,monospace);margin:6px 0 2px;word-break:break-all}
+  .bfields{margin:12px 6px 0;font-size:12px;line-height:1.5}
+  .bm{padding:14px 18px;overflow:auto;min-width:0} .bmh{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+  .bcanvw{display:flex;justify-content:center} .bcanv{position:relative;width:min(100%,900px);max-height:68vh;background:#000;border-radius:14px;border:6px solid #2a2a2e;
+    background-image:linear-gradient(rgba(255,255,255,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.04) 1px,transparent 1px);background-size:calc(100%/12) calc(100%/9)}
+  .bw{position:absolute;box-sizing:border-box;padding:2px;cursor:grab;touch-action:none}
+  .bw>span,.bw>small{position:relative;z-index:1;display:block;padding:4px 7px 0;font-size:12px;font-weight:600;overflow:hidden;white-space:nowrap;text-overflow:ellipsis} .bw>small{font-weight:400;color:var(--muted);font-size:10.5px;padding-top:0}
+  .bw::before{content:"";position:absolute;inset:2px;border-radius:7px;background:#1c1c1e;border:1px solid #333}
+  .bw.ctl::before{background:color-mix(in srgb,var(--wc,#0a84ff) 30%,#1c1c1e);border-color:var(--wc,#0a84ff)} .bw.on::before{border:2px solid var(--blue,#0a84ff)}
+  .brs{position:absolute;right:3px;bottom:3px;width:12px;height:12px;cursor:nwse-resize;z-index:2;border-right:2px solid #888;border-bottom:2px solid #888}
+  .bandv .br{background:var(--s1,#141415);border-left:1px solid var(--line);padding:12px;overflow:auto} .bandv .br h3{margin:4px 0 8px}
+  .bwl{padding:7px 9px;border-radius:7px;background:var(--s2,#1c1c1e);margin-bottom:4px;font-size:12px;cursor:grab} .bwl:hover{background:#26262a}
+  .ftab{border-collapse:collapse;width:100%;font-size:12.5px} .ftab th{text-align:left;color:var(--muted);font-weight:500;padding:4px 6px;position:sticky;top:0;background:#1c1c1e}
+  .ftab td{padding:3px 6px;border-top:1px solid #26262a} .ftab td input,.ftab td select{width:100%;min-width:90px} .ftab td.chg input,.ftab td.chg select{box-shadow:inset 0 0 0 1px var(--amber,#f5a524);background:rgba(245,165,36,.12)}
+  .bandstat{display:flex;gap:8px;margin-left:10px;font-size:11.5px} .bandstat[hidden]{display:none} .bandstat span{background:rgba(255,159,10,.16);color:#ffcc66;border-radius:6px;padding:3px 8px}
+  .syncb{margin-left:8px;color:#64d2ff;border-color:#0a84ff} .syncb[hidden]{display:none} .syncb.synced{color:#30d158;border-color:#30d158;background:rgba(48,209,88,.12)}
+  .qrbox svg{width:180px;height:180px;background:#fff;border-radius:8px;padding:8px}
+  .clkrow{display:flex;gap:6px;align-items:center}
   /* 6f: the Library panel, the setlist picker, saved state, export / migration sheets */
   .libsec{flex:none;display:flex;flex-direction:column;border-top:1px solid var(--line);max-height:46%;min-height:120px}
   .libh{display:flex;align-items:center;gap:8px;padding:9px 10px 4px;font-size:12px;color:var(--muted)} .libh b{color:var(--text);font-weight:600;font-size:12.5px}
@@ -941,7 +969,7 @@
   <nav class="tabs">
     <a class="on" href="#show" data-tab="show">Show</a>
     <a href="#perform" data-tab="perform" title="The song playing, what’s next, live jumps and loops">Perform</a>
-    <a href="5-band.html" title="The band’s screens">Band</a>
+    <a href="#band" data-tab="band" title="The band’s screens: what each phone and tablet shows and may do">Band</a>
   </nav>
   <div class="transport">
     <button class="tb" id="prevSong" title="Previous song"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M3 3h1.6v10H3zM13 3v10L5.5 8z"/></svg></button>
@@ -960,6 +988,7 @@
   </div>
   <div class="listenc" title="Where you hear the show: its own outputs (normal), or this computer's speakers / headphones"><div class="seg" id="listenSeg"><button data-v="show" class="on">Show outputs</button><button data-v="pc">This computer</button></div></div>
   <div class="listenbar" id="listenBar" hidden>Listening on <span id="listenDev"></span><span id="listenWhat" style="font-weight:500"></span><button id="listenOffB">Back to show outputs</button></div>
+  <span class="bandstat" id="bandStat" hidden></span><button class="btn line syncb" id="syncBtn" hidden title="Send this setlist’s MIDI sync point to every device">Sync MIDI</button>
   <button class="status" id="statusChip" title="Audio settings"><span class="dot" id="statusDot"></span><span id="statusTxt">No audio device</span></button><button class="ibtn gear" id="gearBtn" title="Settings  ⌘,">⚙</button>
 </header>
 
@@ -1005,6 +1034,7 @@
 </div>
 
 <section class="perf" id="perf"></section>
+<section class="bandv" id="bandV"></section>
 
 <div class="modalbg" id="modal"><div class="modal nsong" role="dialog" aria-label="New song">
   <header><span>New Song</span><button class="xbtn" id="mClose" title="Close  Esc"><svg viewBox="0 0 12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 3l6 6M9 3l-6 6"/></svg></button></header>
@@ -1031,7 +1061,7 @@
 
 <script>
 let PXS = 5, TH = 50, tool = 'pointer', loopOn = false;
-const SEC_C = {intro:'var(--s-intro)',verse:'var(--s-verse)',pre:'var(--s-pre)',chorus:'var(--s-chorus)',bridge:'var(--s-bridge)',outro:'var(--s-outro)',turn:'var(--s-turn)'};
+const SEC_C = {intro:'var(--s-intro)',verse:'var(--s-verse)',pre:'var(--s-pre)',chorus:'var(--s-chorus)',bridge:'var(--s-bridge)',outro:'var(--s-outro)',turn:'var(--s-turn)','count-in':'#ff9f0a'};
 const cssVar = v => getComputedStyle(document.documentElement).getPropertyValue(v.slice(4,-1)).trim();
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -1067,11 +1097,11 @@ let setOrder=['neon','glass','low','sat','copper'];
 let setlists=[{id:'L1',name:'Full show',order:setOrder},{id:'L2',name:'Festival 30',order:['neon','glass','sat']},{id:'L3',name:'Acoustic',order:['low','paper']}], curSet='L1', setSeq=4;
 const curSetObj=()=>setlists.find(x=>x.id===curSet)||setlists[0];
 function syncSet(){ const c=curSetObj(); if(c) c.order=setOrder; }
-function useSet(id){ if(playing&&id!==curSet){ toast('Stop playback first: the setlist can’t change while a song plays'); return false; } syncSet(); curSet=id; setOrder=curSetObj().order; refresh(); if(perfOn) renderPerform(true); return true; }
+function useSet(id){ if(playing&&id!==curSet){ toast('Stop playback first: the setlist can’t change while a song plays'); return false; } syncSet(); const was=curSet; curSet=id; setOrder=curSetObj().order; refresh(); if(perfOn) renderPerform(true); if(was!==id&&curSetObj().sync&&curSetObj().sync.onOpen) syncMidi(); return true; }
 const SETCOLS=['#f5a524','#7fe0cf','#bf5af2','#ff6b6b','#5ac8fa','#a3e635','#f472b6','#9aa0aa'];
 const setCol=l=>l.col||SETCOLS[Math.max(0,setlists.indexOf(l))%SETCOLS.length];
 function setlistCmd(cmd){ if(playing&&cmd!=='ren'){ toast('Stop playback first: the setlist can’t change while a song plays'); return; } const c=curSetObj(); syncSet();
-  if(cmd==='new'){ const n={id:'L'+setSeq++,name:'Setlist '+(setlists.length+1),order:[],col:SETCOLS[setlists.length%SETCOLS.length]}; setlists.push(n); curSet=n.id; setOrder=n.order; refresh(); renameSet(); }
+  if(cmd==='new'){ const last=c, n={id:'L'+setSeq++,name:'Setlist '+(setlists.length+1),order:[],col:SETCOLS[setlists.length%SETCOLS.length]}; if(last&&last.sync) n.sync=JSON.parse(JSON.stringify(last.sync)); setlists.push(n); curSet=n.id; setOrder=n.order; refresh(); renameSet(); }
   else if(cmd==='dup'){ const n=JSON.parse(JSON.stringify(c)); n.id='L'+setSeq++; n.name=c.name+' copy'; setlists.push(n); curSet=n.id; setOrder=n.order; refresh(); renameSet(); }
   else if(cmd==='ren') renameSet();
   else if(cmd==='del'){ if(setlists.length<2){ toast('A library keeps at least one setlist'); return; } confirmBox(`Delete the setlist “${esc(c.name)}”?`,'The songs stay in the library. Only this running order is removed.','Delete setlist',()=>{ const i=setlists.indexOf(c); setlists.splice(i,1); curSet=setlists[Math.max(0,i-1)].id; setOrder=curSetObj().order; refresh(); toast(`Deleted setlist “${c.name}”`,()=>{ setlists.splice(i,0,c); useSet(c.id); }); }); } }
@@ -1079,6 +1109,7 @@ function setlistMenu(e){ const c=curSetObj(), r=e.currentTarget?e.currentTarget.
   ctxMenu(at,[...setlists.map(l=>({label:l.name+'  ·  '+l.order.length,icon:`<span class="cb" style="background:${setCol(l)}"></span>`,act:()=>useSet(l.id)})),'-',
     {label:'New setlist',icon:'＋',act:()=>setlistCmd('new')},{label:`Duplicate “${c.name}”`,icon:'⧉',act:()=>setlistCmd('dup')},{label:'Rename…',icon:'✎',act:()=>setlistCmd('ren')},
     {label:'Colour ▸',icon:'●',act:()=>swatchPop({left:at.clientX+150,right:at.clientX+150,top:at.clientY},setCol(c),col=>{ snap(); c.col=col; refresh(); })},
+    {label:'Finish by…'+(c.finishBy?'  '+c.finishBy:''),icon:'⏱',act:()=>finishByBox()},{label:'MIDI sync point…',icon:'⇄',act:()=>openSettings('midi')},
     {label:`Delete “${c.name}”…`,icon:'⌫',danger:true,dis:setlists.length<2,act:()=>setlistCmd('del')}]); }
 const ROLE={'Click':'click','Cues':'cues','Drums':'drums','Bass':'bass','Keys':'keys','Guitars':'guitars','BGVs':'bgvs','Synth / Pads':'synth','FX / Risers':'fx','Pads':'synth','Strings':'strings'};
 // ---------- outputs (6d): every track has its own output, set on its header or in the right panel ----------
@@ -1294,7 +1325,7 @@ function entryVerId(s,list){ list=list||curSetObj(); const id=list&&list.vers&&l
 const entryVer=(s,list)=>versOf(s).find(v=>v.id===entryVerId(s,list));
 function setEntryVer(s,id,list){ list=list||curSetObj(); if(!list) return; (list.vers||(list.vers={}))[s.id]=id; }
 // The version a song plays now: its setlist entry's (in the current set), else the one shown in the Song view.
-const playVer=s=>setOrder.includes(s.id)?entryVer(s):curVer(s);
+const playVer=s=>{ if(SOUNDCHECK&&SOUNDCHECK.songId===s.id&&SOUNDCHECK.verId){ const v=versOf(s).find(x=>x.id===SOUNDCHECK.verId); if(v) return v; } return setOrder.includes(s.id)?entryVer(s):curVer(s); };
 const AFTER={stop:['','Stop'],segue:['↘','Segue'],auto:['⏵','Auto-next']};
 function afterOf(s,list){ list=list||curSetObj(); const a=list&&list.after&&list.after[s.id]; return a&&AFTER[a.mode]?{mode:a.mode,sec:a.sec||4}:{mode:'stop',sec:4}; }
 function setAfter(s,mode,sec,list){ list=list||curSetObj(); if(!list) return; snap(); const m=list.after||(list.after={}); if(mode==='stop') delete m[s.id]; else m[s.id]={mode,sec:Math.max(1,Math.min(60,Math.round(sec||4)))}; refresh(); }
@@ -1351,7 +1382,7 @@ const secOfBar=(s,bar)=>s.secPos.find(p=>bar>=p.start&&bar<p.start+p.bars);
 // ======================= SETLIST =======================
 let dragId=null, dragFrom=null;
 const TRANS={segue:['↘','Segue'],stop:['■','Stop, wait for go'],auto:['→','Auto-next after 4 s']};
-function renderSetHead(){ const h=$('setHead'); if(!h) return; const c=curSetObj();
+function renderSetHead(){ const h=$('setHead'); if(!h) return; const c=curSetObj(); const sb=$('syncBtn'); if(sb){ const n=(c.sync&&c.sync.devices||[]).length; sb.hidden=!n; const done=SYNCED&&SYNCED.set===curSet; sb.classList.toggle('synced',!!done); sb.textContent=done?'⇄ Synced ✓':'⇄ Sync MIDI'; sb.title=n?'Send “'+c.name+'”’s MIDI sync point ('+n+' device'+(n>1?'s':'')+')':''; }
   h.innerHTML=`<button class="setpick" id="setSel" title="Setlists"><i class="cb" style="background:${setCol(c)}"></i><span>${esc(c.name)}</span>▾</button>`; $('setSel').onclick=setlistMenu; return;
   h.innerHTML=`<select class="setsel" id="setSel" title="Setlist">${setlists.map(x=>`<option value="${x.id}" ${x.id===curSet?'selected':''}>${esc(x.name)}</option>`).join('')}<option disabled>──────</option><option value="__new">＋ New setlist</option><option value="__dup">Duplicate “${esc(c.name)}”</option><option value="__ren">Rename…</option>${setlists.length>1?`<option value="__del">Delete “${esc(c.name)}”…</option>`:''}</select>`;
   $('setSel').onchange=e=>{ const v=e.target.value;
@@ -2679,6 +2710,7 @@ function renderInsp(){
     +rrow('Default in new sets',tog('vDef',!!V.def,'The version a song plays when it’s added to a setlist'))
     +(V.custom?'':rrow('Add audio just for this version',`<button class="sel2" id="vAudio" data-vaudio="${V.id}" title="Pick files, or drop them here">Drop files…</button>`))
     +`<button class="rdanger" id="vDel" ${vs.length<2?'disabled style="opacity:.4" title="A song keeps at least one version"':''}>Delete version…</button>`);
+  vh+=fieldsCard(s,V);
   if(inSet) vh+=rcard('After this song',rrow('In '+esc(curSetObj().name),segm('vAfter',[['stop','Stop'],['segue','Segue'],['auto','Auto-next']],af.mode))
     +(af.mode==='auto'?rrow('Wait',`<span class="rsl"><input type="number" id="vAfterSec" min="1" max="60" step="1" value="${af.sec}" style="width:60px"> s</span>`):'')
     +`<p class="rnote">${af.mode==='segue'?'The next song starts on the very next sample (gapless).':af.mode==='auto'?'Stops, waits, then starts the next song.':'Stops at the end and selects the next song, ready for Play.'}</p>`);
@@ -2690,7 +2722,7 @@ function renderInsp(){
       <div class="acts"><button class="btn line">Import MIDI file…</button><button class="btn" id="resetMap">Revert</button></div></div>
     <div class="acts" style="margin-top:10px"><button class="btn line" id="sDup">Duplicate song</button><button class="btn danger" id="sDelSong">Delete song…</button></div></details>
 `;
-  wireVerPanel(s,V);
+  wireVerPanel(s,V); wireFieldsCard(s,V);
   $('insp').querySelectorAll('.tmap tr[data-i]').forEach(tr=>{ const e=s.tmap[+tr.dataset.i];
     tr.querySelectorAll('input[data-f=bpm],input[data-f=bar]').forEach(inp=>inp.onkeydown=ev=>{ if(ev.key==='Enter'){ inp.blur(); return; } if(ev.key!=='ArrowUp'&&ev.key!=='ArrowDown') return; ev.preventDefault(); const f=inp.dataset.f, st=f==='bar'?1:(ev.shiftKey?10:ev.altKey?.1:1), d=ev.key==='ArrowUp'?st:-st;
       if(f==='bpm'&&e.bpm!==undefined){ e.bpm=Math.round(Math.max(20,Math.min(300,e.bpm+d))*10)/10; } else if(f==='bar'&&tr.dataset.i!=='0'){ const n=e.bar+Math.sign(d); if(n>1&&n<=s.total&&!s.tmap.some(o=>o!==e&&o.bar===n)) e.bar=n; } else return;
@@ -2979,6 +3011,210 @@ $('mAdd').onclick=()=>{ const name=$('mName').value.trim(); if(!name){ $('mName'
   snap(); normSecs(so); buildBars(so); seedMidi(so); songs.push(so); if($('mToSet').checked){ setOrder.push(id); syncSet(); }
   closeNewSong(); open.add(id); selId=id; resetModal(); refresh(); document.querySelector(`.folder[data-id="${id}"]`)?.scrollIntoView({block:'start'}); };
 
+// ======================= BAND (6g): song fields, curfew, MIDI sync point, Soundcheck, Vamp, the band's screens =======================
+// Song fields: definitions in the library (FIELDS, Settings › Band), values per song (s.fields) and per version
+// (v.fields: the version's value wins). The band's screens (BAND.screens): their layouts, also in the library.
+let BAND={network:'',pin:'',screens:[]};
+const fieldVal=(s,fid,v)=>{ const vv=v&&v.fields&&v.fields[fid]; if(vv!==undefined&&vv!==null&&vv!=='') return String(vv); const x=s&&s.fields&&s.fields[fid]; return x===undefined||x===null?'':String(x); };
+function setFieldVal(s,fid,val,v){ snap(); const o=v||s; o.fields=o.fields||{}; if(val==='') delete o.fields[fid]; else o.fields[fid]=val; if(!Object.keys(o.fields).length) delete o.fields; refresh(); }
+function fieldInput(f,val,attrs){ if(f.type==='list') return `<select ${attrs}><option value="" ${val?'':'selected'}>–</option>${(f.options||[]).map(o=>`<option ${o===val?'selected':''}>${esc(o)}</option>`).join('')}${val&&!(f.options||[]).includes(val)?`<option selected>${esc(val)}</option>`:''}</select>`;
+  return `<input ${attrs} value="${esc(val)}" spellcheck="false">`; }
+function fieldsCard(s,V){ const vs=versOf(s);
+  if(!FIELDS.length) return rcard('Fields','<p class="rnote">Song fields (Tuning, Guitar, Click…) show on the band’s screens.</p><div class="racts"><button class="btn line" id="fEdit">Add song fields…</button></div>');
+  return rcard('Fields',FIELDS.map(f=>rrow(esc(f.name),`<span style="display:flex;gap:4px;min-width:0">${fieldInput(f,(s.fields||{})[f.id]??'',`data-fs="${f.id}" title="This song" style="width:${vs.length>1?'92px':'150px'}"`)}${vs.length>1?fieldInput(f,(V.fields||{})[f.id]??'',`data-fv="${f.id}" title="Only in “${esc(V.name)}”: wins over the song’s value" placeholder="${esc(V.name)}" style="width:92px"`):''}</span>`)).join('')
+    +(vs.length>1?`<p class="rnote">Left: the song. Right: only in “${esc(V.name)}” (wins over the song’s).</p>`:'')+'<div class="racts"><button class="btn line" id="fTable">Song fields table…</button></div>'); }
+function wireFieldsCard(s,V){ if($('fEdit')) $('fEdit').onclick=()=>openSettings('band'); if($('fTable')) $('fTable').onclick=()=>fieldsTable();
+  document.querySelectorAll('#insp [data-fs]').forEach(i=>i.onchange=()=>setFieldVal(s,i.dataset.fs,i.value.trim()));
+  document.querySelectorAll('#insp [data-fv]').forEach(i=>i.onchange=()=>setFieldVal(s,i.dataset.fv,i.value.trim(),V)); }
+// The song fields table: one row per song in this setlist (its version in the set), one column per field. Type
+// straight into the cells; Tab and Enter move on; a cell that differs from the song before is highlighted. A value
+// goes to the version if that version overrides the field, else to the song.
+function fieldsTable(){ document.querySelectorAll('.fieldsTbl').forEach(x=>x.remove()); const bg=document.createElement('div'); bg.className='cfbg fieldsTbl';
+  const draw=()=>{ const rows=setOrder.map((id,i)=>{ const s=songs.find(x=>x.id===id); if(!s) return ''; const v=entryVer(s);
+      return `<tr><td class="faint">${i+1}</td><td><b>${esc(s.name)}</b></td><td class="faint">${versOf(s).length>1?esc(v.name):''}</td><td class="faint">${fmt(verLen(s,v))}</td>${FIELDS.map((f,k)=>{ const val=fieldVal(s,f.id,v), prev=i>0?(()=>{ const p=songs.find(x=>x.id===setOrder[i-1]); return p?fieldVal(p,f.id,entryVer(p)):val; })():val;
+        return `<td class="${i>0&&val!==prev?'chg':''}">${fieldInput(f,val,`data-r="${i}" data-c="${k}" class="ftc"`)}</td>`; }).join('')}</tr>`; }).join('');
+    bg.innerHTML=`<div class="cfbox" style="width:min(980px,96vw);max-width:96vw"><b>Song fields · ${esc(curSetObj().name)}</b><p>Type into the cells: Tab and Enter move on. Highlighted: different from the song before.</p>
+      <div style="max-height:62vh;overflow:auto;margin-top:8px"><table class="ftab"><tr><th>#</th><th>Song</th><th>Version</th><th>Length</th>${FIELDS.map(f=>`<th>${esc(f.name)}</th>`).join('')}</tr>${rows||'<tr><td colspan="9" class="faint">No songs in this setlist.</td></tr>'}</table></div>
+      <div class="cfa"><button class="btn line" data-a="fields" style="margin-right:auto">Edit song fields…</button><button class="btn pri" data-a="ok">Done</button></div></div>`;
+    bg.querySelectorAll('.ftc').forEach(inp=>{ const i=+inp.dataset.r, k=+inp.dataset.c, s=songs.find(x=>x.id===setOrder[i]), v=entryVer(s), f=FIELDS[k];
+      inp.onchange=()=>{ const val=inp.value.trim(), toVer=v&&v.fields&&v.fields[f.id]!==undefined; setFieldVal(s,f.id,val,toVer?v:null); const at=[i,k]; draw(); const n=bg.querySelector(`.ftc[data-r="${at[0]}"][data-c="${at[1]}"]`); if(n) n.focus(); };
+      inp.onkeydown=e=>{ if(e.key==='Enter'){ e.preventDefault(); inp.dispatchEvent(new Event('change')); const n=bg.querySelector(`.ftc[data-r="${i+1}"][data-c="${k}"]`)||bg.querySelector(`.ftc[data-r="0"][data-c="${k+1}"]`); if(n){ n.focus(); if(n.select) n.select(); } } }; });
+    bg.querySelector('[data-a=ok]').onclick=()=>bg.remove(); bg.querySelector('[data-a=fields]').onclick=()=>{ bg.remove(); openSettings('band'); }; };
+  document.body.appendChild(bg); draw(); bg.onclick=e=>{ if(e.target===bg) bg.remove(); }; }
+function newField(name){ const id='f'+Date.now().toString(36)+Math.floor(Math.random()*99); FIELDS.push({id,name:name||'Field '+(FIELDS.length+1),type:'text',options:[]}); return id; }
+
+// ---- curfew: each setlist has a "finish by" time ----
+function finishByBox(){ const L=curSetObj(); const bg=document.createElement('div'); bg.className='cfbg';
+  bg.innerHTML=`<div class="cfbox"><b>Finish “${esc(L.name)}” by</b><p>The Curfew clock on the band’s screens counts the rest of the set against it.</p><input id="fbT" type="time" value="${esc(L.finishBy||'')}" style="margin-top:10px;font-size:15px"><div class="cfa"><button class="btn line" data-a="clear" style="margin-right:auto">No curfew</button><button class="btn line" data-a="no">Cancel</button><button class="btn pri" data-a="ok">OK</button></div></div>`;
+  document.body.appendChild(bg); const close=()=>bg.remove(); bg.onclick=e=>{ if(e.target===bg) close(); };
+  bg.querySelector('[data-a=no]').onclick=close; bg.querySelector('[data-a=clear]').onclick=()=>{ snap(); delete L.finishBy; close(); refresh(); };
+  bg.querySelector('[data-a=ok]').onclick=()=>{ const v=$('fbT').value; snap(); if(v) L.finishBy=v; else delete L.finishBy; close(); refresh(); }; }
+
+// ---- MIDI sync point (per setlist): per device (port + channel) the messages that put it in the right state ----
+// One message per line: "PC 12", "PC 1:0:12" (bank MSB:LSB:program), "CC 7 100", "raw B0 07 64" (up to 3 bytes).
+let SYNC_SENT={}, SYNCED=null; // device index -> time sent (this session); the last Sync MIDI (top-bar button: "Synced ✓")
+function syncOf(L){ L=L||curSetObj(); if(!L.sync) L.sync={devices:[],onOpen:false,onReconnect:false}; return L.sync; }
+function syncLines(text,ch){ const c=Math.max(0,Math.min(15,(+ch||1)-1)), out=[], bad=[];
+  String(text||'').split(/\n|;/).map(x=>x.trim()).filter(Boolean).forEach(line=>{ let m;
+    if((m=line.match(/^pc\s+(?:(\d+):(\d+):)?(\d+)$/i))){ if(m[1]!==undefined){ out.push([0xB0|c,0,+m[1]&127]); out.push([0xB0|c,32,+m[2]&127]); } out.push([0xC0|c,+m[3]&127]); }
+    else if((m=line.match(/^cc\s+(\d+)\s+(\d+)$/i))) out.push([0xB0|c,+m[1]&127,+m[2]&127]);
+    else if((m=line.match(/^raw\s+((?:[0-9a-f]{2}\s*){1,3})$/i))) out.push(m[1].trim().split(/\s+/).map(h=>parseInt(h,16)));
+    else bad.push(line); });
+  return {msgs:out,bad}; }
+async function syncMidi(onlyPorts){ const sy=syncOf(), devs=sy.devices.map((d,i)=>[d,i]).filter(([d])=>!onlyPorts||onlyPorts.includes(d.port));
+  if(!devs.length){ if(!onlyPorts) toast('No MIDI sync point for “'+curSetObj().name+'”: set one in Settings › MIDI'); return {sent:0}; }
+  let ok=0; const fails=[];
+  for(const [d,i] of devs){ const {msgs}=syncLines(d.text,d.ch); const r=await ncall('sendMidiNow',{port:d.port,msgs}); if(r&&!r.error){ ok++; SYNC_SENT[i]=Date.now(); } else if(NATIVE) fails.push(d.port+(r&&r.error?': '+r.error:'')); else { ok++; SYNC_SENT[i]=Date.now(); } }
+  SYNCED={set:curSet,list:devs.map(([d,i])=>({label:d.port+' · Ch '+d.ch,ok:!!SYNC_SENT[i]}))};
+  if(fails.length) toast(`MIDI sync: ${ok} sent, ${fails.length} failed (${fails.join('; ')})`);
+  else if(!onlyPorts){ const b=$('syncBtn'), r=b&&!b.hidden?b.getBoundingClientRect():null; if(r) ctxMenu({clientX:r.left,clientY:r.bottom+6},[{cap:'Sent to all devices at once'},...SYNCED.list.map(x=>({label:x.label,icon:x.ok?'✓':'✕',act:()=>{}})),{cap:'Songs take over from here.'}]); else toast(`MIDI synced: ${ok} device${ok===1?'':'s'} ✓`); }
+  if(settingsOpen()&&SET_TAB==='midi') renderSettings(); renderSetHead(); return {sent:ok,failed:fails}; }
+// "Fill from first song": the first events on each MIDI track at the start of the setlist's first song.
+function fillSyncFromFirst(){ const L=curSetObj(), s=songs.find(x=>x.id===L.order[0]); if(!s){ toast('The setlist is empty'); return 0; } const sy=syncOf(L); let n=0; snap();
+  s.tracks.filter(t=>isMidiTrack(s,t)).forEach(t=>{ const cfg=s.midiCfg[t]||{}, evs=(s.midi[t]||[]).map(e=>({e,t:evTime(s,e)})).sort((a,b)=>a.t-b.t); if(!evs.length) return;
+    const t0=evs[0].t; if(t0>(s.bars[1]?s.bars[1].t:2)+1e-6) return; // nothing at the start of the song
+    const lines=evs.filter(x=>x.t<=t0+1e-6).map(({e})=>e.kind==='pc'?`PC ${e.msb!==undefined||e.lsb!==undefined?`${+e.msb||0}:${+e.lsb||0}:`:''}${+e.pc||0}`:e.kind==='cc'?`CC ${+e.cc||0} ${+e.val||0}`:'').filter(Boolean);
+    if(!lines.length) return; const port=cfg.port||PORTS[0]||'', ch=+cfg.ch||1;
+    let d=sy.devices.find(x=>x.port===port&&+x.ch===ch); if(!d){ d={port,ch,text:''}; sy.devices.push(d); } d.text=lines.join('\n'); n++; });
+  toast(n?`Sync point filled from “${s.name}” (${n} device${n>1?'s':''})`:`“${s.name}” sends no MIDI at its start`); refresh(); return n; }
+
+// ---- Soundcheck: a library song / version as a loop, outside the setlist (the set position is kept) ----
+let SOUNDCHECK=null; // {songId, verId, back: {sel, play, pos}}
+function soundcheck(songId,verId){ if(SOUNDCHECK){ endSoundcheck(); return {ok:true,stopped:true}; }
+  if(playing) return {ok:false,why:'The set is playing'}; const s=songs.find(x=>x.id===songId); if(!s) return {ok:false,why:'That song isn’t in the library'};
+  SOUNDCHECK={songId,verId:verId||'',back:{sel:selId,play:playId,pos}}; selId=s.id; playId=null; pos=0; toggle(); toast(`Soundcheck: “${s.name}” on a loop`); renderPerform(true); return {ok:true}; }
+function endSoundcheck(){ const sc=SOUNDCHECK; if(!sc) return; SOUNDCHECK=null; if(playing){ playing=false; $('playBtn').classList.remove('on'); if(NATIVE&&window.SLE) SLE.stop(); }
+  selId=sc.back.sel; playId=sc.back.play; pos=sc.back.pos||0; refresh(); lcd(); renderPerform(true); toast('Soundcheck stopped: back to the set'); }
+// ---- Vamp: loops the section playing until pressed again; then it plays on at the end of that pass ----
+let VAMP=null; // {songId, secId}
+function vamp(){ const s=songs.find(x=>x.id===playId); if(VAMP){ VAMP=null; toast('Vamp off: on at the end of this pass'); renderPerform(); return {ok:true,on:false}; }
+  if(!playing||!s) return {ok:false,why:'Nothing is playing'}; const b=barAtTime(s,pos), p=s.secPos.find(x=>b>=x.start&&b<x.start+x.bars); if(!p) return {ok:false,why:'No section here'};
+  VAMP={songId:s.id,secId:p.id}; loopExitId=null; toast(`Vamp: looping “${p.name}”`); renderPerform(); return {ok:true,on:true}; }
+
+// ---- what the band's screens are told about the setlist (the host sends it when it changes) ----
+function bandShow(){ const L=curSetObj(), out={t:'show',lib:'',setlist:{id:L.id,name:L.name,finishBy:L.finishBy||'',order:[]},songs:{},fields:FIELDS,screens:BAND.screens.map(x=>({id:x.id,name:x.name,col:x.col,device:x.device})),network:BAND.network||''};
+  const add=(s,v)=>{ const doc={name:s.name,col:s.col,key:s.key,ver:versOf(s).length>1?v.name:'',vers:versOf(s).map(x=>({id:x.id,name:x.name})),len:verLen(s,v),bars:[],secs:[],cues:[],patches:{},fields:SLBandMerge(s.fields,v&&v.fields)};
+    const map=(!v||v.custom||isFullVer(s,v))?s.secPos.map(p=>({sb:p.start,bars:p.bars,secId:p.id,name:p.name,type:p.type})):verMap(s,v);
+    let t=0; const srcToVer=[]; // [srcStart, srcEnd, verStart]
+    map.forEach((p,i)=>{ const t0=t;
+      if(p.extra){ const d=extraBarDur(s,map,i), nb=map.slice(i+1).find(x=>!x.extra), sig=sigAt(s,nb?nb.sb:1); for(let k=0;k<p.bars;k++){ doc.bars.push([+(t).toFixed(4),sig[0],sig[1],+(60/(d/sig[0])/(4/sig[1])).toFixed(3)]); t+=d; } }
+      else { const a=s.bars[p.sb-1]; for(let k=0;k<p.bars;k++){ const b=s.bars[p.sb-1+k]; if(!b) break; doc.bars.push([+(t).toFixed(4),b.sig[0],b.sig[1],+bpmAt(s,b.bar).toFixed(3)]); t+=b.dur; } srcToVer.push([a?a.t:0,a?a.t+(t-t0):0,t0]); }
+      const so=p.extra?null:secObj(s,p.secId);
+      doc.secs.push({id:p.secId??null,name:p.name,type:p.extra?'x':p.type,t0:+t0.toFixed(4),t1:+t.toFixed(4),bars:p.bars,notes:so&&so.notes||{}}); });
+    if(!map.length) doc.bars.push([0,4,4,120]);
+    const vt=x=>{ for(const [a,b,v0] of srcToVer) if(x>=a-1e-6&&x<b-1e-6) return v0+(x-a); return null; };
+    (s.cues||[]).forEach(c=>{ const x=vt(cueT(s,c)); if(x!==null) doc.cues.push({t:+x.toFixed(3),text:c.text}); });
+    s.tracks.filter(t=>isMidiTrack(s,t)).forEach(t=>{ const l=(s.midi[t]||[]).filter(e=>e.kind==='pc').map(e=>{ const x=vt(evTime(s,e)); return x===null?null:{t:+x.toFixed(3),name:evName(e,s,t)}; }).filter(Boolean).sort((a,b)=>a.t-b.t); if(l.length) doc.patches[t]=l; });
+    return doc; };
+  L.order.forEach(id=>{ const s=songs.find(x=>x.id===id); if(!s) return; const v=entryVer(s); out.setlist.order.push({id,ver:v?v.id:'',after:afterOf(s)}); out.songs[id]=add(s,v); });
+  // the song playing (or selected) even if it isn't in the set (a soundcheck)
+  const cur=songs.find(x=>x.id===(playId||selId)); if(cur&&!out.songs[cur.id]) out.songs[cur.id]=add(cur,playVer(cur));
+  return out; }
+const SLBandMerge=(a,b)=>{ const o={...(a||{})}; Object.entries(b||{}).forEach(([k,v])=>{ if(v!==undefined&&v!==null&&v!=='') o[k]=v; }); return o; };
+// what changes 15 times a second (the transport comes from the engine, added by the app)
+function bandLive(){ const s=songs.find(x=>x.id===(playId||selId)), L=curSetObj(), i=s?L.order.indexOf(s.id):-1, n=s?nextInSet(s):null;
+  return {cur:s?s.id:null,idx:i,playing,soundcheck:SOUNDCHECK?SOUNDCHECK.songId:null,vamp:VAMP?VAMP.secId:null,loop:!!(s&&playing&&sectionLoopRange(s)),jumpQ:jumpQueuedSec,
+    next:n?{id:n.song.id,ver:n.ver.id,name:n.song.name,vname:versOf(n.song).length>1?n.ver.name:''}:null,pos:s&&s.id===playId?pos:0}; }
+
+// ---- the Band view: the screens and their dashboards (drag-and-drop widgets on a 12 x 9 grid) ----
+let bandOn=false, BSEL=null, BWID=null, BORI='land', BINFO=null, BONLINE={}, BDEVS=[];
+const DEVS={ipad:['iPad',4/3],phone:['Phone',19.5/9],tablet:['Android tablet',16/10],desktop:['Computer',16/9]};
+const BCOLS=['#30d158','#0a84ff','#ff9f0a','#bf5af2','#ff453a','#64d2ff','#ffd60a','#ff375f'];
+function setBand(on){ bandOn=on; document.body.classList.toggle('bd',on); if(on){ perfOn=false; document.body.classList.remove('pf'); }
+  document.querySelectorAll('.tabs a').forEach(a=>a.classList.toggle('on',on?a.dataset.tab==='band':perfOn?a.dataset.tab==='perform':a.dataset.tab==='show'));
+  if(on){ if(!BSEL&&BAND.screens[0]) BSEL=BAND.screens[0].id; ncall('bandInfo').then(r=>{ BINFO=r; renderBand(); }); renderBand(); } }
+function bandChanged(){ if(window.SLBandHost) SLBandHost.layoutChanged(); }
+function addScreen(name,kind){ snap(); const id='scr'+Date.now().toString(36); const p=window.SLBand?SLBand.preset(kind||'blank'):{land:[],port:[]};
+  const s={id,name:name||'Screen '+(BAND.screens.length+1),col:BCOLS[BAND.screens.length%BCOLS.length],device:'ipad',...p}; BAND.screens.push(s); BSEL=id; BWID=null; bandChanged(); return s; }
+function curScreen(){ return BAND.screens.find(x=>x.id===BSEL)||null; }
+function renderBand(){ const el=$('bandV'); if(!el||!bandOn) return; const sc=curScreen(), ip=BINFO&&BINFO.addresses&&BINFO.addresses[0], url=ip?`http://${ip}:${BINFO.port}/`:'';
+  const qr=url&&window.SLBand?SLBand.qrSVG(url):'';
+  const left=`<div class="bl"><div class="blh"><b>Screens</b><button class="ibtn" id="bAdd" title="Add a screen">＋</button></div>
+    ${BAND.screens.map(x=>`<div class="bscr ${x.id===BSEL?'on':''}" data-id="${x.id}"><span class="bav" style="background:${x.col}">${esc(x.name.slice(0,2).toUpperCase())}</span><span class="bt"><b>${esc(x.name)}</b><small>${DEVS[x.device]?DEVS[x.device][0]:'Device'}</small></span><i class="bdot ${BONLINE[x.id]?'on':''}" title="${BONLINE[x.id]?'Connected':'Not connected'}"></i></div>`).join('')||'<p class="faint" style="font-size:12px;padding:6px 8px">No screens yet. ＋ adds one; a device that joins can also make one.</p>'}
+    <div class="bjoin">${qr?`<div class="bqr">${qr}</div>`:''}<div class="bip">${esc(url||'No network')}</div><div class="faint" style="font-size:11px">${BINFO&&BINFO.mdns==='setline.local'?`or <b>http://setline.local:${BINFO.port}/</b>`:'Scan the code or type the address'}${BINFO&&!BINFO.running?' · <span style="color:var(--amber)">the server is off (Settings › Band)</span>':''}</div>
+      <label class="faint" style="font-size:11px;display:block;margin-top:8px">Band network <input id="bNet" value="${esc(BAND.network||'')}" placeholder="name (just a label)" style="width:100%;margin-top:3px"></label></div>
+    ${BDEVS.length?`<div class="bfields"><span class="faint">Connected devices</span>${BDEVS.map(d=>`<div class="clkrow" style="margin-top:4px"><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(d.device||'')}">${esc(d.address)}</span><select data-dev="${d.id}" title="Which screen this device shows"><option value="">(asks)</option>${BAND.screens.map(x=>`<option value="${x.id}" ${x.id===d.screen?'selected':''}>${esc(x.name)}</option>`).join('')}</select></div>`).join('')}</div>`:''}
+    <div class="bfields"><span class="faint">Song fields:</span> ${FIELDS.length?FIELDS.map(f=>esc(f.name)).join(', '):'none'}<div style="display:flex;gap:6px;margin-top:6px"><button class="btn line" id="bFields">Edit song fields…</button><button class="btn line" id="bTable">Table…</button></div></div></div>`;
+  let mid='<div class="bm"><div class="blank"><div class="bs">Add a screen to design what it shows.</div></div></div>', right='';
+  if(sc){ const ar=(DEVS[sc.device]||DEVS.ipad)[1], ratio=BORI==='land'?ar:1/ar, list=sc[BORI]||(sc[BORI]=[]);
+    mid=`<div class="bm"><div class="bmh"><input id="bName" value="${esc(sc.name)}" style="font-weight:600;width:170px"><select id="bDev">${Object.entries(DEVS).map(([k,[n]])=>`<option value="${k}" ${k===sc.device?'selected':''}>${n}</option>`).join('')}</select>
+      ${segm('bOri',[['land','Landscape'],['port','Portrait']],BORI)}<button class="btn line" id="bPreset">Start from preset ▾</button><button class="btn line" id="bCol" title="Colour">●</button><button class="btn line danger" id="bDel" title="Delete this screen">Delete</button></div>
+      <div class="bcanvw"><div class="bcanv" id="bCanv" style="aspect-ratio:${ratio}">${list.map(w=>{ const d=(window.SLBand&&SLBand.WIDGETS[w.type])||{name:w.type};
+        return `<div class="bw ${w.id===BWID?'on':''} ${d.cmd?'ctl':''}" data-w="${w.id}" style="left:${w.x/12*100}%;top:${w.y/9*100}%;width:${w.w/12*100}%;height:${w.h/9*100}%;${w.cfg&&w.cfg.col?`--wc:${w.cfg.col}`:''}"><span>${esc((w.cfg&&w.cfg.label)||d.name)}</span><small>${esc(bandPreview(w))}</small><i class="brs" data-rs="${w.id}"></i></div>`; }).join('')}</div></div>
+      <p class="faint" style="font-size:11px;margin-top:8px">Drag widgets in from the right, move and resize them on the grid; Delete removes the selected one. Changes show on the device at once. ${list.some(w=>(SLBand.WIDGETS[w.type]||{}).cmd)?'This screen can do what its buttons do, nothing else.':'No buttons: this screen can only watch.'}</p></div>`;
+    const w=list.find(x=>x.id===BWID);
+    right=w?bandWidgetSettings(sc,w):`<div class="br"><h3>Widgets</h3>${['Info','Communication','Controls'].map(g=>`<div class="bwg"><div class="faint" style="font-size:11px;margin:10px 0 4px">${g}</div>${Object.entries(SLBand.WIDGETS).filter(([,d])=>d.group===g).map(([k,d])=>`<div class="bwl" draggable="true" data-add="${k}">${esc(d.name)}</div>`).join('')}</div>`).join('')}</div>`; }
+  else right='<div class="br"></div>';
+  el.innerHTML=left+mid+right; wireBand(); }
+function bandPreview(w){ const c=w.cfg||{}, f=FIELDS.find(x=>x.id===c.field);
+  return ({field:f?f.name+(c.which==='next'?' · next song':''):'pick a field',until:f?'until '+f.name+' changes':'pick a field',setlist:f?'with '+f.name:'',label:c.text||'text',status:(c.labels||[]).join(' · '),checklist:(c.items||[]).join(' · '),
+    soundcheck:(()=>{ const s=songs.find(x=>x.id===c.song); return s?s.name:'pick a song'; })(),midiBtn:c.port?c.port+' ch '+(c.ch||1):'pick a port',notes:c.role?'notes for '+c.role:'',changes:'within '+(c.bars||4)+' bars',patch:c.track||'pick a MIDI track'})[w.type]||''; }
+function bandWidgetSettings(sc,w){ const d=SLBand.WIDGETS[w.type], c=w.cfg||(w.cfg={}), opt=(l,v)=>l.map(([k,n])=>`<option value="${esc(k)}" ${String(k)===String(v)?'selected':''}>${esc(n)}</option>`).join('');
+  const fieldSel=(id,v,none='–')=>`<select id="${id}"><option value="">${none}</option>${opt(FIELDS.map(f=>[f.id,f.name]),v)}</select>`;
+  let rows=[];
+  if(d.cmd) rows.push(rrow('Label',`<input id="bwLabel" value="${esc(c.label||'')}" placeholder="${esc(d.name)}">`),rrow('Colour',`<input type="color" id="bwCol" value="${esc(c.col||'#3a3a40')}">`),rrow('Ask to confirm',tog('bwConfirm',!!c.confirm)));
+  if(['field','until','setlist'].includes(w.type)) rows.push(rrow('Field',fieldSel('bwField',c.field)));
+  if(w.type==='field') rows.push(rrow('Song',segm('bwWhich',[['this','This song'],['next','Next song']],c.which||'this')));
+  if(w.type==='until') rows.push(rrow('Also show',fieldSel('bwAlso',c.also,'nothing')));
+  if(w.type==='label') rows.push(rrow('Text',`<input id="bwText" value="${esc(c.text||'')}">`));
+  if(w.type==='status') rows.push(rrow('Buttons',`<input id="bwLabels" value="${esc((c.labels||['Ready','Need 30 s','Problem']).join(', '))}" title="Comma between buttons">`));
+  if(w.type==='checklist') rows.push(rrow('Items',`<input id="bwItems" value="${esc((c.items||[]).join(', '))}" title="Comma between items">`));
+  if(w.type==='changes') rows.push(rrow('Look ahead',`<span class="rsl"><input type="number" id="bwBars" min="1" max="16" value="${c.bars||4}" style="width:56px"> bars</span>`));
+  if(w.type==='notes') rows.push(rrow('Notes for',segm('bwRole',[['drums','Drums'],['keys','Keys'],['md','MD'],['vocals','Vocals']],c.role||'drums')));
+  if(w.type==='patch'){ const tracks=[...new Set(songs.flatMap(s=>s.tracks.filter(t=>isMidiTrack(s,t))))]; rows.push(rrow('MIDI track',`<select id="bwTrack"><option value="">–</option>${opt(tracks.map(t=>[t,t]),c.track)}</select>`)); }
+  if(w.type==='soundcheck'){ const s=songs.find(x=>x.id===c.song); rows.push(rrow('Song',`<select id="bwSong"><option value="">–</option>${opt([...songs].sort(byName).map(x=>[x.id,x.name]),c.song)}</select>`)); if(s&&versOf(s).length>1) rows.push(rrow('Version',`<select id="bwVer">${opt(versOf(s).map(v=>[v.id,v.name]),c.ver||curVer(s).id)}</select>`)); }
+  if(w.type==='midiBtn') rows.push(rrow('Port',`<select id="bwPort"><option value="">–</option>${opt(PORTS.map(p=>[p,p]),c.port)}</select>`),rrow('Channel',`<select id="bwCh">${opt([...Array(16)].map((_,i)=>[i+1,i+1]),c.ch||1)}</select>`),rrow('Messages',`<textarea id="bwMsgs" rows="3" spellcheck="false" placeholder="PC 12&#10;CC 7 100">${esc(c.text||'')}</textarea>`));
+  rows.push(rrow('Size',`<span class="rsl"><input type="number" id="bwW" min="1" max="12" value="${w.w}" style="width:48px"> × <input type="number" id="bwH" min="1" max="9" value="${w.h}" style="width:48px"></span>`));
+  return `<div class="br"><div class="brh"><button class="iback" id="bwBack">‹ Widgets</button></div><h3>${esc(d.name)}</h3>${rows.join('')}<button class="rdanger" id="bwDel">Remove widget</button></div>`; }
+function wireBand(){ const sc=curScreen(), q=id=>$(id);
+  q('bAdd').onclick=()=>{ addScreen(); renderBand(); };
+  document.querySelectorAll('.bscr').forEach(r=>r.onclick=()=>{ BSEL=r.dataset.id; BWID=null; renderBand(); });
+  q('bNet').onchange=e=>{ snap(); BAND.network=e.target.value.trim(); bandChanged(); };
+  q('bFields').onclick=()=>openSettings('band'); q('bTable').onclick=()=>fieldsTable();
+  document.querySelectorAll('[data-dev]').forEach(s=>s.onchange=()=>{ if(window.SLBandHost) SLBandHost.assign(+s.dataset.dev,s.value||null); });
+  if(!sc) return; const list=sc[BORI];
+  q('bName').onchange=e=>{ snap(); sc.name=e.target.value.trim()||sc.name; bandChanged(); renderBand(); };
+  q('bDev').onchange=e=>{ snap(); sc.device=e.target.value; bandChanged(); renderBand(); };
+  q('bOri').querySelectorAll('button').forEach(b=>b.onclick=()=>{ BORI=b.dataset.v; BWID=null; renderBand(); });
+  q('bPreset').onclick=e=>ctxMenu(e,SLBand.PRESETS.map(([k,n])=>({label:n,icon:'▦',act:()=>{ const go=()=>{ snap(); Object.assign(sc,SLBand.preset(k)); BWID=null; bandChanged(); renderBand(); }; if(sc.land.length||sc.port.length) confirmBox(`Replace “${esc(sc.name)}”’s layout?`,`Both orientations start again from the ${n} preset.`,'Replace',go); else go(); }})));
+  q('bCol').onclick=e=>swatchPop({left:e.clientX,right:e.clientX,top:e.clientY},sc.col,c=>{ snap(); sc.col=c; bandChanged(); renderBand(); });
+  q('bDel').onclick=()=>confirmBox(`Delete the screen “${esc(sc.name)}”?`,'A device showing it goes back to “Which screen is this?”.','Delete screen',()=>{ snap(); BAND.screens=BAND.screens.filter(x=>x!==sc); BSEL=BAND.screens[0]&&BAND.screens[0].id; BWID=null; bandChanged(); renderBand(); });
+  const canv=q('bCanv'), cell=()=>{ const r=canv.getBoundingClientRect(); return {r,cw:r.width/12,ch:r.height/9}; };
+  // drag from the library: drop where it lands (else the first free place)
+  document.querySelectorAll('.bwl').forEach(x=>{ x.ondragstart=e=>{ e.dataTransfer.setData('text/plain','w:'+x.dataset.add); }; x.ondblclick=()=>{ addWidget(sc,x.dataset.add); }; });
+  canv.ondragover=e=>e.preventDefault();
+  canv.ondrop=e=>{ e.preventDefault(); const t=e.dataTransfer.getData('text/plain'); if(!t.startsWith('w:')) return; const {r,cw,ch}=cell(); addWidget(sc,t.slice(2),Math.floor((e.clientX-r.left)/cw),Math.floor((e.clientY-r.top)/ch)); };
+  canv.querySelectorAll('.bw').forEach(el=>{ const w=list.find(x=>x.id===el.dataset.w);
+    el.onpointerdown=e=>{ e.preventDefault(); const rs=e.target.classList.contains('brs'), {cw,ch}=cell(), x0=e.clientX, y0=e.clientY, st={...w}; let moved=false; BWID=w.id; canv.querySelectorAll('.bw').forEach(b=>b.classList.toggle('on',b===el));
+      const mv=ev=>{ const dx=Math.round((ev.clientX-x0)/cw), dy=Math.round((ev.clientY-y0)/ch); if(!moved&&(dx||dy)){ moved=true; snap(); }
+        if(rs){ w.w=st.w+dx; w.h=st.h+dy; } else { w.x=st.x+dx; w.y=st.y+dy; } SLBand.clampWidget(w);
+        el.style.left=w.x/12*100+'%'; el.style.top=w.y/9*100+'%'; el.style.width=w.w/12*100+'%'; el.style.height=w.h/9*100+'%'; };
+      const up=()=>{ removeEventListener('pointermove',mv); removeEventListener('pointerup',up); if(moved) bandChanged(); renderBand(); };
+      addEventListener('pointermove',mv); addEventListener('pointerup',up); }; });
+  const w=list.find(x=>x.id===BWID); if(!w) return; const c=w.cfg||(w.cfg={}), set=(k,v)=>{ snap(); if(v===''||v===undefined) delete c[k]; else c[k]=v; bandChanged(); renderBand(); };
+  q('bwBack').onclick=()=>{ BWID=null; renderBand(); };
+  q('bwDel').onclick=()=>{ snap(); sc[BORI]=list.filter(x=>x!==w); BWID=null; bandChanged(); renderBand(); };
+  const on=(id,ev,fn)=>{ const x=q(id); if(x) x[ev]=fn; };
+  on('bwLabel','onchange',e=>set('label',e.target.value.trim())); on('bwCol','onchange',e=>set('col',e.target.value)); on('bwConfirm','onclick',()=>set('confirm',!c.confirm||''));
+  on('bwField','onchange',e=>set('field',e.target.value)); on('bwAlso','onchange',e=>set('also',e.target.value)); on('bwText','onchange',e=>set('text',e.target.value));
+  on('bwLabels','onchange',e=>set('labels',e.target.value.split(',').map(x=>x.trim()).filter(Boolean))); on('bwItems','onchange',e=>set('items',e.target.value.split(',').map(x=>x.trim()).filter(Boolean)));
+  on('bwBars','onchange',e=>set('bars',Math.max(1,Math.min(16,+e.target.value||4)))); on('bwTrack','onchange',e=>set('track',e.target.value));
+  on('bwSong','onchange',e=>{ delete c.ver; set('song',e.target.value); }); on('bwVer','onchange',e=>set('ver',e.target.value));
+  on('bwPort','onchange',e=>set('port',e.target.value)); on('bwCh','onchange',e=>set('ch',+e.target.value)); on('bwMsgs','onchange',e=>set('text',e.target.value));
+  if(q('bwWhich')) q('bwWhich').querySelectorAll('button').forEach(b=>b.onclick=()=>set('which',b.dataset.v));
+  if(q('bwRole')) q('bwRole').querySelectorAll('button').forEach(b=>b.onclick=()=>set('role',b.dataset.v));
+  on('bwW','onchange',e=>{ snap(); w.w=+e.target.value||1; SLBand.clampWidget(w); bandChanged(); renderBand(); }); on('bwH','onchange',e=>{ snap(); w.h=+e.target.value||1; SLBand.clampWidget(w); bandChanged(); renderBand(); }); }
+function addWidget(sc,type,x,y){ const d=SLBand.WIDGETS[type]; if(!d) return null; snap(); const list=sc[BORI]||(sc[BORI]=[]);
+  const w={id:'w'+Date.now().toString(36)+Math.floor(Math.random()*999),type,x:0,y:0,w:d.w,h:d.h,cfg:{}};
+  const free=(px,py)=>!list.some(o=>px<o.x+o.w&&px+w.w>o.x&&py<o.y+o.h&&py+w.h>o.y);
+  if(x!==undefined){ w.x=x; w.y=y; } else { let found=false; for(let yy=0;yy<=9-w.h&&!found;yy++) for(let xx=0;xx<=12-w.w&&!found;xx++) if(free(xx,yy)){ w.x=xx; w.y=yy; found=true; } }
+  SLBand.clampWidget(w); list.push(w); BWID=w.id; bandChanged(); renderBand(); return w; }
+document.addEventListener('keydown',e=>{ if(!bandOn||!BWID||(e.key!=='Delete'&&e.key!=='Backspace')) return; const a=document.activeElement; if(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)) return; const sc=curScreen(); if(!sc) return; e.preventDefault(); snap(); sc[BORI]=sc[BORI].filter(x=>x.id!==BWID); BWID=null; bandChanged(); renderBand(); },true);
+// band statuses from the screens (cleared on song change)
+let BSTATUS=[];
+function bandStatus(from,label,on){ BSTATUS=BSTATUS.filter(x=>x.from!==from); if(on) BSTATUS.push({from,label,at:Date.now()}); if(on) toast(`${from}: ${label}`); renderStatusBar(); renderPerform(); }
+function renderStatusBar(){ const el=$('bandStat'); if(!el) return; el.hidden=!BSTATUS.length; el.innerHTML=BSTATUS.map(x=>`<span><b>${esc(x.from)}</b> ${esc(x.label)}</span>`).join(''); }
+
 // ======================= LIBRARY (6f): import, migration =======================
 let LIBMODE=false; // a library is open (the page autosaves into it)
 const audioSet=s=>Object.values(s.files||{}).map(f=>f&&f.path?String(f.path).split(/[\\/]/).pop():'').filter(Boolean).sort().join('|');
@@ -3020,7 +3256,7 @@ function importMerge(pkg,dec){ snap(); syncSet();
   Object.entries(L.vers).forEach(([sid,vid])=>{ const s=songs.find(q=>q.id===sid); if(!s||!versOf(s).some(v=>v.id===vid)) delete L.vers[sid]; });
   setlists.push(L); curSet=L.id; setOrder=L.order;
   const addById=(dst,src,key='id')=>{ (src||[]).forEach(x=>{ if(x&&!dst.some(y=>y[key]===x[key])) dst.push(x); }); };
-  addById(presets,(pkg.presets||[]).filter(p=>!p.built)); addById(CUEWORDS,pkg.cueWords||[]); addById(USER_LISTS,pkg.patchLists||[]); saveLists(); addById(FIELDS,pkg.fields||[]);
+  addById(presets,(pkg.presets||[]).filter(p=>!p.built)); addById(CUEWORDS,pkg.cueWords||[]); addById(USER_LISTS,pkg.patchLists||[]); saveLists(); addById(FIELDS,pkg.fields||[]); if(pkg.dashboards&&Array.isArray(pkg.dashboards.screens)) addById(BAND.screens,pkg.dashboards.screens);
   if(Array.isArray(pkg.phrases)&&PHRASES) pkg.phrases.forEach(p=>{ if(p&&p.t&&!PHRASES.list.some(q=>q.t.toLowerCase()===p.t.toLowerCase())) PHRASES.list.push({t:p.t,n:0}); });
   restore(ser()); renderPerform(true);
   return {setlist:L.name,added,same,replaced,both}; }
@@ -3084,9 +3320,9 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
   redraw(){ lcd(); },
   // Everything a .setline session holds.
   sessionData(){ const o=JSON.parse(ser()); o.presets=presets.filter(p=>!p.built); o.click=CLICK; if(Object.keys(CLICKT).length) o.clickT=CLICKT; o.cueVoice=CUEV; if(Object.keys(PRON).length) o.pron=PRON; if(CUEWORDS.length) o.cueWords=CUEWORDS;
-    if(LIBMODE){ if(PHRASES) o.phrases=PHRASES.list; if(USER_LISTS.length) o.patchLists=USER_LISTS; } if(FIELDS.length) o.fields=FIELDS; return o; },
+    if(LIBMODE){ if(PHRASES) o.phrases=PHRASES.list; if(USER_LISTS.length) o.patchLists=USER_LISTS; } if(FIELDS.length) o.fields=FIELDS; if(BAND.screens.length||BAND.network||BAND.pin) o.dashboards=BAND; return o; },
   loadSession(o){ ROUTE_LOG=[]; migrateRouting(o); migrateMidi(o); migrateVersions(o);
-    if(Array.isArray(o.phrases)) PHRASES={list:o.phrases.filter(x=>x&&typeof x.t==='string')}; if(Array.isArray(o.patchLists)){ USER_LISTS=o.patchLists; saveLists(); } FIELDS=Array.isArray(o.fields)?o.fields:[]; if(Array.isArray(o.presets)){ presets=[...o.presets]; } if(o.click) CLICK={...CLICK,...o.click}; CLICKT={...(o.clickT||{})}; CUEV={voice:'',name:'',speed:1,...(o.cueVoice||{})}; cuevFresh=false; PRON={...(o.pron||{})}; UNKNOWN=[]; CUEWORDS=Array.isArray(o.cueWords)?o.cueWords:[]; cwSeq=1+Math.max(0,...allWords().map(w=>+String(w.id).slice(1)||0));
+    if(Array.isArray(o.phrases)) PHRASES={list:o.phrases.filter(x=>x&&typeof x.t==='string')}; if(Array.isArray(o.patchLists)){ USER_LISTS=o.patchLists; saveLists(); } FIELDS=Array.isArray(o.fields)?o.fields:[]; BAND=o.dashboards&&typeof o.dashboards==='object'&&!Array.isArray(o.dashboards)?{network:'',pin:'',screens:[],...o.dashboards}:{network:'',pin:'',screens:[]}; BSEL=null; BWID=null; if(Array.isArray(o.presets)){ presets=[...o.presets]; } if(o.click) CLICK={...CLICK,...o.click}; CLICKT={...(o.clickT||{})}; CUEV={voice:'',name:'',speed:1,...(o.cueVoice||{})}; cuevFresh=false; PRON={...(o.pron||{})}; UNKNOWN=[]; CUEWORDS=Array.isArray(o.cueWords)?o.cueWords:[]; cwSeq=1+Math.max(0,...allWords().map(w=>+String(w.id).slice(1)||0));
     restore(JSON.stringify({songs:o.songs||[],setlists:o.setlists&&o.setlists.length?o.setlists:[{id:'L1',name:'Setlist 1',order:[]}],curSet:o.curSet||'L1'}));
     // ids made from now on must not collide with the loaded ones
     let num=0; const pre={}; const walk=v=>{ if(Array.isArray(v)) v.forEach(walk); else if(v&&typeof v==='object'){ if(typeof v.id==='number') num=Math.max(num,v.id); else if(typeof v.id==='string'){ const m=v.id.match(/^([a-zA-Z])(\d+)$/); if(m) pre[m[1]]=Math.max(pre[m[1]]||0,+m[2]); } Object.values(v).forEach(walk); } };
@@ -3114,6 +3350,13 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
   // The interface's outputs (from the app): its name, how many, their names. Renames are kept per device.
   setOutputs(device,names){ OUTS.device=device||''; OUTS.names=names||[]; OUTS.count=(names||[]).length; },
   setDirty(d){ const m=$('dirtyMk'); if(m) m.hidden=!d||LIBMODE; },
+  // 6g: the band's screens
+  band:{ show:()=>bandShow(), live:()=>bandLive(), get data(){ return BAND; }, set data(v){ BAND=v; }, screen:id=>BAND.screens.find(x=>x.id===id)||null, addScreen:(n,k)=>{ const s=addScreen(n,k); refresh(); return s; },
+    online:(m,devs)=>{ BONLINE=m||{}; BDEVS=devs||[]; if(bandOn) renderBand(); }, info:i=>{ BINFO=i; if(bandOn) renderBand(); }, status:(from,label,on)=>bandStatus(from,label,on), clearStatus:()=>{ BSTATUS=[]; renderStatusBar(); },
+    soundcheck:(id,v)=>soundcheck(id,v), endSoundcheck:()=>endSoundcheck(), vamp:()=>vamp(), jump:id=>queueJumpTo(id), cancelJump:()=>cancelQueuedJump(), syncMidi:p=>syncMidi(p), fillSync:()=>fillSyncFromFirst(), syncLines:(t,c)=>syncLines(t,c),
+    view:on=>setBand(on), addWidget:(sc,type,x,y)=>addWidget(sc,type,x,y), select:(id,ori)=>{ BSEL=id; if(ori) BORI=ori; renderBand(); }, fields:()=>FIELDS, setFields:f=>{ FIELDS=f; refresh(); }, fieldVal:(s,f,v)=>fieldVal(s,f,v), setFieldVal:(s,f,val,v)=>setFieldVal(s,f,val,v), newField:n=>newField(n), table:()=>fieldsTable(), finishBy:v=>{ const L=curSetObj(); if(v) L.finishBy=v; else delete L.finishBy; } },
+  midiReconnected(names){ const sy=curSetObj().sync; if(sy&&sy.onReconnect) syncMidi(names); },
+  setlistOpened(){ const sy=curSetObj().sync; if(sy&&sy.onOpen) syncMidi(); },
   // 6f: the Library
   setlistCmd:cmd=>setlistCmd(cmd), curSetId:()=>curSet,
   setSaveState(st,why){ LIBMODE=true; const m=$('saveMk'), d=$('dirtyMk'); if(d) d.hidden=true; if(!m) return; m.hidden=false; m.className='savemk'+(st==='saving'?' saving':st==='error'?' err':''); m.textContent=st==='saving'?'Saving…':st==='error'?'Not saved: '+(why||'error'):'Saved'; m.title=st==='error'?(why||''):'Every change is saved to the library as you work'; },
@@ -3204,7 +3447,7 @@ $('statusChip').onclick=()=>openSettings('audio'); $('gearBtn').onclick=()=>open
 $('newTrackB').onclick=()=>{ const s=songs.find(x=>x.id===selId); if(!s){ toast('Select a song first'); return; } const r=$('newTrackB').getBoundingClientRect();
   ctxMenu({clientX:r.left,clientY:r.bottom+4},[{label:'Audio track…',icon:'∿',act:()=>addTrack(s,'audio')},{label:'Click track',icon:'◔',act:()=>addTrack(s,'click')},{label:'MIDI track',icon:'⎍',act:()=>addTrack(s,'midi')},{label:'Cues track',icon:'❝',dis:s.tracks.includes('Cues'),act:()=>addTrack(s,'cues')}]); };
 $('listenOffB').onclick=()=>{ if(window.SLE) SLE.listen({on:false}); };
-document.querySelectorAll('.tabs a[data-tab]').forEach(a=>a.addEventListener('click',e=>{ e.preventDefault(); const pf=a.dataset.tab==='perform';
+document.querySelectorAll('.tabs a[data-tab]').forEach(a=>a.addEventListener('click',e=>{ e.preventDefault(); const pf=a.dataset.tab==='perform'; if(a.dataset.tab==='band'){ setBand(true); return; } if(bandOn) setBand(false);
   if(pf&&LISTEN.on&&!perfOn){ confirmBox('You’re listening on this computer','The show is playing on '+esc(LISTEN.current||'this computer')+', not on its outputs. Perform anyway?','Perform anyway',()=>setPerform(true)); return; } setPerform(pf); }));
 $('zoom').value=zToSlider(PXS); $('zoom').oninput=e=>setZoom(sliderToZ(+e.target.value)); $('zIn').onclick=()=>setZoom(Math.max(PXS+1,Math.round(PXS*1.4))); $('zOut').onclick=()=>setZoom(Math.min(PXS-1,Math.round(PXS/1.4)));
 $('scroller').addEventListener('scroll',()=>{ if(viewRaf) return; viewRaf=requestAnimationFrame(()=>{ viewRaf=0; redrawView(false); }); },{passive:true});
@@ -3234,8 +3477,8 @@ function verFields(s,v){ const o=JSON.parse(JSON.stringify(s,function(k,x){ retu
   return o; }
 // ---- loops: a section marked Loop repeats until Exit loop (L); it leaves at the end of the pass that's playing ----
 let loopExitId=null, engBar=1, engBeat=1;
-const loopSecAt=s=>{ if(!s||!s.secPos) return null; const b=barAtTime(s,pos); return s.secPos.find(x=>x.end==='loop'&&b>=x.start&&b<x.start+x.bars)||null; };
-function sectionLoopRange(s){ if(!playing||s.id!==playId) return null; const p=loopSecAt(s); if(!p){ loopExitId=null; return null; } if(loopExitId===p.id) return null;
+const loopSecAt=s=>{ if(!s||!s.secPos) return null; const b=barAtTime(s,pos); return s.secPos.find(x=>(x.end==='loop'||(VAMP&&VAMP.songId===s.id&&VAMP.secId===x.id))&&b>=x.start&&b<x.start+x.bars)||null; };
+function sectionLoopRange(s){ if(SOUNDCHECK&&s.id===SOUNDCHECK.songId&&playing) return [0,verLen(s,playVer(s))]; if(!playing||s.id!==playId) return null; const p=loopSecAt(s); if(!p){ loopExitId=null; return null; } if(loopExitId===p.id) return null;
   return [s.bars[p.start-1].t,s.bars[p.start-1+p.bars].t]; }
 const looping=()=>{ const s=songs.find(x=>x.id===playId); return !!(playing&&s&&sectionLoopRange(s)); };
 function exitLoop(){ const s=songs.find(x=>x.id===playId), p=loopSecAt(s); if(!p||!playing){ return false; } loopExitId=p.id; toast(`Leaving “${p.name}” at the end of this pass`); if(window.SLE&&SLE.nextChanged){ /* the loop is released by the next transport tick (syncLoop) */ } renderPerform(); return true; }
@@ -3255,11 +3498,14 @@ const ACTIONS=[
   {id:'nextVersion',name:'Next version of the next song',key:'V',run:()=>{ const cur=songs.find(x=>x.id===(playId||selId)), n=cur&&nextInSet(cur); if(n) flipVer(n.song,1); else toast('No next song in this setlist'); }},
   {id:'exitLoop',name:'Exit loop',key:'L',run:()=>{ if(!exitLoop()) toast('Not in a loop'); }},
   {id:'cancelJump',name:'Cancel queued jump',key:'Esc',run:()=>cancelQueuedJump()},
+  {id:'syncMidi',name:'Sync MIDI (send the setlist’s sync point)',key:'M',run:()=>syncMidi()},
+  {id:'vamp',name:'Vamp (loop the section playing)',key:'',run:()=>vamp()},
 ];
-window.SLActions={ list:()=>ACTIONS.map(({id,name,key})=>({id,name,key})), run:id=>{ const a=ACTIONS.find(x=>x.id===id); if(a){ a.run(); return true; } return false; } };
+window.SLActions={ list:()=>ACTIONS.map(({id,name,key})=>({id,name,key})), run:(id,arg)=>{ const a=ACTIONS.find(x=>x.id===id); if(a){ a.run(arg); return true; } return false; } };
+$('syncBtn').onclick=()=>syncMidi();
 // ---- Perform: the song playing (or ready), its sections, bars left, LOOPING; up next as a stack of versions ----
 let perfOn=false, NEXTST=null, autoLeft=0;
-function setPerform(on){ perfOn=on; document.body.classList.toggle('pf',on); document.querySelectorAll('.tabs a').forEach(a=>a.classList.toggle('on',on?a.dataset.tab==='perform':a.dataset.tab==='show')); if(on) renderPerform(true); }
+function setPerform(on){ perfOn=on; if(on&&bandOn){ bandOn=false; document.body.classList.remove('bd'); } document.body.classList.toggle('pf',on); document.querySelectorAll('.tabs a').forEach(a=>a.classList.toggle('on',on?a.dataset.tab==='perform':a.dataset.tab==='show')); if(on) renderPerform(true); }
 function perfSong(){ return songs.find(x=>x.id===(playId||selId))||null; }
 function perfParts(s,v){ if(!v||v.custom||isFullVer(s,v)) return s.secPos.map(p=>({secId:p.id,name:p.name,type:p.type,bars:p.bars,sb:p.start})); let vb=1; return verMap(s,v).map(p=>({secId:p.secId,name:p.name,type:p.extra?'x':p.type,bars:p.bars,sb:p.sb,extra:p.extra,vb:p.vb})); }
 function renderPerform(full){ const el=$('perf'); if(!el||!perfOn) return; const s=perfSong();
@@ -3300,7 +3546,7 @@ function nextLoadText(n){ if(!NATIVE) return 'Loaded and ready'; const m=NEXTST;
 // ======================= SETTINGS (6d) =======================
 // One sheet: ⚙ in the top bar, File › Preferences…, Ctrl/⌘+,. These belong to this computer (the rig), not the show,
 // except where a row says so. The app module (window.SLE) answers the native calls; a plain browser shows the layout.
-const SET_TABS=[['audio','Audio'],['out','Outputs'],['midi','MIDI'],['voices','Voices'],['general','General'],['look','Appearance'],['diag','Diagnostics']];
+const SET_TABS=[['audio','Audio'],['out','Outputs'],['midi','MIDI'],['voices','Voices'],['band','Band'],['general','General'],['look','Appearance'],['diag','Diagnostics']];
 let SET_TAB='audio', setRenderSeq=0, LDEV={list:[],rate:0,busy:false};
 const ncall=(n,a)=>NATIVE&&window.SLE&&SLE.call?SLE.call(n,a):Promise.resolve(null);
 function openSettings(tab){ if(tab) SET_TAB=tab; let bg=$('setSheet');
@@ -3349,6 +3595,13 @@ async function settingsHTML(tab){
     const all=[...new Set([...outs,...Object.keys(used)])], off=(await ncall('midiOffset'))||{ms:0};
     return `<h3>MIDI</h3><p class="d">Any MIDI device works. Each MIDI track picks a port and channel on its header or in the right panel.</p>
       ${sgrp(all.length?all.map(p=>sf(esc(p)+(outs.includes(p)?'':' <span style="color:var(--amber)">(not connected)</span>'),`<span style="color:var(--muted);font-size:12px">${used[p]?used[p].size+' track'+(used[p].size>1?'s':''):'not used'}</span>`)):[sf('No MIDI outputs found','')])}
+      <h3 style="margin-top:6px">MIDI clock</h3><p class="d">24 ppqn on every MIDI output, following each song’s tempo map; while stopped it keeps running at the next song’s tempo. Start/Stop/Continue + Song Position is off by default (some loopers and drum machines start by themselves).</p>
+      ${sgrp(((await ncall('midiPorts'))||[]).map(p=>sf(esc(p.name)+(p.connected?'':' <span style="color:var(--amber)">(not connected)</span>'),`<span class="clkrow"><span class="faint" style="font-size:11px">Clock</span>${tog('clk_'+btoa(unescape(encodeURIComponent(p.name))).replace(/=/g,''),p.clock)}<span class="faint" style="font-size:11px;margin-left:8px">Start/Stop + SPP</span>${tog('trn_'+btoa(unescape(encodeURIComponent(p.name))).replace(/=/g,''),p.transport)}</span>`)).concat(NATIVE?[]:[sf('MIDI outputs appear here in the app','')]))}
+      ${(()=>{ const L=curSetObj(), sy=syncOf(L); return `<h3 style="margin-top:6px">Sync point for “${esc(L.name)}”</h3><p class="d">What each device should be on before the set starts (Bank + Program, CCs, any message). One per line: <span class="faint">PC 12 · PC 1:0:12 · CC 7 100 · raw B0 07 64</span>. Sync MIDI (top bar, a key, a band screen) sends it all; after that the songs drive the devices.</p>
+        ${sgrp(sy.devices.map((d,i)=>{ const {msgs,bad}=syncLines(d.text,d.ch); return sf(`<span class="clkrow"><select data-sp="${i}">${[...new Set([...PORTS,d.port])].filter(Boolean).map(p=>`<option ${p===d.port?'selected':''}>${esc(p)}</option>`).join('')}</select><select data-sc="${i}">${[...Array(16)].map((_,k)=>`<option value="${k+1}" ${k+1===+d.ch?'selected':''}>ch ${k+1}</option>`).join('')}</select></span>`,
+          `<span class="clkrow"><textarea data-st="${i}" rows="2" spellcheck="false" style="width:170px;font:12px var(--code,monospace)">${esc(d.text||'')}</textarea><span class="faint" style="font-size:11px;width:56px">${msgs.length} msg${bad.length?` · <span style="color:var(--amber)">${bad.length} not understood</span>`:''}</span><button class="sel2" style="min-width:0" data-ss="${i}">${SYNC_SENT[i]?'Sent ✓':'Send'}</button><button class="sel2" style="min-width:0" data-sx="${i}" title="Remove">✕</button></span>`); }).concat(sy.devices.length?[]:[sf('No devices yet','')]))}
+        <div class="racts"><button class="btn line" id="stSadd">＋ Add device</button><button class="btn line" id="stSfill">Fill from first song</button><button class="btn pri" id="stSall" ${sy.devices.length?'':'disabled'}>Sync MIDI</button></div>
+        ${sgrp([sf('Send when this setlist opens',tog('stSopen',!!sy.onOpen)),sf('Send when a MIDI device reconnects',tog('stSrecon',!!sy.onReconnect))])}`; })()}
       ${sgrp([sf('Send MIDI early by',`<span class="rsl"><input type="number" id="stMidiOff" min="-200" max="200" step="1" value="${+off.ms||0}" style="width:70px"> ms</span>`)])}
       <h3 style="margin-top:6px">Patch name lists</h3><p class="d">Optional. A list names program numbers so MIDI clips read “Prog 12 · Lead”. Pick one per MIDI track (none: numbers).</p>
       ${sgrp(patchLists().map(l=>sf(esc(l.name),`<span style="display:flex;gap:6px;align-items:center"><span style="color:var(--muted);font-size:12px">${Object.keys(l.names||{}).length} names${l.built?' · built in':''}</span><button class="sel2" style="min-width:0" data-plist="${esc(l.id)}">${l.built?'View…':'Edit…'}</button></span>`)))}
@@ -3359,6 +3612,17 @@ async function settingsHTML(tab){
       ${sgrp([sf('Natural voices (Kokoro, '+KOKORO_MB()+' MB, offline)',`<span style="display:flex;gap:8px;align-items:center"><span style="color:var(--muted);font-size:12px" id="stKstate">${state}</span>${m.state==='ready'?'':m.state==='downloading'?'<button class="sel2" style="min-width:0" id="stKcancel">Cancel</button>':'<button class="sel2" style="min-width:0" id="stKget">Download</button>'}</span>`),
         sf('Cue voice for this show',`<select id="stVoice"><option value="">Default voice</option>${list.map(v=>`<option value="${esc(v.id)}" ${(c.voice===v.id||(!c.voice&&c.name&&c.name===v.name))?'selected':''}>${esc(v.name)}${v.engine==='kokoro'?' · Kokoro':v.lang?' · '+esc(v.lang):''}</option>`).join('')}</select>`)])}
       <p class="d">A song can use its own voice: select its Cues track and turn off “Same voice for every song”.</p>`; }
+  if(tab==='band'){ const st=(await ncall('bandInfo'))||{running:false,port:8080,addresses:[],mdns:'off',clients:0}; BINFO=st; const ip=(st.addresses||[])[0]||'', url=ip?`http://${ip}:${st.port}/`:'';
+    const win=navigator.platform.startsWith('Win');
+    return `<h3>Band</h3><p class="d">Phones and tablets on the band’s own network open this address (or scan the code). Nothing to install. They show what their screen’s layout shows and can only do what its buttons do; they never change levels.</p>
+      <div style="display:flex;gap:18px;align-items:center;margin:4px 0 12px">${url&&window.SLBand?`<div class="qrbox">${SLBand.qrSVG(url)}</div>`:''}<div><div style="font:600 24px var(--mono,monospace)">${esc(url||'No network')}</div>${st.mdns==='setline.local'?`<div class="faint">or http://setline.local:${st.port}/</div>`:`<div class="faint">setline.local: ${esc(st.mdns||'off')}</div>`}<div class="faint" style="margin-top:4px">${st.running?`Server on · ${st.clients} device${st.clients===1?'':'s'} connected`:'<span style="color:var(--amber)">Server off</span>'}</div></div></div>
+      ${sgrp([sf('Port',`<span class="rsl"><input type="number" id="stBport" min="1024" max="65535" value="${st.port}" style="width:80px"><button class="sel2" style="min-width:0" id="stBrestart">${st.running?'Restart':'Start'}</button></span>`),
+        sf('Join PIN',`<input id="stBpin" value="${esc(BAND.pin||'')}" placeholder="off" style="width:90px" title="Optional: a device asks for it once">`),
+        sf('Band network',`<input id="stBnet" value="${esc(BAND.network||'')}" placeholder="a name, just a label" style="width:180px">`)])}
+      ${win?'<p class="d">The first time, Windows asks whether set.Line may use the network: allow it on private networks. If devices can’t connect, check Windows Security › Firewall › Allow an app: set.Line (Private).</p>':''}
+      <h3 style="margin-top:6px">Song fields</h3><p class="d">Your own fields per song (Tuning, Guitar, Click…): set in each song’s panel, overridable per version, shown on the band’s screens.</p>
+      ${sgrp(FIELDS.length?FIELDS.map((f,i)=>sf(`<input data-fn="${i}" value="${esc(f.name)}" style="width:130px">`,`<span class="clkrow"><select data-ft="${i}"><option value="text" ${f.type!=='list'?'selected':''}>Text</option><option value="list" ${f.type==='list'?'selected':''}>List of choices</option></select>${f.type==='list'?`<input data-fo="${i}" value="${esc((f.options||[]).join(', '))}" placeholder="E Standard, Drop D…" style="width:180px" title="Comma between choices">`:''}<button class="sel2" style="min-width:0" data-fu="${i}" ${i?'':'disabled'} title="Move up">↑</button><button class="sel2" style="min-width:0" data-fd="${i}" title="Delete">✕</button></span>`)):[sf('No song fields yet','')])}
+      <div class="racts"><button class="btn line" id="stFadd">＋ Add a field</button><button class="btn line" id="stFtable">Song fields table…</button></div>`; }
   if(tab==='general'){ const st=(await ncall('libraryState'))||{name:'My Library',root:'Documents/set.Line/Libraries/My Library',onLaunch:'last'};
     return `<h3>General</h3><p class="d">The library is every song and setlist, saved as you work. This computer remembers which setlist was open.</p>
       ${sgrp([sf('On launch',segm('stLaunch',[['last','Last setlist'],['empty','Empty setlist']],st.onLaunch||'last')),
@@ -3382,11 +3646,31 @@ function wireSettings(tab){ const q=id=>$(id), re=()=>renderSettings();
     [['stLclick','click'],['stLcues','cues'],['stLmidi','midi']].forEach(([id,k])=>q(id).onclick=()=>L({[k]:q(id).classList.contains('off')})); }
   if(tab==='out'){ document.querySelectorAll('#sbody input[data-o]').forEach(i=>{ i.onchange=()=>{ setOutName(+i.dataset.o,i.value); refresh(); re(); }; i.onkeydown=e=>{ if(e.key==='Enter') i.blur(); }; });
     q('stPdf').onclick=()=>exportPatchSheet(); }
-  if(tab==='midi'){ q('stMidiOff').onchange=e=>{ ncall('midiOffset',{ms:+e.target.value||0}); toast('MIDI is sent '+(+e.target.value||0)+' ms early from the next Play'); };
+  if(tab==='midi'){ document.querySelectorAll('#sbody .tog[id^="clk_"],#sbody .tog[id^="trn_"]').forEach(b=>b.onclick=async()=>{ const name=decodeURIComponent(escape(atob(b.id.slice(4)+'=='.slice(0,(4-b.id.slice(4).length%4)%4)))), row=b.closest('.clkrow'), c=row.querySelector('[id^="clk_"]'), tr=row.querySelector('[id^="trn_"]');
+      b.classList.toggle('off'); await ncall('setMidiPort',{name,clock:!c.classList.contains('off'),transport:!tr.classList.contains('off')}); });
+    const sy=syncOf();
+    document.querySelectorAll('#sbody [data-sp]').forEach(s=>s.onchange=()=>{ snap(); sy.devices[+s.dataset.sp].port=s.value; refresh(); re(); });
+    document.querySelectorAll('#sbody [data-sc]').forEach(s=>s.onchange=()=>{ snap(); sy.devices[+s.dataset.sc].ch=+s.value; refresh(); re(); });
+    document.querySelectorAll('#sbody [data-st]').forEach(s=>s.onchange=()=>{ snap(); sy.devices[+s.dataset.st].text=s.value; delete SYNC_SENT[+s.dataset.st]; SYNCED=null; refresh(); re(); });
+    document.querySelectorAll('#sbody [data-ss]').forEach(b=>b.onclick=async()=>{ const i=+b.dataset.ss, d=sy.devices[i], {msgs}=syncLines(d.text,d.ch); const r=await ncall('sendMidiNow',{port:d.port,msgs}); if(r&&r.error) toast(r.error); else { SYNC_SENT[i]=Date.now(); toast(`Sent ${msgs.length} message${msgs.length===1?'':'s'} to ${d.port}`); } re(); });
+    document.querySelectorAll('#sbody [data-sx]').forEach(b=>b.onclick=()=>{ snap(); sy.devices.splice(+b.dataset.sx,1); SYNC_SENT={}; refresh(); re(); });
+    q('stSadd').onclick=()=>{ snap(); sy.devices.push({port:PORTS[0]||'',ch:1,text:''}); refresh(); re(); };
+    q('stSfill').onclick=()=>{ fillSyncFromFirst(); re(); }; q('stSall').onclick=()=>syncMidi();
+    q('stSopen').onclick=()=>{ snap(); sy.onOpen=!sy.onOpen; refresh(); re(); }; q('stSrecon').onclick=()=>{ snap(); sy.onReconnect=!sy.onReconnect; refresh(); re(); };
+    q('stMidiOff').onchange=e=>{ ncall('midiOffset',{ms:+e.target.value||0}); toast('MIDI is sent '+(+e.target.value||0)+' ms early from the next Play'); };
     document.querySelectorAll('#sbody [data-plist]').forEach(b=>b.onclick=()=>patchListBox(b.dataset.plist));
     q('stNewList').onclick=()=>patchListBox(null); }
   if(tab==='voices'){ if(q('stKget')) q('stKget').onclick=()=>{ if(window.SLC) SLC.downloadVoices(); setTimeout(re,300); }; if(q('stKcancel')) q('stKcancel').onclick=()=>{ if(window.SLC) SLC.cancelVoiceDownload(); setTimeout(re,300); };
     q('stVoice').onchange=e=>{ snap(); const v=voiceList().find(x=>x.id===e.target.value); CUEV={...CUEV,voice:v?v.id:'',name:v?v.name:''}; cuevFresh=false; refresh(); }; }
+  if(tab==='band'){ q('stBrestart').onclick=async()=>{ const p=+q('stBport').value||8080; const r=await ncall('bandStart',{port:p}); if(r&&r.error) toast(r.error); re(); };
+    q('stBpin').onchange=e=>{ snap(); BAND.pin=e.target.value.trim(); bandChanged(); }; q('stBnet').onchange=e=>{ snap(); BAND.network=e.target.value.trim(); bandChanged(); };
+    document.querySelectorAll('#sbody [data-fn]').forEach(i=>i.onchange=()=>{ snap(); FIELDS[+i.dataset.fn].name=i.value.trim()||FIELDS[+i.dataset.fn].name; refresh(); bandChanged(); re(); });
+    document.querySelectorAll('#sbody [data-ft]').forEach(i=>i.onchange=()=>{ snap(); FIELDS[+i.dataset.ft].type=i.value; refresh(); bandChanged(); re(); });
+    document.querySelectorAll('#sbody [data-fo]').forEach(i=>i.onchange=()=>{ snap(); FIELDS[+i.dataset.fo].options=i.value.split(',').map(x=>x.trim()).filter(Boolean); refresh(); bandChanged(); re(); });
+    document.querySelectorAll('#sbody [data-fu]').forEach(b=>b.onclick=()=>{ const i=+b.dataset.fu; if(!i) return; snap(); const [f]=FIELDS.splice(i,1); FIELDS.splice(i-1,0,f); refresh(); bandChanged(); re(); });
+    document.querySelectorAll('#sbody [data-fd]').forEach(b=>b.onclick=()=>{ const i=+b.dataset.fd, f=FIELDS[i]; confirmBox(`Delete the field “${esc(f.name)}”?`,'Its values in every song and version go too.','Delete field',()=>{ snap(); FIELDS.splice(i,1); songs.forEach(s=>{ if(s.fields) delete s.fields[f.id]; versOf(s).forEach(v=>{ if(v.fields) delete v.fields[f.id]; }); }); refresh(); bandChanged(); re(); }); });
+    q('stFadd').onclick=()=>{ snap(); newField(); refresh(); bandChanged(); re(); setTimeout(()=>{ const l=document.querySelectorAll('#sbody [data-fn]'); const x=l[l.length-1]; if(x){ x.focus(); x.select(); } },50); };
+    q('stFtable').onclick=()=>{ closeSettings(); fieldsTable(); }; }
   if(tab==='general'){ q('stLaunch').querySelectorAll('button').forEach(b=>b.onclick=async()=>{ await ncall('libraryState',{onLaunch:b.dataset.v}); re(); });
     q('stLib').onclick=()=>ncall('libraryReveal'); q('stLogs').onclick=()=>ncall('revealFolder',{which:'logs'}); }
   if(tab==='look') q('stLook').querySelectorAll('button').forEach(b=>b.onclick=()=>{ if(window.SLAppearance) SLAppearance.set(b.dataset.v); re(); });
@@ -3440,7 +3724,7 @@ $('tglL').onclick=()=>setPanel('L',!isOpen('L')); $('tglR').onclick=()=>setPanel
 $('closeL').onclick=()=>setPanel('L',false); $('closeR').onclick=()=>setPanel('R',false);
 try{ if(localStorage.getItem('setline.panelL')==='0') setPanel('L',false); if(localStorage.getItem('setline.panelR')==='0') setPanel('R',false); }catch(e){}
 document.addEventListener('keydown',e=>{ if(/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
-  if(e.metaKey||e.ctrlKey){ const k=e.key.toLowerCase(); if(k===','){ e.preventDefault(); openSettings(); return; } if(k==='s'){ e.preventDefault(); if(window.SLE) SLE.save(e.shiftKey); return; } if(k==='o'){ e.preventDefault(); if(window.SLE) SLE.open(); return; } if(k==='n'){ e.preventDefault(); if(window.SLE) SLE.newSession(); return; } if(k==='z'){ e.preventDefault(); e.shiftKey?redo():undo(); return; } if(k==='y'){ e.preventDefault(); redo(); return; }
+  if(e.metaKey||e.ctrlKey){ const k=e.key.toLowerCase(); if(k===','){ e.preventDefault(); openSettings(); return; } if(k==='s'||k==='o'){ e.preventDefault(); toast('Nothing to save: the library saves every change by itself'); return; } if(k==='n'){ e.preventDefault(); setlistCmd('new'); return; } if(k==='z'){ e.preventDefault(); e.shiftKey?redo():undo(); return; } if(k==='y'){ e.preventDefault(); redo(); return; }
     if(k==='a'&&selId&&!ed.song){ e.preventDefault(); const s=songs.find(x=>x.id===selId); if(s) selectAllIn(s); return; }
     if(k==='j'){ e.preventDefault(); glueSel(); return; }
     if(k==='c'){ e.preventDefault(); doCopy(); return; } if(k==='x'){ e.preventDefault(); doCut(); return; } if(k==='v'){ e.preventDefault(); doPaste(); return; } if(k==='d'){ e.preventDefault(); doDup(); return; } }
@@ -3448,7 +3732,7 @@ document.addEventListener('keydown',e=>{ if(/INPUT|SELECT|TEXTAREA/.test(documen
   if(multiOn()&&e.key==='Escape'){ clearMulti(); renderInsp(); return; }
   if(document.querySelector('.pop')&&e.key==='Escape'){ closePops(); return; }
   if(e.key==='Escape'&&jumpQueuedSec!==null){ cancelQueuedJump(); return; }
-  if(!e.metaKey&&!e.ctrlKey&&!e.altKey&&!e.shiftKey){ const k=e.key.toLowerCase(), act={n:'nextSong',p:'prevSong',v:'nextVersion',l:'exitLoop'}[k]; if(act&&!(k==='v'&&selClip)){ e.preventDefault(); SLActions.run(act); return; } }
+  if(!e.metaKey&&!e.ctrlKey&&!e.altKey&&!e.shiftKey){ const k=e.key.toLowerCase(), act={n:'nextSong',p:'prevSong',v:'nextVersion',l:'exitLoop',m:'syncMidi'}[k]; if(act&&!(k==='v'&&selClip)){ e.preventDefault(); SLActions.run(act); return; } }
   if(trackOpen&&e.key==='Escape'){ closeTrack(); return; }
   if(pick&&(e.key==='Delete'||e.key==='Backspace')){ e.preventDefault(); doDelete(); return; }
   if(pick&&e.key==='Escape'){ setPick(null); return; }

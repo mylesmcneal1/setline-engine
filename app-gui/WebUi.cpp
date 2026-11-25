@@ -1,4 +1,5 @@
 #include "WebUi.h"
+#include <mutex>
 #include "Folders.h"
 #include <SetLineUi.h>
 #include <unordered_map>
@@ -63,11 +64,14 @@ void WebUi::loadStartPage(const juce::String& pageIn)
 
 std::optional<juce::WebBrowserComponent::Resource> WebUi::serve(const juce::String& rawPath)
 {
-    // "/" -> start page; strip the query ("3-satellite.html?mac") and fragment.
+    // "/" -> start page; strip the query ("1-arrange.html?settings=audio") and fragment.
     auto path = rawPath.upToFirstOccurrenceOf("?", false, false).upToFirstOccurrenceOf("#", false, false);
     path = juce::URL::removeEscapeChars(path).trimCharactersAtStart("/");
     if (path.isEmpty()) path = startPage;
 
+    // the window and the band server (6g, its own threads) both read the archive: one at a time
+    static std::mutex zipLock;
+    std::lock_guard<std::mutex> g(zipLock);
     auto* zip = uiArchive();
     if (zip == nullptr) return std::nullopt;
     const auto* entry = zip->getEntry(path);

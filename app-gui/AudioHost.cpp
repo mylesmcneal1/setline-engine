@@ -410,6 +410,103 @@ void AudioHost::changeListenerCallback(juce::ChangeBroadcaster*)
 
 // ------------------------------------------------------------------ MIDI outputs
 
+namespace {
+juce::StringArray nameList(juce::PropertiesFile& s, const char* key)
+{
+    juce::StringArray out; const auto v = juce::JSON::parse(s.getValue(key));
+    if (auto* a = v.getArray()) for (auto& x : *a) out.add(x.toString());
+    return out;
+}
+// Never clocked unless asked: the software synth that ships with Windows
+bool clockByDefault(const juce::String& name) { return ! name.containsIgnoreCase("GS Wavetable"); }
+} // namespace
+
+void AudioHost::refreshClock()
+{
+    const auto off = nameList(settings, "midiClockOff"), on = nameList(settings, "midiClockOn"), tr = nameList(settings, "midiTransport");
+    uint32_t cm = 0, tm = 0;
+    const int n = midiOuts.count.load();
+    for (int i = 0; i < n && i < 32; ++i) {
+        const auto& nm = midiOuts.names[(size_t) i];
+        if ((clockByDefault(nm) && ! off.contains(nm)) || on.contains(nm)) cm |= 1u << i;
+        if (tr.contains(nm)) tm |= 1u << i;
+    }
+    eng.setMidiClock(cm, tm, n);
+}
+
+void AudioHost::scanMidiPorts()
+{
+    const auto avail = juce::MidiOutput::getAvailableDevices();
+    juce::StringArray now; for (auto& d : avail) now.add(d.name);
+    const auto off = nameList(settings, "midiClockOff"), on = nameList(settings, "midiClockOn");
+    juce::StringArray back;
+    std::vector<std::string> w;
+    for (auto& d : avail) {
+        int idx = -1; for (int i = 0; i < midiOuts.count.load(); ++i) if (midiOuts.names[(size_t) i] == d.name) idx = i;
+        const bool wantClock = (clockByDefault(d.name) && ! off.contains(d.name)) || on.contains(d.name);
+        if (idx < 0 && wantClock) midiOuts.resolve(d.name, w); // MIDI clock goes to every output: open it
+        else if (idx >= 0 && connectedPorts.size() && ! connectedPorts.contains(d.name)) {
+            // it was gone and came back: the old handle is dead, open it again
+            if (auto o = juce::MidiOutput::openDevice(d.identifier)) { std::lock_guard<std::mutex> g(midiOuts.locks[(size_t) idx]); midiOuts.outs[(size_t) idx] = std::move(o); }
+            back.add(d.name);
+        }
+    }
+    for (auto& x : w) applog::line("MIDI: " + juce::String(x));
+    const bool first = connectedPorts.isEmpty();
+    connectedPorts = now;
+    if (connectedPorts.isEmpty()) connectedPorts.add({}); // (scanned once)
+    refreshClock();
+    if (! first && back.size()) { applog::line("MIDI: reconnected " + back.joinIntoString(", ")); if (onMidiReconnected) onMidiReconnected(back); }
+}
+
+juce::var AudioHost::midiPorts()
+{
+    scanMidiPorts();
+    const auto off = nameList(settings, "midiClockOff"), on = nameList(settings, "midiClockOn"), tr = nameList(settings, "midiTransport");
+    juce::Array<juce::var> list; juce::StringArray seen;
+    auto add = [&](const juce::String& nm, bool connected) {
+        if (seen.contains(nm)) return; seen.add(nm);
+        bool open = false; for (int i = 0; i < midiOuts.count.load(); ++i) open |= midiOuts.names[(size_t) i] == nm;
+        auto* o = new juce::DynamicObject();
+        o->setProperty("name", nm); o->setProperty("open", open); o->setProperty("connected", connected);
+        o->setProperty("clock", (clockByDefault(nm) && ! off.contains(nm)) || on.contains(nm)); o->setProperty("transport", tr.contains(nm));
+        list.add(juce::var(o));
+    };
+    for (auto& d : juce::MidiOutput::getAvailableDevices()) add(d.name, true);
+    for (int i = 0; i < midiOuts.count.load(); ++i) add(midiOuts.names[(size_t) i], false);
+    return list;
+}
+
+void AudioHost::setMidiPort(const juce::String& name, bool clock, bool transport)
+{
+    auto off = nameList(settings, "midiClockOff"), on = nameList(settings, "midiClockOn"), tr = nameList(settings, "midiTransport");
+    off.removeString(name); on.removeString(name); tr.removeString(name);
+    if (! clock && clockByDefault(name)) off.add(name);
+    if (clock && ! clockByDefault(name)) on.add(name);
+    if (transport) tr.add(name);
+    auto save = [this](const char* k, const juce::StringArray& a) { juce::Array<juce::var> v; for (auto& x : a) v.add(x); settings.setValue(k, juce::JSON::toString(v, true)); };
+    save("midiClockOff", off); save("midiClockOn", on); save("midiTransport", tr);
+    settings.saveIfNeeded();
+    scanMidiPorts();
+}
+
+juce::var AudioHost::sendMidiNow(const juce::String& port, const juce::var& msgs)
+{
+    std::vector<std::string> w;
+    const int i = midiOuts.resolve(port, w);
+    if (i < 0) { auto* o = new juce::DynamicObject(); o->setProperty("error", w.empty() ? "MIDI output \"" + port + "\" isn't connected." : juce::String(w.front())); return juce::var(o); }
+    refreshClock();
+    int sent = 0;
+    if (auto* a = msgs.getArray())
+        for (auto& m : *a) {
+            uint8_t b[3] = { 0, 0, 0 }; int len = 0;
+            if (auto* bytes = m.getArray()) for (auto& x : *bytes) if (len < 3) b[len++] = (uint8_t) (int) x;
+            if (len == 0 || (b[0] & 0x80) == 0) continue;
+            midiOuts.sendNow(i, b, len); ++sent;
+        }
+    auto* o = new juce::DynamicObject(); o->setProperty("sent", sent); return juce::var(o);
+}
+
 int AudioHost::MidiOuts::resolve(const juce::String& want, std::vector<std::string>& warnings)
 {
     const int n = count.load();
@@ -456,6 +553,7 @@ MappedSong AudioHost::mapForEngine(const juce::var& payload, Engine::Config& cfg
     cfg.sampleRate = sr;
     cfg.numOutputs = outs;
     cfg.midiOffsetMs = settings.getDoubleValue("midiOffsetMs", 0.0);
+    refreshClock();
     if (listen.on) {
         applyListen(mapped.def, listen);
         if (listen.mode == "output") cfg.numOutputs = scratchOuts; // every show output, into the scratch buffers
@@ -697,6 +795,7 @@ juce::var AudioHost::engineStats()
 void AudioHost::timerCallback()
 {
     collectPreviews();
+    if (++scanTick % 60 == 1) scanMidiPorts(); // MIDI outputs: clock on new ones, reopen ones that came back
     if (! emit) return;
     bool segued = false;
     if (eng.segues() != seguesSeen) { takeOverNext(); applyLevels(); segued = true; applog::line("Segue into \"" + loadedName + "\""); }
