@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>set.Line — streamlined (mockup)</title>
+<style>
+:root{--bg:#0b0b0c;--s1:#141415;--s2:#1c1c1e;--s3:#2a2a2e;--hair:#26262a;--line:#0c0c0d;--text:#f2f2f4;--muted:#8e8e96;--faint:#5a5a62;--accent:#ff9f0a;--blue:#0a84ff;--green:#30d158;--red:#ff453a;
+--s-intro:#6b7cff;--s-verse:#22c3a6;--s-pre:#a46bff;--s-chorus:#f5a524;--s-bridge:#ff5fa2;--s-outro:#7d8696}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font:13px/1.35 Inter,system-ui,sans-serif;height:100vh;overflow:hidden;display:grid;grid-template-rows:52px 44px 1fr}
+.mono{font-family:"JetBrains Mono",ui-monospace,monospace}
+/* top bar */
+.top{display:flex;align-items:center;gap:14px;padding:0 14px;border-bottom:1px solid var(--line);background:var(--s1)}
+.logo{font-weight:700;font-size:16px;letter-spacing:-.02em;position:relative;margin-right:6px}
+.logo:after{content:"";position:absolute;left:0;right:0;bottom:-3px;height:2px;background:linear-gradient(90deg,var(--s-intro) 0 20%,var(--s-verse) 20% 45%,var(--s-chorus) 45% 70%,var(--s-bridge) 70% 85%,var(--s-outro) 85%)}
+.seg{display:flex;background:var(--s3);border-radius:8px;padding:2px}
+.seg span{padding:5px 13px;border-radius:6px;color:#c9c9cf;font-weight:500}
+.seg span.on{background:#48484e;color:#fff}
+.tb{color:#c9c9cf;padding:5px 8px;border-radius:6px}
+.tp{display:flex;gap:4px;align-items:center}
+.tp b{width:32px;height:30px;border-radius:7px;background:var(--s3);display:flex;align-items:center;justify-content:center;font-weight:400;font-size:13px;color:#e4e4e8}
+.tp b.play{background:var(--text);color:#000;width:40px}
+.pos{background:#000;border-radius:7px;padding:4px 12px;display:flex;gap:16px;align-items:center}
+.pos .big{font-size:18px;font-weight:500}
+.pos small{color:var(--muted);font-size:10px;display:block}
+.sp{flex:1}
+.pill{display:flex;align-items:center;gap:6px;background:var(--s3);border-radius:20px;padding:5px 11px;color:#d0d0d6;font-size:12px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--green)}
+.gear{width:30px;height:30px;border-radius:7px;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:15px}
+/* toolbar */
+.tool{display:flex;align-items:center;gap:12px;padding:0 14px;border-bottom:1px solid var(--line);background:var(--s1)}
+.tool .nm{font-weight:600}
+.tool .saved{color:var(--muted);font-size:12px}
+.btn{background:var(--s3);border-radius:7px;padding:5px 11px;color:#e4e4e8;font-size:12px;font-weight:500}
+.btn.acc{background:var(--accent);color:#2b1600}
+/* main */
+.main{display:grid;grid-template-columns:236px minmax(0,1fr) 300px;min-height:0}
+.left{background:var(--s1);border-right:1px solid var(--line);padding:10px 8px;overflow:hidden}
+.lh{display:flex;justify-content:space-between;align-items:center;padding:2px 6px 10px;font-weight:600}
+.song{display:flex;align-items:center;gap:9px;padding:8px 8px;border-radius:7px;margin-bottom:1px;position:relative}
+.song.on{background:var(--s3)}
+.song .n{color:var(--muted);width:12px;font-size:11px}
+.song .bar{width:3px;height:22px;border-radius:2px}
+.song .t{flex:1}
+.song .tr{font-size:11px;color:var(--muted)}
+.song .d{color:var(--muted);font-size:12px}
+.seq{font-size:11px;color:var(--muted);padding:0 8px 4px 41px}
+.lib{border-top:1px solid var(--hair);margin-top:14px;padding-top:10px}
+.lib .song{opacity:.75}
+/* center */
+.ctr{display:grid;grid-template-rows:58px 26px 30px 32px 1fr;min-height:0;position:relative}
+.sh{display:flex;align-items:center;gap:12px;padding:0 14px;border-bottom:1px solid var(--line)}
+.sh h1{font-size:20px;font-weight:700;letter-spacing:-.01em}
+.sh .meta{color:var(--muted)}
+.chip{background:var(--s3);border-radius:6px;padding:3px 8px;font-size:12px;color:#d6d6dc}
+.grid{display:grid;grid-template-columns:300px minmax(0,1fr)}
+.lab{background:var(--s1);border-right:1px solid var(--line);padding:0 12px;display:flex;align-items:center;color:var(--muted);font-size:12px;border-bottom:1px solid var(--line)}
+.lanebg{position:relative;border-bottom:1px solid var(--line);overflow:hidden}
+.ruler{background:#101011}
+.ruler span{position:absolute;top:6px;font-size:10px;color:var(--faint)}
+.secs span{position:absolute;top:4px;bottom:4px;border-radius:5px;font-size:11px;font-weight:600;padding:3px 6px;color:#0b0b0c}
+.tempo svg{position:absolute;left:0;top:0;width:100%;height:100%}
+.tracks{overflow:hidden}
+.row{display:grid;grid-template-columns:300px minmax(0,1fr);height:50px;border-bottom:1px solid var(--line)}
+.hd{background:var(--s2);display:flex;align-items:center;gap:8px;padding-right:10px;border-right:1px solid var(--line);position:relative}
+.row.sel .hd{background:#26262a}
+.tab{width:5px;align-self:stretch}
+.ico{width:18px;text-align:center;font-size:13px}
+.tn{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
+.out{font-size:11px;color:#c9c9cf;background:var(--s3);border-radius:5px;padding:3px 7px;white-space:nowrap}
+.out.open{background:#48484e;color:#fff}
+.fad{width:44px;height:3px;border-radius:2px;background:#3a3a3e;position:relative;flex:none}
+.fad i{position:absolute;left:0;top:0;bottom:0;border-radius:2px;background:#d8d8dc}
+.fad u{position:absolute;top:-4px;width:11px;height:11px;border-radius:50%;background:#f2f2f4}
+.ms{display:inline-flex;gap:3px}
+.ms b{font-weight:600;font-size:10px;width:20px;height:18px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;background:#2c2c30;color:#a1a1a8}
+.ms b.m{background:var(--accent);color:#2b1600}
+.mtr{width:4px;height:28px;border-radius:2px;background:#2a2a2e;position:relative;overflow:hidden;flex:none}
+.mtr i{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(0deg,var(--green) 0 75%,#ffd60a 75%)}
+.ln{position:relative;overflow:hidden}
+.clip{position:absolute;top:5px;bottom:5px;border-radius:6px;overflow:hidden}
+.clip svg{position:absolute;inset:0;width:100%;height:100%}
+.clip .cl{position:absolute;left:6px;top:3px;font-size:10px;font-weight:600;color:#fff;text-shadow:0 1px 2px #000}
+.cue{position:absolute;top:12px;font-size:10px;padding:3px 6px;border-radius:5px;background:#3a3a40;color:#e4e4e8;border-left:2px solid #c9cdd4}
+.addrow{padding:10px 14px;color:var(--muted);font-size:12px;display:flex;gap:18px}
+.playhead{position:absolute;top:58px;bottom:0;width:1px;background:#fff;left:calc(300px + 31%);z-index:3;box-shadow:0 0 6px #fff8}
+/* right */
+.right{background:var(--s1);border-left:1px solid var(--line);padding:14px;overflow:hidden}
+.rh{display:flex;align-items:center;gap:9px;margin-bottom:14px}
+.rh .tab2{width:10px;height:10px;border-radius:3px}
+.rh h2{font-size:17px;font-weight:700}
+.rh small{color:var(--muted);margin-left:auto;font-size:11px}
+.card{background:var(--s2);border-radius:10px;padding:11px 12px;margin-bottom:10px}
+.card h3{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:9px}
+.f{display:flex;align-items:center;justify-content:space-between;padding:5px 0;gap:10px}
+.f span:first-child{color:#c9c9cf}
+.sel2{background:var(--s3);border-radius:6px;padding:4px 9px;font-size:12px;min-width:110px;text-align:left;display:flex;justify-content:space-between;gap:8px}
+.sw{display:flex;gap:6px;flex-wrap:wrap}
+.sw i{width:17px;height:17px;border-radius:50%;display:block}
+.sw i.on{box-shadow:0 0 0 2px var(--s2),0 0 0 4px #fff}
+.tog{width:32px;height:19px;border-radius:10px;background:var(--green);position:relative}
+.tog:after{content:"";position:absolute;right:2px;top:2px;width:15px;height:15px;border-radius:50%;background:#fff}
+.tog.off{background:#48484e}.tog.off:after{right:auto;left:2px}
+.segm{display:flex;background:var(--s3);border-radius:6px;padding:2px}
+.segm span{padding:3px 9px;border-radius:5px;font-size:12px;color:#c9c9cf}
+.segm span.on{background:#5a5a62;color:#fff}
+.sl{flex:1;height:3px;background:#3a3a3e;border-radius:2px;position:relative;max-width:130px}
+.sl i{position:absolute;left:0;top:0;bottom:0;background:#d8d8dc;border-radius:2px}
+.sl u{position:absolute;top:-4px;width:11px;height:11px;border-radius:50%;background:#fff}
+.danger{color:var(--red);font-size:12px;padding:6px 0}
+/* popovers */
+.pop{position:absolute;z-index:20;background:#2c2c30;border:0.5px solid #48484e;border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.6);padding:5px;display:none}
+.pop.show{display:block}
+.pop .it{padding:6px 10px;border-radius:6px;font-size:12px;display:flex;justify-content:space-between;gap:16px;color:#e4e4e8}
+.pop .it small{color:var(--muted)}
+.pop .it.hi{background:var(--blue);color:#fff}.pop .it.hi small{color:#dbeaff}
+.pop .sep{height:1px;background:#3e3e44;margin:4px 5px}
+.pop .cap{font-size:10px;color:var(--muted);padding:5px 10px 2px;text-transform:uppercase;letter-spacing:.05em}
+.pop .swg{display:grid;grid-template-columns:repeat(6,20px);gap:8px;padding:8px}
+.pop .swg i{width:20px;height:20px;border-radius:50%;display:block}
+.pop .swg i.on{box-shadow:0 0 0 2px #2c2c30,0 0 0 4px #fff}
+.cursor{position:absolute;z-index:50;width:18px;height:18px;pointer-events:none;display:none}
+.cursor.show{display:block}
+/* sheets */
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;z-index:30;align-items:center;justify-content:center}
+.scrim.show{display:flex}
+.sheet{width:900px;height:640px;background:#1c1c1e;border-radius:14px;border:0.5px solid #3a3a40;box-shadow:0 30px 80px rgba(0,0,0,.6);display:grid;grid-template-columns:200px 1fr;overflow:hidden}
+.snav{background:#161617;padding:16px 10px;border-right:1px solid var(--line)}
+.snav h2{font-size:15px;padding:0 8px 12px}
+.snav div{padding:7px 10px;border-radius:7px;color:#c9c9cf;margin-bottom:1px}
+.snav div.on{background:var(--s3);color:#fff}
+.sbody{padding:20px 26px;overflow:hidden}
+.sbody h3{font-size:16px;margin-bottom:4px}
+.sbody p.d{color:var(--muted);font-size:12px;margin-bottom:14px}
+.grp{background:var(--s2);border:1px solid var(--hair);border-radius:10px;margin-bottom:14px}
+.grp .f{padding:9px 14px;border-bottom:1px solid var(--hair)}
+.grp .f:last-child{border-bottom:0}
+input.tx{background:var(--s3);border:0;border-radius:6px;padding:5px 9px;color:#fff;font:inherit;font-size:12px;width:170px}
+.stat{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+.stat div{background:var(--s2);border-radius:10px;padding:10px 12px}
+.stat b{font-size:18px;display:block}
+.stat small{color:var(--muted);font-size:11px}
+/* band page */
+.band{display:none;grid-template-columns:250px minmax(0,1fr) 300px;min-height:0}
+body.bandv .main{display:none} body.bandv .band{display:grid} body.bandv .tool{visibility:hidden}
+.ppl .song{padding:9px 8px}
+.av{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#111}
+.layouts{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px}
+.lay{background:var(--s2);border-radius:10px;padding:10px;border:2px solid transparent}
+.lay.on{border-color:var(--blue)}
+.lay .pv{height:110px;border-radius:6px;background:#000;margin-bottom:8px;position:relative;overflow:hidden}
+.lay b{font-size:13px}.lay small{display:block;color:var(--muted);font-size:11px}
+</style></head>
+<body>
+<div class="top">
+  <div class="logo">set.Line</div>
+  <div class="seg" id="tabs"><span class="on" id="t-show">Show</span><span>Perform</span><span id="t-band">Band</span></div>
+  <span class="tb">File ▾</span>
+  <div class="sp"></div>
+  <div class="tp"><b>⏮</b><b>◀◀</b><b>■</b><b class="play">▶</b><b>▶▶</b><b>↻</b></div>
+  <div class="pos mono"><div><span class="big">25 . 1 . 1</span><small>1:02.6</small></div><div><span class="big">92</span><small>BPM · 4/4</small></div></div>
+  <div class="sp"></div>
+  <div class="seg"><span class="on">Show outputs</span><span>This computer</span></div>
+  <div class="pill"><span class="dot"></span>iD14 · 48k · 128</div>
+  <div class="gear" id="gear">⚙</div>
+</div>
+<div class="tool">
+  <span class="nm">Fall Tour 2026</span><span class="saved">Saved</span>
+  <span class="tb">↶</span><span class="tb">↷</span>
+  <span class="chip">Snap · Bar ▾</span>
+  <span class="tb">−</span><div class="sl" style="max-width:90px"><i style="width:45%"></i><u style="left:38px"></u></div><span class="tb">+</span>
+  <div class="sp"></div>
+  <span class="btn">＋ Track</span><span class="btn acc">＋ Song</span>
+</div>
+
+<div class="main">
+  <div class="left">
+    <div class="lh"><span>Fall Tour set ▾</span><span style="color:var(--muted);font-weight:400">5 · 16:07</span></div>
+    <div id="songs"></div>
+    <div class="lib"><div class="lh" style="font-size:12px;color:var(--muted)"><span>Not in this set · 3</span></div>
+      <div class="song"><span class="n"></span><span class="bar" style="background:#5a5a62"></span><span class="t">Paper Kings</span><span class="d">3:12</span></div>
+      <div class="song"><span class="n"></span><span class="bar" style="background:#5a5a62"></span><span class="t">Soundcheck loop</span><span class="d">0:32</span></div>
+    </div>
+    <div class="pop" id="songpop" style="left:150px;top:150px;width:190px">
+      <div class="it">Rename…</div><div class="it">Duplicate song</div>
+      <div class="it hi">Colour <small>▸</small></div>
+      <div class="sep"></div><div class="it">Remove from this setlist</div><div class="it" style="color:var(--red)">Delete from show…</div>
+    </div>
+    <div class="pop" id="songsw" style="left:340px;top:190px"><div class="swg" id="songswg"></div></div>
+  </div>
+
+  <div class="ctr" id="ctr">
+    <div class="sh"><span id="songbar" style="width:5px;height:30px;border-radius:3px;background:#22c3a6"></span><h1>Glasshouse</h1><span class="chip">Album ▾</span><span class="meta mono">92 BPM · 4/4 · F♯ · 3:26</span><div class="sp"></div></div>
+    <div class="grid"><div class="lab">Bars</div><div class="lanebg ruler" id="ruler"></div></div>
+    <div class="grid"><div class="lab">Tempo</div><div class="lanebg tempo"><svg viewBox="0 0 100 30" preserveAspectRatio="none"><polyline points="0,18 70,18 85,10 100,10" fill="none" stroke="#64d2ff" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></div></div>
+    <div class="grid"><div class="lab">Sections</div><div class="lanebg secs" id="secs"></div></div>
+    <div class="tracks" id="tracks"></div>
+    <div class="playhead"></div>
+    <div class="pop" id="outpop" style="width:200px">
+      <div class="cap">Stereo</div>
+      <div class="it" data-o="Click IEM">Out 1–2 <small></small></div>
+      <div class="it" id="o34">FOH L/R <small>3–4</small></div>
+      <div class="it" id="o56">Keys rig <small>5–6</small></div>
+      <div class="cap">Mono</div>
+      <div class="it">Click IEM <small>1</small></div><div class="it">Cues IEM <small>2</small></div>
+      <div class="it">FOH L <small>3</small></div>
+      <div class="sep"></div><div class="it"><span style="color:var(--muted)">None</span></div>
+      <div class="it"><span style="color:var(--muted)">Rename outputs…</span></div>
+    </div>
+    <div class="pop" id="swpop"><div class="swg" id="swg"></div></div>
+  </div>
+
+  <div class="right" id="right"></div>
+</div>
+
+<!-- Band page -->
+<div class="band">
+  <div class="left ppl">
+    <div class="lh"><span>Band screens</span><span style="color:var(--muted);font-weight:400">＋ Add</span></div>
+    <div class="song on"><span class="av" style="background:#30d158">DR</span><span class="t">Drummer<br><span class="tr">iPad · online</span></span></div>
+    <div class="song"><span class="av" style="background:#bf5af2">MD</span><span class="t">Music Director<br><span class="tr">Laptop · online</span></span></div>
+    <div class="song"><span class="av" style="background:#64d2ff">KY</span><span class="t">Keys<br><span class="tr">Phone · online</span></span></div>
+    <div class="song"><span class="av" style="background:#ff375f">VX</span><span class="t">Vocals<br><span class="tr">offline</span></span></div>
+    <div style="margin:18px 8px 0;padding:12px;background:var(--s2);border-radius:10px;font-size:12px;color:var(--muted)">Join at <b style="color:#fff" class="mono">setline.local</b><br>or scan the code on this computer's screen.</div>
+  </div>
+  <div style="padding:18px 22px;overflow:hidden">
+    <h1 style="font-size:20px">Drummer</h1>
+    <p style="color:var(--muted);margin-top:2px">Pick a layout. You can still move things around on the device itself.</p>
+    <div class="layouts">
+      <div class="lay on"><div class="pv"><div style="position:absolute;left:8px;right:8px;top:8px;height:22px;display:flex;gap:2px"><i style="flex:1;background:#6b7cff"></i><i style="flex:2;background:#22c3a6"></i><i style="flex:2;background:#f5a524"></i><i style="flex:1;background:#ff5fa2"></i></div><div style="position:absolute;left:8px;top:38px;width:60%;height:40px;background:#22c3a6;border-radius:4px"></div><div style="position:absolute;right:10px;top:42px;color:#fff;font:700 26px Inter">8</div><div style="position:absolute;left:8px;bottom:8px;display:flex;gap:3px"><i style="width:22px;height:8px;background:#ff9f0a;border-radius:2px"></i><i style="width:22px;height:8px;background:#333;border-radius:2px"></i><i style="width:22px;height:8px;background:#333;border-radius:2px"></i><i style="width:22px;height:8px;background:#333;border-radius:2px"></i></div></div><b>Count &amp; sections</b><small>Bars left, beat lights, next section</small></div>
+      <div class="lay"><div class="pv"><div style="position:absolute;left:8px;top:8px;right:8px;color:#fff;font:600 12px Inter">1 Neon Rivers<br>2 Glasshouse<br><span style="color:#888">3 Low Tide<br>4 Satellites</span></div></div><b>Setlist</b><small>Song order, what's next, transitions</small></div>
+      <div class="lay"><div class="pv"><div style="position:absolute;inset:8px;display:grid;grid-template-columns:1fr 1fr;gap:4px"><i style="background:#1e3a26;border-radius:4px"></i><i style="background:#3a2a10;border-radius:4px"></i><i style="background:#22223a;border-radius:4px"></i><i style="background:#3a1e2a;border-radius:4px"></i></div></div><b>Controls</b><small>Big buttons: play, next, jump</small></div>
+    </div>
+    <div class="card" style="margin-top:18px"><h3>Shown on this screen</h3>
+      <div class="f"><span>Song name, BPM, meter</span><div class="tog"></div></div>
+      <div class="f"><span>Section timeline</span><div class="tog"></div></div>
+      <div class="f"><span>Notes for the drummer</span><div class="tog"></div></div>
+      <div class="f"><span>Patch names (MIDI tracks)</span><div class="tog off"></div></div>
+    </div>
+  </div>
+  <div class="right">
+    <div class="card"><h3>Can control</h3>
+      <div class="f"><span>Play / stop</span><div class="tog"></div></div>
+      <div class="f"><span>Jump to section</span><div class="tog"></div></div>
+      <div class="f"><span>Exit loop</span><div class="tog"></div></div>
+      <div class="f"><span>Change songs</span><div class="tog off"></div></div>
+      <div class="f"><span>Mute stems</span><div class="tog off"></div></div>
+      <div class="f"><span>Resend MIDI</span><div class="tog off"></div></div>
+    </div>
+    <div class="card"><h3>Device</h3>
+      <div class="f"><span>Name</span><span class="sel2">Drummer</span></div>
+      <div class="f"><span>Colour</span><div class="sw"><i style="background:#30d158" class="on"></i><i style="background:#64d2ff"></i><i style="background:#bf5af2"></i><i style="background:#ff9f0a"></i></div></div>
+      <div class="f"><span>Keep screen awake</span><div class="tog"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Settings -->
+<div class="scrim" id="settings"><div class="sheet">
+  <div class="snav"><h2>Settings</h2>
+    <div class="on" id="n-audio">Audio</div><div id="n-out">Outputs</div><div id="n-midi">MIDI</div><div>Voices</div><div>Folders</div><div>Appearance</div><div>Diagnostics</div></div>
+  <div class="sbody" id="sbody"></div>
+</div></div>
+
+<svg class="cursor" id="cur" viewBox="0 0 18 18"><path d="M2 1 L2 15 L6 11.5 L9 17 L11 16 L8 10.5 L13 10.5 Z" fill="#fff" stroke="#000" stroke-width="1"/></svg>
+
+<script>
+const PAL=['#ff6b6b','#ff9f43','#ffd60a','#30d158','#22c3a6','#64d2ff','#5aa9ff','#5e5ce6','#bf5af2','#ff375f','#ac8e68','#c9cdd4'];
+const songs=[['Neon Rivers','3:45','#ff6b6b','Segue'],['Glasshouse','3:26','#22c3a6','Auto-next after 4 s'],['Low Tide','3:18','#5aa9ff',''],['Satellites','2:46','#bf5af2','Segue'],['Copper Sun','2:50','#ff9f43','']];
+function renderSongs(){document.getElementById('songs').innerHTML=songs.map((s,i)=>`<div class="song${i==1?' on':''}" id="song${i}"><span class="n">${i+1}</span><span class="bar" style="background:${s[2]}"></span><span class="t">${s[0]}</span><span class="d mono">${s[1]}</span></div>${s[3]?`<div class="seq">↘ ${s[3]}</div>`:''}`).join('')}
+renderSongs();
+const T=[
+ {n:'Click',ic:'◔',c:'#c9cdd4',o:'Click IEM',k:'click',f:70,m:55},
+ {n:'Cues',ic:'❝',c:'#9aa0aa',o:'Cues IEM',k:'cues',f:62,m:0},
+ {n:'Drums',ic:'∿',c:'#ff6b6b',o:'FOH L/R',k:'audio',f:75,m:82},
+ {n:'Bass',ic:'∿',c:'#ff9f43',o:'FOH L/R',k:'audio',f:70,m:70},
+ {n:'Keys',ic:'∿',c:'#5aa9ff',o:'Keys rig',k:'audio',f:68,m:64},
+ {n:'Guitars',ic:'∿',c:'#bf5af2',o:'FOH L/R',k:'audio',f:72,m:58},
+ {n:'Strings',ic:'∿',c:'#ac8e68',o:'FOH L/R',k:'audio',f:60,m:0,mute:1},
+ {n:'Guitar rig',ic:'⎍',c:'#64d2ff',o:'USB MIDI · Ch 1',k:'midi'},
+ {n:'Lights',ic:'⎍',c:'#ffd60a',o:'loopMIDI · Ch 16',k:'midi'},
+];
+let sel=0;
+function wave(seed,col){let p='M0,50 ';const pts=[];for(let i=0;i<=400;i++){const x=i/4;let a=0.25+0.2*Math.sin(i*0.07+seed)+0.12*Math.sin(i*0.31+seed*2);if(i>220&&i<340)a+=0.12;a=Math.max(0.05,Math.min(0.48,a*(0.55+0.5*Math.abs(Math.sin(i*1.7+seed)*Math.cos(i*0.53+seed)))));pts.push([x,a])}
+ return `<svg viewBox="0 0 100 100" preserveAspectRatio="none"><path d="M0,50 ${pts.map(p=>`L${p[0]},${50-p[1]*95}`).join(' ')} ${pts.reverse().map(p=>`L${p[0]},${50+p[1]*95}`).join(' ')} Z" fill="${col}" opacity=".6"/></svg>`}
+function hexa(h,a){const n=parseInt(h.slice(1),16);return `rgba(${n>>16},${n>>8&255},${n&255},${a})`}
+function renderTracks(){
+ document.getElementById('tracks').innerHTML=T.map((t,i)=>{
+  let lane='';
+  if(t.k=='click'){lane=`<div class="clip" style="left:0;right:0;background:${hexa(t.c,.12)}"><svg viewBox="0 0 400 10" preserveAspectRatio="none">${Array.from({length:400},(_,j)=>`<rect x="${j}" y="${j%4?3:1}" width=".35" height="${j%4?4:8}" fill="${t.c}" opacity=".7"/>`).join('')}</svg></div>`}
+  else if(t.k=='cues'){lane=[[0.5,'1 2 3 4'],[10.5,'Verse'],[29,'Chorus'],[48,'Verse'],[66,'Bridge']].map(c=>`<span class="cue" style="left:${c[0]}%;border-left-color:${t.c}">${c[1]}</span>`).join('')}
+  else if(t.k=='midi'){lane=[[0,10,'Prog 4 · Clean'],[10,19,'Prog 9 · Crunch'],[29,19,'Prog 12 · Lead'],[48,18,'Prog 4 · Clean'],[66,34,'Prog 12 · Lead']].map(c=>`<div class="clip" style="left:${c[0]}%;width:calc(${c[1]}% - 3px);background:${hexa(t.c,.16)};border:1px solid ${hexa(t.c,.45)}"><span class="cl">${t.n=='Lights'?c[2].replace(/Prog (\d+) · \w+/,'Scene $1'):c[2]}</span></div>`).join('')}
+  else {const st=t.n=='Strings'?29:0, en=t.n=='Strings'?48:100;lane=`<div class="clip" style="left:${st}%;width:${en-st}%;background:${hexa(t.c,.14)};border:1px solid ${hexa(t.c,.35)}">${wave(i*1.3,t.c)}</div>`}
+  const head=t.k=='midi'
+   ?`<span class="tab" style="background:${t.c}" id="tab${i}"></span><span class="ico" style="color:${t.c}">${t.ic}</span><span class="tn">${t.n}</span><span class="out" id="out${i}">${t.o} ▾</span><span class="ms"><b>M</b></span>`
+   :`<span class="tab" style="background:${t.c}" id="tab${i}"></span><span class="ico" style="color:${t.c}">${t.ic}</span><span class="tn">${t.n}</span><span class="out" id="out${i}">${t.o} ▾</span><span class="fad"><i style="width:${t.f}%"></i><u style="left:${t.f*.44-5}px"></u></span><span class="ms"><b class="${t.mute?'m':''}">M</b><b>S</b></span><span class="mtr"><i style="height:${t.m}%"></i></span>`;
+  return `<div class="row${i==sel?' sel':''}" id="row${i}"><div class="hd">${head}</div><div class="ln">${lane}</div></div>`}).join('')+`<div class="addrow"><span>＋ Audio track</span><span>＋ Click track</span><span>＋ MIDI track</span></div>`;
+}
+function renderRuler(){document.getElementById('ruler').innerHTML=[1,9,17,25,33,41,49,57,65,73].map((b,i)=>`<span style="left:${i*10+.3}%">${b}</span>`).join('');
+ document.getElementById('secs').innerHTML=[[0,10,'Intro','--s-intro'],[10,19,'Verse 1','--s-verse'],[29,19,'Chorus 1','--s-chorus'],[48,18,'Verse 2','--s-verse'],[66,16,'Bridge','--s-bridge'],[82,18,'Chorus 2','--s-chorus']].map(s=>`<span style="left:calc(${s[0]}% + 2px);width:calc(${s[1]}% - 4px);background:var(${s[3]})">${s[2]}</span>`).join('')}
+function card(h,b){return `<div class="card"><h3>${h}</h3>${b}</div>`}
+function sw(c){return `<div class="sw">${PAL.slice(0,8).map(p=>`<i style="background:${p}" class="${p==c?'on':''}"></i>`).join('')}</div>`}
+function renderRight(){const t=T[sel];let h=`<div class="rh"><span class="tab2" style="background:${t.c}"></span><h2>${t.n}</h2><small>${{click:'Click track',cues:'Cue track',audio:'Audio track',midi:'MIDI track'}[t.k]}</small></div>`;
+ h+=card('Track',`<div class="f"><span>Colour</span>${sw(t.c)}</div><div class="f"><span>${t.k=='midi'?'Sends to':'Output'}</span><span class="sel2">${t.o} <span>▾</span></span></div>`);
+ if(t.k=='click')h+=card('Click sound',`<div class="f"><span>Sound</span><span class="sel2">Woodblock <span>▾</span></span></div><div class="f"><span>Beat 1</span><div class="segm"><span class="on">Accent</span><span>Same</span></div></div><div class="f"><span>Accent level</span><div class="sl"><i style="width:80%"></i><u style="left:98px"></u></div></div><div class="f"><span>Off-beats</span><div class="segm"><span class="on">Off</span><span>8ths</span><span>16ths</span></div></div><div class="f"><span>Same click for every song</span><div class="tog"></div></div>`)+card('Who hears it',`<div class="f"><span style="color:var(--muted);font-size:12px">Add a second Click track if the drummer needs a different click on another output.</span></div>`);
+ if(t.k=='cues')h+=card('Voice',`<div class="f"><span>Voice</span><span class="sel2">Heart (Kokoro) <span>▾</span></span></div><div class="f"><span>Speed</span><div class="sl"><i style="width:50%"></i><u style="left:60px"></u></div></div><div class="f"><span>Phrases</span><span class="sel2">Edit phrases…</span></div><div class="f"><span>Pronunciations</span><span class="sel2">Edit…</span></div>`);
+ if(t.k=='audio')h+=card('Audio',`<div class="f"><span>Gain</span><div class="sl"><i style="width:${t.f}%"></i><u style="left:${t.f*1.3-5}px"></u></div></div><div class="f"><span>File</span><span style="color:var(--muted);font-size:12px">${t.n.toLowerCase()}.wav · 48k</span></div>`);
+ if(t.k=='midi')h+=card('MIDI',`<div class="f"><span>Port</span><span class="sel2">${t.o.split(' · ')[0]} <span>▾</span></span></div><div class="f"><span>Channel</span><span class="sel2">${t.o.split('Ch ')[1]} <span>▾</span></span></div><div class="f"><span>Patch names</span><span class="sel2">None (numbers) <span>▾</span></span></div><div class="f"><span>Events</span><span class="sel2">Edit MIDI…</span></div>`);
+ h+=`<div class="danger">Delete track…</div>`;document.getElementById('right').innerHTML=h}
+function render(){renderTracks();renderRuler();renderRight()}
+render();
+
+/* helpers for screenshots */
+function rect(id){return document.getElementById(id).getBoundingClientRect()}
+function cursorTo(id,dx=0,dy=0){const r=rect(id),c=document.getElementById('cur');c.classList.add('show');c.style.left=(r.left+r.width/2+dx)+'px';c.style.top=(r.top+r.height/2+dy)+'px'}
+function hideCursor(){document.getElementById('cur').classList.remove('show')}
+function closeAll(){document.querySelectorAll('.pop').forEach(p=>p.classList.remove('show'));document.querySelectorAll('.out.open').forEach(o=>o.classList.remove('open'))}
+function openOut(i,hi){closeAll();const o=document.getElementById('out'+i),r=o.getBoundingClientRect(),c=rect('ctr'),p=document.getElementById('outpop');o.classList.add('open');p.style.left=(r.left-c.left)+'px';p.style.top=(r.bottom-c.top+4)+'px';p.classList.add('show');p.querySelectorAll('.it').forEach(x=>x.classList.remove('hi'));if(hi)document.getElementById(hi).classList.add('hi');else document.getElementById('o34').classList.add('hi')}
+function setOut(i,v){T[i].o=v;closeAll();render()}
+function openSw(i,hiCol){closeAll();const r=rect('tab'+i),c=rect('ctr'),p=document.getElementById('swpop');document.getElementById('swg').innerHTML=PAL.map(x=>`<i style="background:${x}" class="${x==(hiCol||T[i].c)?'on':''}"></i>`).join('');p.style.left=(r.right-c.left+4)+'px';p.style.top=(r.top-c.top-6)+'px';p.classList.add('show')}
+function setCol(i,c){T[i].c=c;closeAll();render()}
+function select(i){sel=i;render()}
+function songMenu(open,col){const p=document.getElementById('songpop'),s=document.getElementById('songsw');p.classList.toggle('show',open);s.classList.toggle('show',!!col);if(col)document.getElementById('songswg').innerHTML=PAL.map(x=>`<i style="background:${x}" class="${x==col?'on':''}"></i>`).join('');const r=rect('song2'),l=document.querySelector('.left').getBoundingClientRect();p.style.left=(r.left-l.left+90)+'px';p.style.top=(r.top-l.top+20)+'px';s.style.left=(r.left-l.left+284)+'px';s.style.top=(r.top-l.top+60)+'px'}
+function setSongCol(c){songs[2][2]=c;renderSongs();songMenu(false)}
+const S={
+ audio:`<h3>Audio</h3><p class="d">Set once for this computer. Everything per-song lives on the tracks.</p>
+ <div class="grp"><div class="f"><span>Device</span><span class="sel2">Audient iD14 <span>▾</span></span></div><div class="f"><span>Driver</span><span class="sel2">ASIO <span>▾</span></span></div><div class="f"><span>Sample rate</span><div class="segm"><span>44.1</span><span class="on">48</span><span>96</span></div></div><div class="f"><span>Buffer</span><div class="segm"><span>64</span><span class="on">128</span><span>256</span><span>512</span></div></div></div>
+ <div class="stat"><div><b>2.7 ms</b><small>Output latency</small></div><div><b>6%</b><small>Audio load</small></div><div><b>0</b><small>Dropouts this show</small></div></div>
+ <div class="grp"><div class="f"><span>Listen on this computer</span><span class="sel2">Built-in speakers <span>▾</span></span></div><div class="f"><span>What you hear</span><span class="sel2">Everything (folded to stereo) <span>▾</span></span></div><div class="f"><span>If the interface disconnects</span><span class="sel2">Stop and warn <span>▾</span></span></div></div>`,
+ out:`<h3>Outputs</h3><p class="d">Name your interface outputs once. Track headers show these names.</p>
+ <div class="grp">${[['1','Click IEM'],['2','Cues IEM'],['3','FOH L'],['4','FOH R'],['5','Keys rig L'],['6','Keys rig R']].map(o=>`<div class="f"><span class="mono" style="color:var(--muted);width:60px">Out ${o[0]}</span><input class="tx" value="${o[1]}"><span style="margin-left:auto;color:var(--muted);font-size:12px">${o[0]=='3'||o[0]=='5'?'Stereo pair with '+(+o[0]+1)+' ✓':''}</span></div>`).join('')}</div>
+ <div class="grp"><div class="f"><span>Print a patch sheet for front of house</span><span class="sel2">Export PDF…</span></div></div>`,
+ midi:`<h3>MIDI</h3><p class="d">Any MIDI device works. Each MIDI track picks a port and channel here.</p>
+ <div class="grp">${[['USB MIDI','Guitar rig','1 track'],['loopMIDI Port','Lights','1 track'],['iD14 MIDI Out','—','not used']].map(m=>`<div class="f"><span>${m[0]}</span><span style="color:var(--muted);font-size:12px">${m[2]}</span></div>`).join('')}</div>
+ <div class="grp"><div class="f"><span>Send MIDI early by</span><span class="sel2">0 ms <span>▾</span></span></div><div class="f"><span>Patch name lists</span><span class="sel2">Manage… <span>▾</span></span></div></div>`};
+function openSettings(k){document.getElementById('settings').classList.toggle('show',!!k);if(!k)return;document.getElementById('sbody').innerHTML=S[k];document.querySelectorAll('.snav div').forEach(d=>d.classList.remove('on'));document.getElementById('n-'+k).classList.add('on')}
+function band(on){document.body.classList.toggle('bandv',on);document.getElementById('t-show').classList.toggle('on',!on);document.getElementById('t-band').classList.toggle('on',on)}
+</script>
+</body></html>

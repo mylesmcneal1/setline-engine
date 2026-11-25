@@ -7,6 +7,8 @@
 
 namespace setline::gui {
 
+void setWindowIcon(void* nativeHandle); // WinIcon.cpp
+
 #if JUCE_MAC
 bool setlineReduceMotionMac(); // MacDrop.mm
 #endif
@@ -78,6 +80,7 @@ Splash::Splash(const juce::String& v) : version(v)
     setOpaque(false); // rounded corners
     setSize((int) W, (int) H);
     addToDesktop(juce::ComponentPeer::windowAppearsOnTaskbar);
+    if (auto* p = getPeer()) setWindowIcon(p->getNativeHandle()); // its taskbar button has the app icon too
     centreWithSize((int) W, (int) H);
     setAlwaysOnTop(true); // a loading window stays in front until the main window takes over
     setVisible(true);

@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>set.Line — versions (mockup)</title>
+<link rel="stylesheet" href="base.css">
+<style>
+.main{grid-template-columns:270px minmax(0,1fr) 300px}
+.stack{position:relative;height:66px;margin:2px 0 6px}
+.stack .c{position:absolute;border-radius:9px;transition:all .25s}
+.stack .c.b2{top:13px;left:22px;right:4px;height:46px;background:#232326}
+.stack .c.b1{top:7px;left:14px;right:10px;height:48px;background:#2a2a2e}
+.stack .c.front{top:0;left:6px;right:18px;height:54px;background:#1f2a28;border:1.5px solid #22c3a6;display:flex;align-items:center;gap:9px;padding:0 10px}
+.stack .vn{font-size:11px;color:#7fe0cf}
+.stack .ar{display:flex;gap:2px}
+.stack .ar b{width:22px;height:22px;border-radius:6px;background:#33333a;display:flex;align-items:center;justify-content:center;font-weight:500;color:#e4e4e8;font-size:13px}
+.dots{display:flex;gap:3px;margin-top:3px}.dots i{width:5px;height:5px;border-radius:50%;background:#3d5a55}.dots i.on{background:#22c3a6}
+.ctr2{display:grid;grid-template-rows:58px auto 26px 32px 1fr;min-height:0;position:relative}
+.vers{padding:10px 14px 12px;border-bottom:1px solid var(--line);background:#111112}
+.vh{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+.vr{display:grid;grid-template-columns:130px minmax(0,1fr) 50px;align-items:center;gap:12px;padding:7px 10px;border-radius:8px;margin-bottom:4px;border:1.5px solid transparent;transition:all .2s}
+.vr.on{background:#1a2624;border-color:#22c3a6}
+.vr .vnm{font-weight:500}
+.vr small{color:var(--muted);text-align:right;font-size:12px}
+.st{display:flex;gap:2px;height:22px}
+.st i{border-radius:3px;display:block;font-style:normal;font-size:10px;font-weight:600;color:#0b0b0c;padding:4px 0 0 4px;overflow:hidden;white-space:nowrap}
+.I{background:var(--s-intro)}.V{background:var(--s-verse)}.C{background:var(--s-chorus)}.B{background:var(--s-bridge)}.O{background:var(--s-outro)}.P{background:#bf5af2;color:#fff!important}
+.diff{outline:2px solid #fff;outline-offset:-2px}
+.secs2 span{position:absolute;top:4px;bottom:4px;border-radius:5px;font-size:11px;font-weight:600;padding:3px 6px;color:#0b0b0c;white-space:nowrap;overflow:hidden;transition:all .25s}
+.rowv{display:grid;grid-template-columns:300px minmax(0,1fr);height:44px;border-bottom:1px solid var(--line)}
+.secl{display:flex;align-items:center;gap:9px;padding:6px 0;font-size:13px}
+.secl .sq{width:12px;height:12px;border-radius:3px}
+.secl .ck{margin-left:auto;width:18px;height:18px;border-radius:5px;background:var(--blue);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center}
+.secl .ck.off{background:#3a3a40;color:transparent}
+.secl.out{color:var(--muted);text-decoration:line-through}
+.grip{color:#5a5a62;font-size:11px}
+/* perform */
+.perf{display:none;padding:22px 26px;grid-template-columns:minmax(0,1fr) 400px;gap:22px}
+body.pv .main{display:none} body.pv .perf{display:grid} body.pv .tool{visibility:hidden}
+.now{background:var(--s2);border-radius:14px;padding:22px;align-self:start}
+.now h1{font-size:40px}
+.nextc{background:var(--s2);border-radius:14px;padding:16px 18px;margin-bottom:12px}
+.nextc h3{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px}
+.pstack{position:relative;height:118px}
+.pstack .c{position:absolute;border-radius:12px}
+.pstack .b2{top:20px;left:28px;right:0;height:92px;background:#232326}
+.pstack .b1{top:10px;left:14px;right:14px;height:96px;background:#2a2a2e}
+.pstack .front{top:0;left:0;right:28px;height:100px;display:block;background:#1f2a28;border:2px solid #22c3a6;padding:12px 14px}
+.pstack .ar{position:absolute;right:12px;top:12px;display:flex;gap:6px}
+.pstack .ar b{width:38px;height:38px;border-radius:10px;background:#33333a;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:500}
+</style></head>
+<body>
+<div class="top">
+  <div class="logo">set.Line</div>
+  <div class="seg"><span class="on" id="t-show">Show</span><span id="t-perf">Perform</span><span>Band</span></div>
+  <span class="tb">File ▾</span><div class="sp"></div>
+  <div class="tp"><b>⏮</b><b>◀◀</b><b>■</b><b class="play">▶</b><b>▶▶</b><b>↻</b></div>
+  <div class="pos mono"><div><span class="big">1 . 1 . 1</span><small>0:00.0</small></div><div><span class="big">92</span><small>BPM · 4/4</small></div></div>
+  <div class="sp"></div>
+  <div class="seg"><span class="on">Show outputs</span><span>This computer</span></div>
+  <div class="pill"><span class="dot"></span>iD14 · 48k · 128</div><div class="gear">⚙</div>
+</div>
+<div class="tool">
+  <span class="nm">Fall Tour 2026</span><span class="saved">Saved</span><span class="tb">↶</span><span class="tb">↷</span><span class="chip">Snap · Bar ▾</span>
+  <div class="sp"></div><span class="btn">＋ Track</span><span class="btn acc">＋ Song</span>
+</div>
+
+<div class="main">
+  <div class="left" id="left"></div>
+  <div class="ctr2">
+    <div class="sh"><span style="width:5px;height:30px;border-radius:3px;background:#22c3a6"></span><h1>Glasshouse</h1><span class="meta mono" id="meta"></span></div>
+    <div class="vers"><div class="vh"><span>Versions</span><span style="color:#c9c9cf;text-transform:none;letter-spacing:0;font-weight:500" id="addv">＋ Version</span></div><div id="vlist"></div></div>
+    <div class="grid"><div class="lab">Bars</div><div class="lanebg ruler" id="ruler"></div></div>
+    <div class="grid"><div class="lab">Sections</div><div class="lanebg secs2" id="secs"></div></div>
+    <div id="tracks" style="overflow:hidden"></div>
+  </div>
+  <div class="right" id="right"></div>
+</div>
+
+<div class="perf">
+  <div class="now">
+    <div style="color:var(--muted)">1 of 5 · Now playing</div><h1>Neon Rivers</h1>
+    <div class="mono" style="color:var(--muted);margin-top:4px">128 BPM · 4/4 · A min</div>
+    <div style="height:10px;border-radius:5px;background:#2a2a2e;margin:18px 0 8px;position:relative;overflow:hidden"><i style="position:absolute;left:0;top:0;bottom:0;width:62%;background:#ff6b6b"></i></div>
+    <div style="display:flex;gap:6px;margin-top:22px"><span style="flex:1;height:44px;border-radius:8px;background:var(--s-verse);opacity:.35"></span><span style="flex:1;height:44px;border-radius:8px;background:var(--s-chorus);opacity:.35"></span><span style="flex:1.2;height:44px;border-radius:8px;background:var(--s-bridge);display:flex;align-items:center;padding-left:12px;color:#111;font-weight:700">Bridge</span><span style="flex:1;height:44px;border-radius:8px;background:var(--s-chorus);opacity:.35"></span></div>
+    <div style="margin-top:30px"><div style="color:var(--muted);font-size:12px">BARS LEFT</div><div style="font-size:64px;font-weight:700;line-height:1">12</div></div>
+  </div>
+  <div>
+    <div class="nextc"><h3>Up next · tap ‹ › to change version</h3>
+      <div class="pstack"><div class="c b2"></div><div class="c b1"></div>
+        <div class="c front"><div style="display:flex;align-items:center;gap:10px"><span style="width:4px;height:30px;border-radius:2px;background:#22c3a6"></span><div><b style="font-size:20px">Glasshouse</b><div style="color:#7fe0cf;font-size:13px" id="pvn"></div></div></div>
+          <div class="st" style="height:18px;margin-top:12px" id="pst"></div>
+          <div class="ar"><b>‹</b><b>›</b></div></div>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-top:8px" id="pload">Loaded and ready</div>
+    </div>
+    <div class="nextc"><h3>Then</h3><div style="padding:6px 4px">3 · Low Tide</div><div style="padding:6px 4px">4 · Satellites</div><div style="padding:6px 4px">5 · Copper Sun</div></div>
+  </div>
+</div>
+<svg class="cursor" id="cur" viewBox="0 0 18 18"><path d="M2 1 L2 15 L6 11.5 L9 17 L11 16 L8 10.5 L13 10.5 Z" fill="#fff" stroke="#000" stroke-width="1"/></svg>
+<script>
+const SEC={I:['Intro',4],V1:['Verse 1',8],C1:['Chorus 1',8],V2:['Verse 2',8],C2:['Chorus 2',8],B:['Bridge',6],C3:['Chorus 3',8],O:['Outro',4],P:['Intro pad',8]};
+const CL={I:'I',V1:'V',V2:'V',C1:'C',C2:'C',C3:'C',B:'B',O:'O',P:'P'};
+const VERS=[
+ {n:'Album',s:['I','V1','C1','V2','C2','B','C3','O'],t:'3:26',bars:54},
+ {n:'With intro',s:['P','V1','C1','V2','C2','B','C3','O'],t:'3:48',bars:58,extra:1},
+ {n:'Festival cut',s:['V1','C1','C3','O'],t:'2:10',bars:28},
+];
+let cur=1;
+const MAX=58;
+function strip(v,big){return v.s.map(k=>`<i class="${CL[k]}" style="flex:${SEC[k][1]}">${big?SEC[k][0]:''}</i>`).join('')+(v.bars<MAX?`<i style="flex:${MAX-v.bars};background:transparent"></i>`:'')}
+function renderLeft(){const songs=[['Neon Rivers','3:45','#ff6b6b'],null,['Low Tide','3:18','#5aa9ff'],['Satellites','2:46','#bf5af2'],['Copper Sun','2:50','#ff9f43']];
+ let h=`<div class="lh"><span>Fall Tour set ▾</span><span style="color:var(--muted);font-weight:400">5 · ${['16:07','16:29','14:51'][cur]}</span></div>`;
+ songs.forEach((s,i)=>{if(!s){const v=VERS[cur];h+=`<div class="stack" id="stack"><div class="c b2"></div><div class="c b1"></div><div class="c front"><span class="n">2</span><span style="width:3px;height:28px;border-radius:2px;background:#22c3a6"></span><div style="flex:1;min-width:0"><b>Glasshouse</b><div class="vn">${v.n}${v.extra?' ◆':''} · ${v.t}</div><div class="dots">${VERS.map((_,j)=>`<i class="${j==cur?'on':''}"></i>`).join('')}</div></div><div class="ar"><b id="sl">‹</b><b id="sr">›</b></div></div></div>`;return}
+  h+=`<div class="song${i==0?'':''}"><span class="n">${i+1}</span><span class="bar" style="background:${s[2]}"></span><span class="t">${s[0]}</span><span class="d mono">${s[1]}</span></div>`});
+ h+=`<div style="font-size:11px;color:var(--muted);padding:12px 8px;line-height:1.5">Songs with versions show as a stack. ‹ › or scroll on the card flips through them.</div>`;
+ document.getElementById('left').innerHTML=h}
+function renderCenter(){const v=VERS[cur];
+ document.getElementById('meta').textContent=`${v.n} · 92 BPM · 4/4 · F♯ · ${v.t}`;
+ document.getElementById('vlist').innerHTML=VERS.map((x,j)=>`<div class="vr${j==cur?' on':''}" id="vr${j}"><span class="vnm">${x.n}${x.extra?' <span style="color:#bf5af2">◆</span>':''}</span><div class="st">${strip(x,false)}</div><small class="mono">${x.t}</small></div>`).join('');
+ // ruler & sections scaled to MAX bars
+ document.getElementById('ruler').innerHTML=[1,9,17,25,33,41,49,57].map(b=>`<span style="left:${(b-1)/MAX*100+.3}%">${b}</span>`).join('');
+ let x=0;document.getElementById('secs').innerHTML=v.s.map(k=>{const w=SEC[k][1]/MAX*100;const r=`<span class="${CL[k]}" style="left:calc(${x}% + 1px);width:calc(${w}% - 2px);${k=='P'?'background:#bf5af2;color:#fff':`background:var(--s-${{I:'intro',V:'verse',C:'chorus',B:'bridge',O:'outro',P:'pre'}[CL[k]]})`}">${SEC[k][0]}</span>`;x+=w;return r}).join('');
+ const end=v.bars/MAX*100;
+ const T=[['Click','#c9cdd4'],['Drums','#ff6b6b'],['Bass','#ff9f43'],['Keys','#5aa9ff'],...(v.extra?[['Intro pad ◆','#bf5af2']]:[])];
+ document.getElementById('tracks').innerHTML=T.map((t,i)=>{let lane;
+  if(t[0]=='Click')lane=`<div class="clip" style="left:0;width:${end}%;background:rgba(201,205,212,.1)"><svg viewBox="0 0 300 10" preserveAspectRatio="none">${Array.from({length:300},(_,j)=>`<rect x="${j}" y="${j%4?3:1}" width=".4" height="${j%4?4:8}" fill="#c9cdd4" opacity=".6"/>`).join('')}</svg></div>`;
+  else if(t[0].startsWith('Intro pad'))lane=`<div class="clip" style="left:0;width:${8/MAX*100}%;background:${hx(t[1],.18)};border:1px solid ${hx(t[1],.5)}">${wv(9,t[1],1)}</div>`;
+  else{let xx=0;lane=v.s.map(k=>{const w=SEC[k][1]/MAX*100;let r='';if(k!='P'||t[0]=='Keys')r=`<div class="clip" style="left:${xx}%;width:calc(${w}% - 1px);background:${hx(t[1],.13)};border:1px solid ${hx(t[1],.3)}">${wv(i*3+xx,t[1],0)}</div>`;xx+=w;return r}).join('')}
+  return `<div class="rowv"><div class="hd"><span class="tab" style="background:${t[1]}"></span><span class="tn">${t[0]}</span><span class="out">${['Click IEM','FOH L/R','FOH L/R','Keys rig','FOH L/R'][i]} ▾</span><span class="ms"><b>M</b><b>S</b></span></div><div class="ln">${lane}</div></div>`}).join('');
+}
+function renderRight(){const v=VERS[cur];
+ let h=`<div class="rh"><span class="tab2" style="background:#22c3a6"></span><h2>${v.n}</h2><small>Version ${cur+1} of 3</small></div>`;
+ h+=`<div class="card"><h3>Sections in this version</h3>${['I','P','V1','C1','V2','C2','B','C3','O'].filter(k=>k!='P'||v.extra).map(k=>{const inn=v.s.includes(k);return `<div class="secl${inn?'':' out'}"><span class="grip">⋮⋮</span><span class="sq" style="background:${k=='P'?'#bf5af2':`var(--s-${{I:'intro',V:'verse',C:'chorus',B:'bridge',O:'outro'}[CL[k]]})`}"></span>${SEC[k][0]}${k=='P'?' <span style="color:var(--muted);font-size:11px">· this version only</span>':''}<span class="ck${inn?'':' off'}">✓</span></div>`}).join('')}<div style="font-size:11px;color:var(--muted);margin-top:6px">Untick to drop a section, drag to reorder. Same stems, no copies.</div></div>`;
+ h+=`<div class="card"><h3>Version</h3><div class="f"><span>Name</span><span class="sel2">${v.n}</span></div><div class="f"><span>Default in new sets</span><div class="tog${cur==0?'':' off'}"></div></div><div class="f"><span>Add audio just for this version</span><span class="sel2">Drop files…</span></div></div><div class="danger">Delete version…</div>`;
+ document.getElementById('right').innerHTML=h}
+function renderPerf(){const v=VERS[cur];document.getElementById('pvn').textContent=`${v.n}${v.extra?' ◆':''} · ${v.t} · ${cur+1} of 3`;document.getElementById('pst').innerHTML=strip(v,false)}
+function hx(h,a){const n=parseInt(h.slice(1),16);return `rgba(${n>>16},${n>>8&255},${n&255},${a})`}
+function wv(seed,col,sw){const pts=[];for(let i=0;i<=80;i++){let a=sw?0.1+0.32*Math.sin(Math.PI*i/80):0.18+0.18*Math.abs(Math.sin(i*0.4+seed))*Math.abs(Math.cos(i*0.13+seed));pts.push([i*1.25,Math.min(.46,a)])}
+ return `<svg viewBox="0 0 100 100" preserveAspectRatio="none"><path d="M0,50 ${pts.map(p=>`L${p[0]},${50-p[1]*95}`).join(' ')} ${pts.slice().reverse().map(p=>`L${p[0]},${50+p[1]*95}`).join(' ')} Z" fill="${col}" opacity=".55"/></svg>`}
+function setV(i){cur=i;renderLeft();renderCenter();renderRight();renderPerf()}
+function perf(on){document.body.classList.toggle('pv',on);document.getElementById('t-show').classList.toggle('on',!on);document.getElementById('t-perf').classList.toggle('on',on)}
+function cursorTo(id,dx=0,dy=0){const r=document.getElementById(id).getBoundingClientRect(),c=document.getElementById('cur');c.classList.add('show');c.style.left=(r.left+r.width/2+dx)+'px';c.style.top=(r.top+r.height/2+dy)+'px'}
+function cursorAt(sel,dx=0,dy=0){const r=document.querySelector(sel).getBoundingClientRect(),c=document.getElementById('cur');c.classList.add('show');c.style.left=(r.left+r.width/2+dx)+'px';c.style.top=(r.top+r.height/2+dy)+'px'}
+function hideCursor(){document.getElementById('cur').classList.remove('show')}
+function loading(on){document.getElementById('pload').textContent=on?'Loading…':'Loaded and ready'}
+setV(1);
+</script>
+</body></html>

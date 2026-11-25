@@ -13,6 +13,8 @@
 
 namespace setline::gui {
 
+void setWindowIcon(void* nativeHandle); // WinIcon.cpp (Windows); nothing elsewhere
+
 static juce::PropertiesFile::Options settingsOptions()
 {
     juce::PropertiesFile::Options o;
@@ -53,6 +55,12 @@ public:
     }
 
     void closeButtonPressed() override { juce::JUCEApplication::getInstance()->systemRequestedQuit(); }
+    // The window is created hidden behind the loading window; its native window (and icon) exists once shown.
+    void visibilityChanged() override
+    {
+        DocumentWindow::visibilityChanged();
+        if (auto* p = getPeer(); p != nullptr && isVisible()) setWindowIcon(p->getNativeHandle()); // title bar, taskbar, Alt+Tab
+    }
 
 private:
     juce::PropertiesFile& settings;
