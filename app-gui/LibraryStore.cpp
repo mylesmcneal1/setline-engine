@@ -98,7 +98,7 @@ juce::var LibraryStore::open(const juce::String& wanted)
     if (dir == juce::File() || ! dir.getChildFile("library.json").existsAsFile()) {
         if (wanted.isNotEmpty()) return err("There's no library called “" + wanted + "”.");
         // the last one is gone (or there never was one): the first library there is, else a new "My Library"
-        dir = {};
+        dir = juce::File();
         for (const auto& d : r.findChildFiles(juce::File::findDirectories, false)) if (d.getChildFile("library.json").existsAsFile()) { dir = d; break; }
         if (dir == juce::File()) {
             dir = r.getChildFile("My Library");
