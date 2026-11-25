@@ -67,6 +67,15 @@ public:
     juce::var setTrackLevel(const juce::var& req);
     // req: {fromBar, fromBeat, toBar, toBeat} loops that range inside the engine (sample-exact); null/{} clears it.
     juce::var setLoop(const juce::var& req);
+    // ---- the next song (6e) ----
+    // payload as loadSong: maps it and loads it into the engine's next slot, primed from its start in the background
+    // (the song playing isn't touched). -> {ok, warnings} or {error}.
+    juce::var queueNext(const juce::var& payload);
+    // {loaded, ready, songId, name, segue}
+    juce::var nextState();
+    // A queued jump (Perform: tap a section while playing): {toBar, toBeat, when: "bar" | "section" | "beat", atBar}
+    // jumps to toBar at the next bar line / at atBar (end of the section) / at the next beat; {cancel: true} clears it.
+    juce::var queueJump(const juce::var& req);
     juce::var transportState();
     // Tests (--test-script): maps the song exactly as loadSong does and renders it offline (no device):
     // {fromBar, seconds, loop: {fromBar, toBar}} -> {rate, bars: [sample per downbeat], outs: [{onsets, peak}], midi: [sample]}
@@ -142,8 +151,16 @@ private:
     // loaded song
     int deviceEpoch = 0, loadedEpoch = -1;
     bool loaded = false;
-    juce::String loadedName;
+    juce::String loadedName, loadedId;
     std::map<juce::String, int> trackIds;
+    // the next slot: what the engine holds there, and its tracks / levels for when it takes over
+    bool nextLoaded = false;
+    juce::String nextName, nextId;
+    std::map<juce::String, int> nextTrackIds;
+    std::map<juce::String, TrackLevel> nextLevels;
+    uint64_t seguesSeen = 0;
+    void takeOverNext(); // the next song became the one playing (segue, Next, Play)
+    MappedSong mapForEngine(const juce::var& payload, Engine::Config& cfg);
     std::map<juce::String, TrackLevel> levels;
 
     // cue preview: handed to the audio thread through previewIn; finished ones come back through

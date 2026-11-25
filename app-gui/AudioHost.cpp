@@ -403,7 +403,7 @@ void AudioHost::changeListenerCallback(juce::ChangeBroadcaster*)
         key = dm.getCurrentAudioDeviceType() + "|" + d->getName() + "|" + juce::String(d->getCurrentSampleRate()) + "|" + juce::String(d->getCurrentBufferSizeSamples());
     if (key == lastDeviceKey) return;
     lastDeviceKey = key;
-    eng.stop(); loaded = false; ++deviceEpoch;
+    eng.stop(); eng.clearNext(); loaded = false; nextLoaded = false; ++deviceEpoch;
     if (key.isEmpty()) error = "The audio device stopped (unplugged or driver reset).";
     if (onSetupChanged) onSetupChanged();
 }
@@ -443,18 +443,16 @@ juce::var errorObj(const juce::String& msg, const juce::String& code = {})
 }
 } // namespace
 
-juce::var AudioHost::loadSong(const juce::var& payload)
+// Maps a song for the engine on the open device (listen mode applied). cfg is filled for Engine::load.
+MappedSong AudioHost::mapForEngine(const juce::var& payload, Engine::Config& cfg)
 {
     auto* d = dm.getCurrentAudioDevice();
-    if (d == nullptr) return errorObj("No audio device is open. Choose one in Settings › Audio.", "nodevice");
     const double sr = d->getCurrentSampleRate();
     const int outs = d->getActiveOutputChannels().countNumberOfSetBits();
-
     auto mapped = mapSong(payload, sr, outs, [this](const juce::String& port, std::vector<std::string>& w) { return midiOuts.resolve(port, w); },
                           [this, sr](const juce::String& text, const juce::var& voice, std::vector<std::string>& w) {
                               return cueAudio ? cueAudio(text, voice, sr, w) : std::shared_ptr<const std::vector<float>>();
                           });
-    Engine::Config cfg;
     cfg.sampleRate = sr;
     cfg.numOutputs = outs;
     cfg.midiOffsetMs = settings.getDoubleValue("midiOffsetMs", 0.0);
@@ -462,6 +460,16 @@ juce::var AudioHost::loadSong(const juce::var& payload)
         applyListen(mapped.def, listen);
         if (listen.mode == "output") cfg.numOutputs = scratchOuts; // every show output, into the scratch buffers
     }
+    return mapped;
+}
+
+juce::var AudioHost::loadSong(const juce::var& payload)
+{
+    auto* d = dm.getCurrentAudioDevice();
+    if (d == nullptr) return errorObj("No audio device is open. Choose one in Settings › Audio.", "nodevice");
+    const double sr = d->getCurrentSampleRate();
+    Engine::Config cfg;
+    auto mapped = mapForEngine(payload, cfg);
     listenOut1.store(listen.on && listen.mode == "output" && ! listen.output.empty() ? listen.output[0] : -1);
     listenOut2.store(listen.on && listen.mode == "output" && listen.output.size() > 1 ? listen.output[1] : (listen.on && listen.mode == "output" && ! listen.output.empty() ? listen.output[0] : -1));
     std::vector<std::string> warnings = mapped.warnings;
@@ -470,6 +478,7 @@ juce::var AudioHost::loadSong(const juce::var& payload)
     loaded = true;
     loadedEpoch = deviceEpoch;
     loadedName = juce::String(mapped.def.name);
+    loadedId = payload["song"]["id"].toString();
     trackIds = mapped.engineTrack;
     levels = mapped.levels;
     applyLevels();
@@ -488,12 +497,97 @@ juce::var AudioHost::loadSong(const juce::var& payload)
     return juce::var(o);
 }
 
+juce::var AudioHost::queueNext(const juce::var& payload)
+{
+    auto* d = dm.getCurrentAudioDevice();
+    if (d == nullptr) return errorObj("No audio device is open. Choose one in Settings › Audio.", "nodevice");
+    if (! loaded || loadedEpoch != deviceEpoch) return errorObj("Load the song first.", "reload");
+    Engine::Config cfg;
+    auto mapped = mapForEngine(payload, cfg);
+    std::vector<std::string> warnings = mapped.warnings;
+    if (auto err = eng.prepareNext(mapped.def, warnings); ! err.empty()) { nextLoaded = false; return errorObj(err); }
+    nextLoaded = true;
+    nextName = juce::String(mapped.def.name);
+    nextId = payload["song"]["id"].toString();
+    nextTrackIds = mapped.engineTrack;
+    nextLevels = mapped.levels;
+    // its levels are in place before it can take over (same rule as applyLevels)
+    bool anySolo = false;
+    for (auto& [name, lv] : nextLevels) anySolo |= lv.solo;
+    for (auto& [name, id] : nextTrackIds) {
+        const auto& lv = nextLevels[name];
+        eng.setTrackLevel(id, lv.db, id <= -200 ? lv.mute : lv.mute || (anySolo && ! lv.solo) || lv.db <= -60.0f, true);
+    }
+    eng.setSegue((bool) payload["segue"]);
+    applog::line("Next: \"" + nextName + "\"" + ((bool) payload["segue"] ? " (segue)" : ""));
+    auto* o = new juce::DynamicObject();
+    o->setProperty("ok", true);
+    juce::Array<juce::var> wa; for (auto& s : warnings) wa.addIfNotAlreadyThere(juce::String(s));
+    o->setProperty("warnings", wa);
+    return juce::var(o);
+}
+
+juce::var AudioHost::nextState()
+{
+    auto* o = new juce::DynamicObject();
+    const bool l = nextLoaded && eng.hasNext();
+    o->setProperty("loaded", l);
+    o->setProperty("ready", l && eng.nextReady());
+    o->setProperty("songId", l ? nextId : juce::String());
+    o->setProperty("name", l ? nextName : juce::String());
+    o->setProperty("segue", l && eng.segueOn());
+    return juce::var(o);
+}
+
+void AudioHost::takeOverNext()
+{
+    loadedName = nextName; loadedId = nextId;
+    trackIds = nextTrackIds; levels = nextLevels;
+    nextLoaded = false; nextName = {}; nextId = {}; nextTrackIds.clear(); nextLevels.clear();
+    seguesSeen = eng.segues();
+}
+
+juce::var AudioHost::queueJump(const juce::var& req)
+{
+    if (! loaded) return errorObj("Load the song first.", "reload");
+    auto* o = new juce::DynamicObject();
+    if ((bool) req["cancel"]) { eng.clearJump(); o->setProperty("queued", false); return juce::var(o); }
+    const auto& tm = eng.tempoMap();
+    const double sr = eng.sampleRate() > 0 ? eng.sampleRate() : 48000.0;
+    // armed a little ahead of the position (the disk prepares the target meanwhile)
+    const int64_t now = eng.position() + (int64_t) (0.06 * sr);
+    const auto when = req["when"].toString();
+    int64_t at;
+    if (when == "section") { at = tm.sampleAt(juce::jmax(1, (int) req["atBar"]), 1); if (at <= now) at = tm.nextBarStart(now); }
+    else if (when == "beat") { int b = 1; double beat = 1; tm.barBeatAt(now, b, beat); at = tm.sampleAt(b, std::floor(beat) + 1); }
+    else at = tm.nextBarStart(now);
+    const int64_t to = tm.sampleAt(juce::jmax(1, (int) req["toBar"]), juce::jmax(1.0, (double) req.getProperty("toBeat", 1.0)));
+    if (to >= eng.lengthSamples()) return errorObj("That's past the end of the song.");
+    eng.setJump(at, to, false);
+    int ab = 1; double abt = 1; tm.barBeatAt(at, ab, abt);
+    o->setProperty("queued", true);
+    o->setProperty("atBar", ab);
+    o->setProperty("atBeat", abt);
+    o->setProperty("atSeconds", (double) at / sr);
+    return juce::var(o);
+}
+
 juce::var AudioHost::transport(const juce::var& req)
 {
     const auto cmd = req["cmd"].toString();
     if (cmd == "stop") {
         eng.stop();
+    } else if (cmd == "next") { // Next while playing: the song waiting in the next slot, faded over (10 ms)
+        if (! nextLoaded || ! eng.hasNext()) return errorObj("The next song isn't loaded yet.", "nonext");
+        if (req["songId"].toString().isNotEmpty() && req["songId"].toString() != nextId) return errorObj("Another song is waiting.", "nonext");
+        if (! eng.switchToNext()) return errorObj("The disk couldn't load the audio in time.", "preroll");
+        takeOverNext();
+        applyLevels();
+    } else if (cmd == "segue") {
+        eng.setSegue((bool) req["on"]);
     } else if (cmd == "play") {
+        // the song asked for is waiting in the next slot (primed): it becomes the song, no loading
+        if (req["songId"].toString().isNotEmpty() && nextLoaded && eng.hasNext() && req["songId"].toString() == nextId && eng.promoteNext()) { takeOverNext(); applyLevels(); }
         if (dm.getCurrentAudioDevice() == nullptr) return errorObj("No audio device is open. Choose one in Settings › Audio.", "nodevice");
         if (! loaded || loadedEpoch != deviceEpoch) return errorObj("Load the song first.", "reload");
         const int bar = juce::jmax(1, (int) req.getProperty("fromBar", 1));
@@ -568,6 +662,7 @@ juce::var AudioHost::transportState()
     o->setProperty("playing", eng.isPlaying());
     o->setProperty("loaded", loaded);
     o->setProperty("song", loadedName);
+    o->setProperty("songId", loadedId);
     o->setProperty("sample", (juce::int64) s);
     o->setProperty("seconds", (double) s / sr);
     o->setProperty("bar", bar);
@@ -602,9 +697,12 @@ void AudioHost::timerCallback()
 {
     collectPreviews();
     if (! emit) return;
+    bool segued = false;
+    if (eng.segues() != seguesSeen) { takeOverNext(); applyLevels(); segued = true; applog::line("Segue into \"" + loadedName + "\""); }
     const bool playing = eng.isPlaying();
-    if (playing || playing != wasPlaying) {
+    if (playing || playing != wasPlaying || segued) {
         auto st = transportState();
+        if (segued) st.getDynamicObject()->setProperty("segued", true);
         if (! playing && eng.takeFinished()) st.getDynamicObject()->setProperty("ended", true);
         emit("transport", st);
     }
@@ -761,6 +859,7 @@ juce::var AudioHost::renderOffline(const juce::var& payload, const juce::var& op
     for (auto& s : warnings) w.add(juce::String(s));
     auto* o = new juce::DynamicObject();
     o->setProperty("rate", sr);
+    o->setProperty("length", (double) e.lengthSamples()); // the song (version) as the engine plays it, in samples
     o->setProperty("first", (double) first); // song sample of stream index 0 (a start mid-song prerolls 5 ms)
     o->setProperty("bars", bars);
     o->setProperty("outs", res);

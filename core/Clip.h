@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 
 namespace setline {
 
@@ -16,6 +17,13 @@ struct ClipDef {
     float gainDb = 0;
     int64_t fadeIn = 0, fadeOut = 0; // samples
     bool mute = false;
+    // A piece of a clip (a song version cuts clips at its section joins, 6e): its fades stay where the whole clip had
+    // them. envStart / envEnd = the whole clip's start and end on this timeline (Unset: this clip's own).
+    static constexpr int64_t Unset = std::numeric_limits<int64_t>::min();
+    int64_t envStart = Unset, envEnd = Unset;
+    // Equal-power crossfades at a version's joins: fade in from silence over [xInAt, xInAt + xInLen), fade out to
+    // silence over [xOutAt, xOutAt + xOutLen). Length 0 = none. sin/cos curves, so a join's two sides sum to constant power.
+    int64_t xInAt = 0, xInLen = 0, xOutAt = 0, xOutLen = 0;
 };
 
 // The fade curve the Edit page draws: a quadratic Bezier from silence to full level with its control
@@ -35,8 +43,12 @@ inline double fadeCurve(double u)
 inline double clipGainAt(const ClipDef& c, double linGain, int64_t t)
 {
     double g = linGain;
-    if (c.fadeIn > 0 && t < c.start + c.fadeIn) g *= fadeCurve((double) (t - c.start) / (double) c.fadeIn);
-    if (c.fadeOut > 0 && t > c.end - c.fadeOut) g *= fadeCurve((double) (c.end - t) / (double) c.fadeOut);
+    const int64_t s = c.envStart == ClipDef::Unset ? c.start : c.envStart, e = c.envEnd == ClipDef::Unset ? c.end : c.envEnd;
+    if (c.fadeIn > 0 && t < s + c.fadeIn) g *= fadeCurve((double) (t - s) / (double) c.fadeIn);
+    if (c.fadeOut > 0 && t > e - c.fadeOut) g *= fadeCurve((double) (e - t) / (double) c.fadeOut);
+    constexpr double halfPi = 1.57079632679489661923;
+    if (c.xInLen > 0 && t < c.xInAt + c.xInLen) g *= t < c.xInAt ? 0.0 : std::sin(halfPi * (double) (t - c.xInAt) / (double) c.xInLen);
+    if (c.xOutLen > 0 && t >= c.xOutAt) g *= t >= c.xOutAt + c.xOutLen ? 0.0 : std::cos(halfPi * (double) (t - c.xOutAt) / (double) c.xOutLen);
     return g;
 }
 

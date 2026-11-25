@@ -42,12 +42,16 @@ s.mute = {}; s.solo = {}; s.gain = { [stems[1]]: -4.5 };
 stems.forEach((t, i) => hooks.SLR.setOverride(s, t, [i + 1]));
 hooks.SLR.setOverride(s, "Click", [stems.length + 1]);
 hooks.SLR.setOverride(s, "Cues", [stems.length + 2]);
+// sections (6e: a version plays some of them, laid end to end): bars 1-2, 3-4, 5-7
+const sec = (id, name, type, start, bars) => ({ id, name, type, start, bars, end: "continue", say: "", notes: {}, tile: true });
+s.secs = [sec(9001, "One", "verse", 1, 2), sec(9002, "Two", "chorus", 3, 2), sec(9003, "Three", "outro", 5, 3)];
+P.buildBars(s);
 const vers = [];
 if (typeof newVer === "function") {
   vers.push(curVer(s).id);
-  newVer(s, "Live"); // the second version: one stem muted, another level
-  s.mute = { [stems[stems.length - 1]]: true }; s.gain = { [stems[0]]: -2 };
-  vers.push(curVer(s).id);
+  const v = newVer(s, "Live"); // the second version: One and Three (Two left out: a join with an equal-power crossfade)
+  v.order.forEach((o) => { if (o.id === 9002) o.on = false; });
+  vers.push(v.id);
 }
 P.buildBars(s);
 // Song 2: one stem, nothing else

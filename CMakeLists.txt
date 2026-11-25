@@ -19,6 +19,7 @@ find_package(Threads REQUIRED)
 # ---------------------------------------------------------------- core (plain C++, no JUCE)
 add_library(setline_core STATIC
   core/Engine.cpp
+  core/Versions.cpp
   core/Platform.cpp
   core/TestSong.cpp)
 target_include_directories(setline_core PUBLIC core)

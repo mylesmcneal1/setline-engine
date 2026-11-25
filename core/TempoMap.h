@@ -57,6 +57,9 @@ public:
         return (int64_t) std::llround(x.start + (beat - 1) * x.beatLen);
     }
 
+    // The first downbeat after sample s (a queued jump's "Next bar").
+    int64_t nextBarStart(int64_t s) const { int b = 1; double beat = 1; barBeatAt(s, b, beat); return sampleAt(b + 1, 1); }
+
     void barBeatAt(int64_t s, int& outBar, double& outBeat) const
     {
         outBar = 1; outBeat = 1;

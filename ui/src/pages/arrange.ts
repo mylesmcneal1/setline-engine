@@ -25,6 +25,12 @@ interface Page {
   setDirty(d: boolean): void; freshShow(): void;
   setOutputs(device: string, names: string[]): void; routeLog(): string[];
   openSettings(tab?: string): void; settingsChanged(): void;
+  // 6e: versions, the next song, transitions, queued jumps
+  ver: { play(s: Song): any; cur(s: Song): any; payload(s: Song, v: any): any; map(s: Song, v: any): any[]; fields(s: Song, v: any): any; inVer(s: Song, t: string, v: any): boolean;
+    nextOf(s: Song): { song: Song; ver: any } | null; after(s: Song): { mode: string; sec: number } };
+  nextState(meta: any): void; readySong(id: string, playing?: boolean): void; autoNext(sec: number): void; jumpQueued(secId: number | null): void;
+  setEngineBar(bar: number, beat: number): void; loopIsSection: boolean;
+  addVerAudio(s: Song, v: any, list: { info: AudioInfo }[], refs: Record<string, string>, copy: boolean): void;
   setListen(st: ListenState, what?: string): void;
   nameBox(o: { title: string; value: string; where: string }, done: (r: { name?: string; elsewhere?: boolean } | null) => void): void;
   copyStatus(p: { done: number; total: number; files?: number; filesDone?: number; finished: boolean; error?: string }): void;
@@ -46,7 +52,7 @@ interface VoiceModel { state: string; done: number; total: number; error: string
 // A file as the app read it (Media::probe). ok = false: error says why it can't be imported.
 interface AudioInfo { path: string; name: string; ok: boolean; channels?: number; rate?: number; frames?: number; seconds?: number; format?: string; bits?: number; error?: string }
 interface Progress { done: number; total: number; file: string; finished: boolean; files?: number; filesDone?: number; kind?: string; error?: string }
-interface Transport { playing: boolean; loaded: boolean; song: string; bar: number; beat: number; seconds: number; ended?: boolean }
+interface Transport { playing: boolean; loaded: boolean; song: string; songId?: string; bar: number; beat: number; seconds: number; ended?: boolean; segued?: boolean }
 interface LoadResult { ok?: boolean; error?: string; code?: string; warnings?: string[]; epoch?: number }
 interface FileResult { name?: string; path?: string; text?: string; cancelled?: boolean; error?: string }
 interface Stats { running: boolean; xruns: number | null; underruns: number; midiSent: number; midiDropped: number; midiLateMaxMs: number; cpu: number; callbackMaxMs: number; budgetMs: number }
@@ -67,8 +73,17 @@ let busy = false, pending: { s: Song; t: number } | null = null;
 let peaks: number[] = [];
 let trackPeaks: Record<string, number> = {}; // each track after its fader (the engine meters every track)
 
+// ---------------------------------------------------------------- song versions (6e)
+// The engine plays a version's parts laid end to end, so its bar numbers are the version's. The page keeps showing
+// the song's own (source) timeline: these convert between the two with the version's map ([] parts; null = the
+// whole source, the same bars).
+interface VPart { vb: number; sb: number; bars: number; extra: boolean; secId?: number }
+let curMap: VPart[] | null = null;   // the loaded song's version layout
+let curVerId = "";
+function mapOf(s: Song, v: any): VPart[] | null { return v && page().ver.payload(s, v) ? page().ver.map(s, v) : null; }
+
 // ---------------------------------------------------------------- positions (page seconds <-> bar/beat)
-function toBarBeat(s: Song, t: number): { bar: number; beat: number } {
+function srcBarBeat(s: Song, t: number): { bar: number; beat: number } {
   const bars = s.bars;
   let i = 0;
   while (i + 1 < bars.length && bars[i + 1].t <= t + 1e-9) i++;
@@ -79,25 +94,43 @@ function toBarBeat(s: Song, t: number): { bar: number; beat: number } {
   const len = Math.max(1e-9, next - b.beatT[k]);
   return { bar: b.bar, beat: 1 + k + Math.max(0, Math.min(1, (t - b.beatT[k]) / len)) };
 }
-function toTime(s: Song, bar: number, beat: number): number {
+function srcTime(s: Song, bar: number, beat: number): number {
   const b = s.bars[Math.max(0, Math.min(s.bars.length - 1, bar - 1))];
   const k = Math.max(0, Math.min(b.beatT.length - 1, Math.floor(beat - 1)));
   const next = k + 1 < b.beatT.length ? b.beatT[k + 1] : b.t + b.dur;
   return b.beatT[k] + (beat - 1 - k) * (next - b.beatT[k]);
 }
+// page (source) seconds -> the engine's bar/beat (a skipped section: the next part the version plays)
+function toBarBeat(s: Song, t: number, map: VPart[] | null = s.id === loadedSongId ? curMap : null): { bar: number; beat: number } {
+  const x = srcBarBeat(s, t);
+  if (!map || !map.length) return x;
+  const src = map.filter((p) => !p.extra), last = map[map.length - 1];
+  let part = src.find((p) => x.bar >= p.sb && x.bar < p.sb + p.bars);
+  if (!part && !last.extra && x.bar >= last.sb + last.bars) part = last; // the source's tail after its last bar
+  if (part) return { bar: part.vb + (x.bar - part.sb), beat: x.beat };
+  const nx = src.find((p) => p.sb > x.bar);
+  return { bar: nx ? nx.vb : 1, beat: 1 };
+}
+// the engine's bar/beat -> page (source) seconds (a version-only part: where the next section starts)
+function toTime(s: Song, bar: number, beat: number, map: VPart[] | null = s.id === loadedSongId ? curMap : null): number {
+  if (!map || !map.length) return srcTime(s, bar, beat);
+  const part = map.find((p) => bar >= p.vb && bar < p.vb + p.bars) || map[map.length - 1];
+  if (part.extra) { const nx = map.find((p) => !p.extra && p.vb > part.vb); return nx ? srcTime(s, nx.sb, 1) : 0; }
+  return srcTime(s, part.sb + (bar - part.vb), beat);
+}
 
 // ---------------------------------------------------------------- loading songs
-function payload(s: Song) {
+// song v: the version to play (default: the one the song plays now, its setlist entry's).
+function payload(s: Song, v: any = page().ver.play(s)) {
   const p = page();
-  // the song's own computed bar list / section positions stay behind; a MIDI or click clip's "bars" (its length)
-  // goes with it (dropping those too made every MIDI clip one bar long: events after its first bar never played)
-  const song = JSON.parse(JSON.stringify(s, function (this: Record<string, unknown>, k: string, v: unknown) {
-    return this === (s as unknown) && (k === "bars" || k === "secPos" || k === "_yy") ? undefined : v;
-  }));
+  // the song's fields for that version (a custom version's own; the source while a custom one is shown), without
+  // the computed bar list / section positions; a MIDI or click clip's "bars" (its length) goes with it
+  const song = p.ver.fields(s, v);
+  song.tracks = (song.tracks || []).filter((t: string) => p.ver.inVer(s, t, v)); // another version's own audio stays out
   const roles: Record<string, string> = {};
-  s.tracks.forEach((t) => (roles[t] = p.ROLE[t] || ""));
+  song.tracks.forEach((t: string) => (roles[t] = p.ROLE[t] || ""));
   const outs: Record<string, number[]> = {};
-  s.tracks.forEach((t) => { if (!isMidiTrack(s, t)) outs[t] = outsOf(s, t); });
+  song.tracks.forEach((t: string) => { if (!isMidiTrack(song, t)) outs[t] = outsOf(s, t); });
   // The show's pronunciations go with the cue voice (the song's own, or the set's), as the app keys cues by them.
   const pron = p.pron();
   if (song.cueVoice) song.cueVoice = { ...song.cueVoice, pron };
@@ -107,8 +140,9 @@ function payload(s: Song) {
   }
   // each click track other than "Click" with its own settings (the app plays every click track, sample-exact)
   const clickTracks: Record<string, Record<string, unknown>> = {};
-  s.tracks.forEach((t) => { if (p.ROLE[t] === "click" && t !== "Click") clickTracks[t] = p.clickCfg(s, t); });
-  return { song, outs, roles, click: p.clickCfg(s), clickTracks, cueVoice: { ...p.cueVoiceAll(), pron } };
+  song.tracks.forEach((t: string) => { if (p.ROLE[t] === "click" && t !== "Click") clickTracks[t] = p.clickCfg(s, t); });
+  const version = p.ver.payload(s, v);
+  return { song, outs, roles, click: p.clickCfg(s), clickTracks, cueVoice: { ...p.cueVoiceAll(), pron }, ...(version ? { version } : {}), verId: v ? v.id : "" };
 }
 // What forces a reload: everything except the mixer levels, which change live (setTrackLevel).
 function loadKey(body: ReturnType<typeof payload>): string {
@@ -117,12 +151,14 @@ function loadKey(body: ReturnType<typeof payload>): string {
 }
 
 async function ensureLoaded(s: Song): Promise<boolean> {
-  const body = payload(s);
+  const v = page().ver.play(s);
+  const body = payload(s, v);
   const key = loadKey(body);
   if (key === loadedKey && loadedSongId === s.id) return true;
   const r = await SL.call<LoadResult>("loadSong", body);
   if (r.error) { page().toast(r.error); loadedKey = null; return false; }
-  loadedKey = key; loadedSongId = s.id; loopKey = "";
+  loadedKey = key; loadedSongId = s.id; loopKey = ""; curMap = mapOf(s, v); curVerId = v ? v.id : "";
+  nextKey = ""; // the next slot follows the song loaded
   const w = r.warnings || [];
   if (w.length && warnedKey !== key) {
     warnedKey = key;
@@ -132,9 +168,64 @@ async function ensureLoaded(s: Song): Promise<boolean> {
   return true;
 }
 
-// ---------------------------------------------------------------- loop (runs in the engine)
-async function syncLoop(s: Song) {
+// ---------------------------------------------------------------- the next song (6e)
+// While a song is loaded, the setlist's next song (in the version its entry plays) waits in the engine's next slot,
+// primed: Segue plays it on the very next sample, Next and Play start it without loading. Changing a version, the
+// order or "After this song" queues it again in the background; the song playing is never touched.
+interface NextMeta { songId: string; verId: string; key: string; map: VPart[] | null; ready: boolean; loading: boolean; segue: boolean; error?: string }
+let nextKey = "", nextMeta: NextMeta | null = null, nextPoll = 0;
+async function queueNext(s: Song) {
+  const p = page();
   if (s.id !== loadedSongId) return;
+  const n = p.ver.nextOf(s);
+  if (!n) { if (nextMeta) { nextMeta = null; nextKey = ""; p.nextState(null); SL.call("transport", { cmd: "segue", on: false }).catch(() => {}); } return; }
+  const body = payload(n.song, n.ver), segue = p.ver.after(s).mode === "segue";
+  const key = loadKey(body) + "|" + segue + "|" + s.id;
+  if (key === nextKey) return;
+  nextKey = key;
+  const meta: NextMeta = { songId: n.song.id, verId: n.ver ? n.ver.id : "", key: loadKey(body), map: mapOf(n.song, n.ver), ready: false, loading: true, segue };
+  nextMeta = meta; p.nextState({ ...meta });
+  const r = await SL.call<LoadResult>("queueNext", { ...body, segue });
+  if (nextMeta !== meta) return; // something newer was queued meanwhile
+  if (r.error) { meta.loading = false; meta.error = r.error; nextKey = ""; p.nextState({ ...meta }); return; }
+  clearInterval(nextPoll);
+  nextPoll = window.setInterval(async () => {
+    if (nextMeta !== meta) { clearInterval(nextPoll); return; }
+    const st = await SL.call<{ loaded: boolean; ready: boolean; songId: string }>("nextState");
+    if (st.ready && st.songId === meta.songId) { meta.loading = false; meta.ready = true; p.nextState({ ...meta }); clearInterval(nextPoll); }
+    else if (!st.loaded) { meta.loading = false; p.nextState({ ...meta }); clearInterval(nextPoll); }
+  }, 150);
+}
+// the next song took over (segue, Next, or Play on it): it's the loaded one now
+function adoptNext() {
+  if (!nextMeta) return;
+  loadedSongId = nextMeta.songId; loadedKey = nextMeta.key; curMap = nextMeta.map; curVerId = nextMeta.verId;
+  loopKey = ""; nextKey = ""; nextMeta = null; page().nextState(null); jumpQ = null; page().jumpQueued(null);
+}
+let autoTimer = 0;
+function cancelAuto() { if (autoTimer) { clearInterval(autoTimer); autoTimer = 0; page().autoNext(0); } }
+// The song playing reached its end (not a segue): Stop selects the next song, ready; Auto-next waits, then plays it.
+function songEnded(s: Song) {
+  const p = page(), n = p.ver.nextOf(s), a = p.ver.after(s);
+  p.setPlaying(false);
+  if (!n) return;
+  p.readySong(n.song.id);
+  if (a.mode === "auto") {
+    let left = a.sec;
+    p.autoNext(left);
+    autoTimer = window.setInterval(() => {
+      left -= 1;
+      if (left > 0) { p.autoNext(left); return; }
+      cancelAuto();
+      if (page().playId === n.song.id && !page().playing) { p.setPlaying(true); SLE.playFrom(n.song, 0); }
+    }, 1000);
+  }
+}
+
+// ---------------------------------------------------------------- loops and queued jumps (run in the engine)
+let jumpQ: { secId: number; at: number } | null = null; // a queued jump, until playback passes its sample
+async function syncLoop(s: Song) {
+  if (s.id !== loadedSongId || jumpQ) return; // a queued jump has the engine's jump slot until it happens
   const cy = page().loopRange(s);
   const range = cy ? { from: toBarBeat(s, cy[0]), to: toBarBeat(s, cy[1]) } : null;
   const key = JSON.stringify(range);
@@ -143,13 +234,19 @@ async function syncLoop(s: Song) {
   const r = await SL.call<LoadResult>("setLoop", range ? { fromBar: range.from.bar, fromBeat: range.from.beat, toBar: range.to.bar, toBeat: range.to.beat } : {});
   if (r.code === "reload") loopKey = "";
   // Turning a loop on while already past its end: go to its start (as the page always did).
-  if (cy && page().playing && page().pos >= cy[1]) SLE.playFrom(s, cy[0]);
+  if (cy && page().playing && page().pos >= cy[1] - 0.02 && !page().loopIsSection) SLE.playFrom(s, cy[0]);
 }
 
 // ---------------------------------------------------------------- transport
 async function run(s: Song, t: number) {
   busy = true;
+  cancelAuto();
   try {
+    // the song is waiting in the next slot, from its start: it becomes the song at once (no loading)
+    if (t < 0.001 && nextMeta && nextMeta.songId === s.id && nextMeta.key === loadKey(payload(s))) {
+      const r = await SL.call<Transport & LoadResult>("transport", { cmd: "play", songId: s.id, fromBar: 1, fromBeat: 1 });
+      if (!r.error && r.songId === s.id) { adoptNext(); await syncLoop(s); queueNext(s); return; }
+    }
     for (let attempt = 0; attempt < 2; attempt++) {
       if (!(await ensureLoaded(s))) { page().setPlaying(false); return; }
       await syncLoop(s); // armed before playing, so the first pass wraps too
@@ -157,6 +254,7 @@ async function run(s: Song, t: number) {
       const r = await SL.call<Transport & LoadResult>("transport", { cmd: "play", fromBar: at.bar, fromBeat: at.beat });
       if (r.code === "reload") { loadedKey = null; continue; } // the device changed since loading
       if (r.error) { page().toast(r.error); page().setPlaying(false); }
+      queueNext(s);
       return;
     }
   } catch (e) {
@@ -178,7 +276,45 @@ const SLE = {
   },
   stop() {
     pending = null;
+    cancelAuto();
     SL.call("transport", { cmd: "stop" }).catch(() => {});
+  },
+  // Next while playing (6e): the song waiting in the next slot takes over with a 10 ms fade; anything else loads.
+  async nextSong(n: Song) {
+    cancelAuto();
+    if (nextMeta && nextMeta.songId === n.id && nextMeta.key === loadKey(payload(n)) && !busy) {
+      busy = true;
+      try {
+        const r = await SL.call<Transport & LoadResult>("transport", { cmd: "next", songId: n.id });
+        if (!r.error) { adoptNext(); page().setPlayId(n.id); page().setPos(0); await syncLoop(n); queueNext(n); return; }
+      } finally { busy = false; }
+    }
+    SLE.playFrom(n, 0);
+  },
+  // The setlist, a version or "After this song" changed: the next slot follows (in the background).
+  nextChanged() { const s = page().songs.find((x) => x.id === loadedSongId); if (s) queueNext(s); },
+  // Perform: tap a section while playing -> a jump to it, at the next bar line / the end of this section / the next beat.
+  async queueJump(s: Song, secId: number, when: "bar" | "section" | "beat") {
+    if (s.id !== loadedSongId || !page().playing) return false;
+    const map = curMap, sec = (s.secs || []).find((x: any) => x.id === secId);
+    if (!sec) return false;
+    let toBar = sec.start;
+    if (map) { const part = map.find((p) => !p.extra && p.secId === secId) || map.find((p) => !p.extra && sec.start >= p.sb && sec.start < p.sb + p.bars); if (!part) { page().toast(`“${sec.name}” isn't in this version`); return false; } toBar = part.vb + (sec.start - part.sb); }
+    // "End of section": where the section playing now ends, in the engine's bars
+    const nowSrc = srcBarBeat(s, page().pos).bar, cur = (s.secs || []).find((x: any) => nowSrc >= x.start && nowSrc < x.start + x.bars);
+    let atBar = 0;
+    if (cur) { const e = toBarBeat(s, srcTime(s, Math.min(cur.start + cur.bars - 1, s.total), 1)); atBar = e.bar + 1; }
+    const r = await SL.call<{ queued?: boolean; atSeconds?: number; error?: string }>("queueJump", { toBar, toBeat: 1, when: when === "section" && atBar ? "section" : when === "beat" ? "beat" : "bar", atBar });
+    if (r.error || !r.queued) { if (r.error) page().toast(r.error); return false; }
+    jumpQ = { secId, at: r.atSeconds || 0 }; page().jumpQueued(secId); loopKey = "";
+    return true;
+  },
+  async cancelJump() {
+    if (!jumpQ) return false;
+    jumpQ = null; page().jumpQueued(null);
+    await SL.call("queueJump", { cancel: true });
+    loopKey = ""; const s = page().songs.find((x) => x.id === loadedSongId); if (s) syncLoop(s); // a section loop takes the slot back
+    return true;
   },
   // Mixer levels of song s changed (fader, mute, solo, click button): send them live, at most once a frame.
   levels(s: Song) {
@@ -200,7 +336,7 @@ const SLE = {
   open: () => openSession(),
   newSession: () => newSession(),
   // Glue (6c item 7): the clips of t from a to b (seconds) rendered exactly as they play into a new WAV
-  glueAudio: (s: Song, t: string, a: number, b: number) => SL.call<{ ref?: string; offset?: number; frames?: number; seconds?: number; error?: string }>("glueAudio", { payload: payload(s), track: t, ref: s.files[t]?.path || "", from: a, to: b }),
+  glueAudio: (s: Song, t: string, a: number, b: number) => SL.call<{ ref?: string; offset?: number; frames?: number; seconds?: number; error?: string }>("glueAudio", { payload: payload(s, page().ver.cur(s)), track: t, ref: s.files[t]?.path || "", from: a, to: b }),
   listen: (req: Partial<ListenState>) => setListen(req),
   diagnostics: (how: "copy" | "save") => diagnostics(how),
   preferences: () => preferences(),
@@ -213,17 +349,31 @@ const SLE = {
   pickStems: () => pickStems(),
   importStems: (infos: AudioInfo[], copy: boolean) => importStems(infos, copy),
   addStems: (s: Song) => addStems(s),
+  // 6e: audio only one version plays (picked here; files dropped on the panel come through onFileDrag)
+  addVerAudio: (s: Song, v: any) => addVerAudio(s, v),
 };
 
 function onTransport(st: Transport) {
   const p = page();
+  // the engine moved into the next song by itself (Segue): that song is playing now, from its start
+  if (st.segued && st.songId) {
+    if (nextMeta && nextMeta.songId === st.songId) adoptNext(); else { loadedSongId = st.songId; loadedKey = null; curMap = null; }
+    const s = p.songs.find((x) => x.id === st.songId);
+    if (s) { p.setPlayId(s.id); p.readySong(s.id, true); p.setPos(toTime(s, st.bar, st.beat)); queueNext(s); }
+    return;
+  }
   if (busy || !p.playing) return;
   const s = p.songs.find((x) => x.id === p.playId);
   if (!s || s.id !== loadedSongId) return;
-  if (st.playing) { p.setPos(toTime(s, st.bar, st.beat)); syncLoop(s); return; }
+  if (st.playing) {
+    p.setPos(toTime(s, st.bar, st.beat)); p.setEngineBar(st.bar, st.beat);
+    if (jumpQ && st.seconds >= jumpQ.at - 0.005) { jumpQ = null; p.jumpQueued(null); loopKey = ""; }
+    syncLoop(s); return;
+  }
   // The engine stopped by itself: end of the song (or the device went away).
   p.setPos(st.ended ? Math.max(0, s.audio - 0.01) : toTime(s, st.bar, st.beat));
-  p.setPlaying(false);
+  if (jumpQ) { jumpQ = null; p.jumpQueued(null); }
+  if (st.ended) songEnded(s); else p.setPlaying(false);
 }
 
 // ---------------------------------------------------------------- status chip
@@ -774,6 +924,19 @@ async function addStemsFrom(s: Song, list: AudioInfo[]) {
   loadedKey = null;
   page().toast(`Added ${good.length} track${good.length > 1 ? "s" : ""} to “${s.name}”`);
 }
+// 6e: audio only one version plays (an intro pad...): imported like stems, placed in that version's own part.
+async function addVerAudioFrom(s: Song, v: any, list: AudioInfo[]) {
+  const bad = list.filter((x) => !x.ok), good = list.filter((x) => x.ok);
+  if (bad.length) page().toast(`${bad[0].name}: ${bad[0].error}`);
+  if (!good.length) return;
+  const copy = copyPref();
+  const refs = await importStems(good, copy);
+  if (!refs) return;
+  page().addVerAudio(s, v, good.map((info) => ({ info })), refs, copy);
+  loadedKey = null; nextKey = "";
+  page().toast(`Added ${good.length} file${good.length > 1 ? "s" : ""} to “${v.name}” only`);
+}
+async function addVerAudio(s: Song, v: any) { const list = await pickStems(); if (list) await addVerAudioFrom(s, v, list); }
 async function addStems(s: Song) {
   const list = await pickStems();
   if (list) await addStemsFrom(s, list);
@@ -813,7 +976,10 @@ async function onFileDrag(d: { state: string; x: number; y: number; paths: strin
   }
   const list = await probe(audio);
   if (p.modalOpen()) { p.addNative(list); return; }
-  const folder = (document.elementFromPoint(d.x, d.y) as HTMLElement | null)?.closest<HTMLElement>(".folder[data-id]");
+  const target = document.elementFromPoint(d.x, d.y) as HTMLElement | null;
+  const vbox = target?.closest<HTMLElement>("[data-vaudio]");
+  if (vbox) { const s = p.songs.find((x) => x.id === p.selId); const v = s && p.ver.cur(s); if (s && v && v.id === vbox.dataset.vaudio) { await addVerAudioFrom(s, v, list); return; } }
+  const folder = target?.closest<HTMLElement>(".folder[data-id]");
   const s = folder ? p.songs.find((x) => x.id === folder.dataset.id) : undefined;
   if (s) { await addStemsFrom(s, list); return; }
   p.openNewSong();
@@ -973,7 +1139,7 @@ async function main() {
   // Coming back to this page while a song plays (pages reload when you switch tabs): follow it.
   try {
     const st = await SL.call<Transport>("getTransport");
-    const s = st.playing ? page().songs.find((x) => x.name === st.song) : undefined;
+    const s = st.playing ? page().songs.find((x) => (st.songId ? x.id === st.songId : x.name === st.song)) : undefined;
     if (s) { loadedSongId = s.id; loadedKey = null; page().setPlayId(s.id); page().setPos(toTime(s, st.bar, st.beat)); page().setPlaying(true); }
   } catch (e) { console.warn("set.Line: transport state", e); }
 
@@ -993,7 +1159,7 @@ async function main() {
     try {
       const AsyncFn = Object.getPrototypeOf(async () => {}).constructor;
       const hooks = { SLE, page, importStems, probe, audioFiles, applyRefMap, checkAudio, onFileDrag, sessionText, applySession,
-        getRate: () => sessionRate, openPath: (p: string) => openPath(p), retryStartShow: () => retryStartShow(), docName: () => doc.name, saveTo: (path: string) => saveSession(false, path), cueList: () => cueList(), setListen: (r: Partial<ListenState>) => setListen(r), SLR: window.SLR, SLW, waves, SLC, prepareCues, remember, payload, isDirty: () => sessionText() !== doc.savedText, setDoc: (n: string) => { doc = { name: n, savedText: "" }; } };
+        getRate: () => sessionRate, openPath: (p: string) => openPath(p), retryStartShow: () => retryStartShow(), docName: () => doc.name, saveTo: (path: string) => saveSession(false, path), cueList: () => cueList(), setListen: (r: Partial<ListenState>) => setListen(r), SLR: window.SLR, SLW, waves, SLC, prepareCues, remember, payload, toBarBeat, toTime, getNext: () => nextMeta, getLoaded: () => ({ id: loadedSongId, ver: curVerId, map: curMap }), isDirty: () => sessionText() !== doc.savedText, setDoc: (n: string) => { doc = { name: n, savedText: "" }; } };
       out = await new AsyncFn("SL", "hooks", info.testScript)(SL, hooks);
     } catch (e) { out = { error: String((e as Error)?.stack || e) }; }
     if (out !== undefined) await SL.call("testDone", { text: JSON.stringify(out, null, 1) }); // undefined: it went to another page

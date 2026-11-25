@@ -1,5 +1,10 @@
 // set.Line engine spike — the playback core.
 // process() is the audio callback body: real-time safe (no locks, no allocation, no file I/O).
+//
+// Two song slots (6e): the song playing, and the next one, loaded and primed from its start in the background (the
+// setlist's next song, in the version it plays). At the end of a song with Segue armed, the next one starts on the very
+// next sample, inside the same audio callback (no gap, no overlap). Next while playing fades the current song out
+// (10 ms) and starts the next one at once; Play on a song that's waiting in the next slot starts without loading.
 #pragma once
 #include "LiveGain.h"
 #include "MidiScheduler.h"
@@ -36,9 +41,28 @@ public:
     Engine();
     ~Engine();
 
-    // Prepares everything (opens streamers, builds the tempo map, click and MIDI lists).
+    // Prepares everything (opens streamers, builds the tempo map, click and MIDI lists) as the song to play.
     // Returns an empty string on success, otherwise a readable error.
     std::string load(const SongDef& song, const Config& cfg, std::vector<std::string>& warnings);
+
+    // ---- the next song (6e) ----
+    // Loads `song` into the next slot and primes it from its start in the background; also while playing (the song
+    // playing is never touched). Uses the Config of the last load(). Empty = fine, else why not.
+    std::string prepareNext(const SongDef& song, std::vector<std::string>& warnings);
+    void clearNext();
+    bool hasNext() const { return nextLoaded.load(std::memory_order_acquire); }
+    bool nextReady() const;                       // loaded and every stem primed from its start
+    std::string nextName() const;
+    // Segue: when the song playing ends, the next one continues on the next sample (it must be ready by then; if it
+    // isn't, playback stops as at any other end).
+    void setSegue(bool on) { segueArmed.store(on, std::memory_order_release); }
+    bool segueOn() const { return segueArmed.load(std::memory_order_acquire); }
+    // Stopped: the next song becomes the one to play (instant, it's primed). Returns false if there is none.
+    bool promoteNext();
+    // Playing: fade the current song out (10 ms), then play the next one from its start. False if there's none ready.
+    bool switchToNext(int timeoutMs = 3000);
+    // How many automatic hand-overs (segues) have happened; the app notices a change.
+    uint64_t segues() const { return segueCount.load(std::memory_order_acquire); }
 
     // Device info, called when the device starts (used to time MIDI to the audio output).
     void setDeviceTiming(int bufferSamples, int outputLatencySamples);
@@ -67,15 +91,15 @@ public:
     Jump currentJump() const { return ctlJump; }
 
     // Live levels (any thread, glitch-free: ramped over 10 ms in the callback).
-    // track: 0..numStems()-1 for stems, or ClickTrack / CueTrack.
+    // track: 0..numStems()-1 for stems, or ClickTrack / CueTrack. next: the song in the next slot.
     static constexpr int ClickTrack = -1, CueTrack = -2;
     // Click track k (0 = the main click, 1.. = SongDef::moreClicks[k-1]) for setTrackLevel.
     static constexpr int clickTrackId(int k) { return k == 0 ? ClickTrack : -100 - k; }
     // MIDI track k (MidiEventDef::track) for setTrackLevel: only its mute counts (a muted MIDI track sends nothing).
     static constexpr int midiTrackId(int k) { return -200 - k; }
     static constexpr int MaxMidiTracks = 64;
-    void setTrackLevel(int track, float db, bool mute);
-    int numStems() const { return (int) stems.size(); }
+    void setTrackLevel(int track, float db, bool mute, bool next = false);
+    int numStems() const { return (int) cur().stems.size(); }
 
     // Output meters: the peak of each device output since the last call (audio thread writes, UI reads).
     static constexpr int MaxMeters = 64;
@@ -89,59 +113,75 @@ public:
     // Audio callback body.
     void process(float* const* outs, int numOuts, int numFrames);
 
-    // Read-only info
-    const TempoMap& tempoMap() const { return tmap; }
+    // Read-only info (the song playing)
+    const TempoMap& tempoMap() const { return cur().tmap; }
     int64_t position() const { return pos.load(std::memory_order_relaxed); }
-    int64_t lengthSamples() const { return songLen; }
+    int64_t lengthSamples() const { return cur().songLen; }
+    const std::string& songName() const { return cur().name; }
     double sampleRate() const { return cfg.sampleRate; }
-    int requiredOutputs() const { return maxOut + 1; }
+    int requiredOutputs() const { return cur().maxOut + 1; }
     Stats stats;
     MidiScheduler midi;
     std::vector<LoggedMidi> midiLog; // offline mode only (pre-reserved)
     struct ClickHit { int64_t sample; bool accent; float gain = 1; };
     struct MidiAt { int64_t sample; int port; uint8_t d[3]; int len; int track = -1; };
-    const std::vector<ClickHit>& clickList(int k = 0) const { static const std::vector<ClickHit> none; return k < (int) clickLanes.size() ? clickLanes[(size_t) k].hits : none; }
-    int numClickTracks() const { return (int) clickLanes.size(); }
-    const std::vector<MidiAt>& midiList() const { return midiEvents; }
+    const std::vector<ClickHit>& clickList(int k = 0) const { static const std::vector<ClickHit> none; return k < (int) cur().clickLanes.size() ? cur().clickLanes[(size_t) k].hits : none; }
+    int numClickTracks() const { return (int) cur().clickLanes.size(); }
+    const std::vector<MidiAt>& midiList() const { return cur().midiEvents; }
     struct CueAt { int64_t sample; std::shared_ptr<const std::vector<float>> audio; };
-    const std::vector<CueAt>& cueList() const { return cues; }
+    const std::vector<CueAt>& cueList() const { return cur().cues; }
 
 private:
-    void diskLoop();
-    void waitForCallbackToFinish();
-    void fadeOutAndStop(); // control lock held
-    void publishJump();
-    void armStems();
-    void renderSegment(float* const* outs, int numOuts, int off, int count, int64_t p, Clock::time_point t0);
-
-    Config cfg;
-    TempoMap tmap;
-    std::vector<std::unique_ptr<StemStreamer>> stems;
-    std::vector<MidiAt> midiEvents;
-    std::vector<CueAt> cues;   // sorted by sample; audio preloaded (never rendered during playback)
-    std::vector<int> cueOuts;
-    int64_t longestCue = 0;
-    std::unique_ptr<LiveGain[]> stemGains; // one per stem (allocated in load)
-    LiveGain cueLive;
-    float cueGain = 1.0f;
-    std::array<std::atomic<float>, MaxMeters> meters {};
-    std::array<std::atomic<float>, MaxTrackMeters> trackMeters {};
-    std::array<std::atomic<bool>, MaxMidiTracks> midiMuted {};
-    void meterTrack(int slot, float pk) { if (slot >= 0 && slot < MaxTrackMeters && pk > trackMeters[(size_t) slot].load(std::memory_order_relaxed)) trackMeters[(size_t) slot].store(pk, std::memory_order_relaxed); }
-    int rampSamples = 480, fadeOutSamples = 480;
-    int64_t songLen = 0;
-    int maxOut = 1;
-
-    // audio-thread state
-    std::atomic<int64_t> pos { 0 };
-    size_t nextMidi = 0;
     struct Voice { int remaining = 0; double phase = 0, inc = 0, env = 0, decay = 0; float amp = 0; };
     // Click tracks: [0] the main click, then SongDef::moreClicks. Built in load, never resized while playing;
     // next / voice are audio-thread state.
     struct ClickLane { std::vector<ClickHit> hits; std::vector<int> outs; float gain = 0.5f; size_t next = 0; Voice voice; };
-    std::vector<ClickLane> clickLanes;
-    std::unique_ptr<LiveGain[]> clickLives; // one per click lane (allocated in load)
-    void seekClicks(int64_t p); // audio thread (or idle)
+    // Everything about one song: what load / prepareNext build, what the audio thread plays.
+    struct Program {
+        std::string name;
+        TempoMap tmap;
+        std::vector<std::unique_ptr<StemStreamer>> stems;
+        std::unique_ptr<LiveGain[]> stemGains;
+        std::vector<MidiAt> midiEvents;
+        std::vector<CueAt> cues;   // sorted by sample; audio preloaded (never rendered during playback)
+        std::vector<int> cueOuts;
+        int64_t longestCue = 0;
+        LiveGain cueLive;
+        float cueGain = 1.0f;
+        std::vector<ClickLane> clickLanes;
+        std::unique_ptr<LiveGain[]> clickLives;
+        std::array<std::atomic<bool>, MaxMidiTracks> midiMuted {};
+        int64_t songLen = 0;
+        int maxOut = 1;
+        bool primed() const { for (auto& s : stems) if (! s->primed()) return false; return true; }
+    };
+    std::string build(Program& P, const SongDef& song, std::vector<std::string>& warnings);
+    Program& cur() const { return *progs[(size_t) curIdx.load(std::memory_order_acquire)]; }
+    Program* other() const { return progs[(size_t) (1 - curIdx.load(std::memory_order_acquire))].get(); }
+
+    void diskLoop();
+    void ensureDisk();
+    void waitForCallbackToFinish();
+    void fadeOutAndStop(); // control lock held
+    void publishJump();
+    void armStems();
+    void seekClicks(Program& P, int64_t p); // audio thread (or idle)
+    void handOver(int64_t& p);              // audio thread: the next song takes over at its sample 0
+    void renderSegment(Program& P, float* const* outs, int numOuts, int off, int count, int64_t p, Clock::time_point t0);
+    void meterTrack(int slot, float pk) { if (slot >= 0 && slot < MaxTrackMeters && pk > trackMeters[(size_t) slot].load(std::memory_order_relaxed)) trackMeters[(size_t) slot].store(pk, std::memory_order_relaxed); }
+
+    Config cfg;
+    std::unique_ptr<Program> progs[2];
+    std::atomic<int> curIdx { 0 };
+    std::atomic<bool> nextLoaded { false }, segueArmed { false }, nextFresh { false };
+    std::atomic<uint64_t> segueCount { 0 };
+    std::array<std::atomic<float>, MaxMeters> meters {};
+    std::array<std::atomic<float>, MaxTrackMeters> trackMeters {};
+    int rampSamples = 480, fadeOutSamples = 480;
+
+    // audio-thread state
+    std::atomic<int64_t> pos { 0 };
+    size_t nextMidi = 0;
     int fadeInLeft = 0, fadeInLen = 0, fadeOutLeft = 0;
 
     // jump / loop: the control side publishes {at, to, repeat} under a sequence number; the audio
@@ -157,6 +197,7 @@ private:
     std::atomic<int> latencyBase { 0 };
 
     std::mutex control;
+    std::mutex diskMx;  // the disk thread fills both slots; a slot is only replaced while holding this
     std::thread disk;
     std::atomic<bool> diskRun { false };
     MidiSink* sink = nullptr;

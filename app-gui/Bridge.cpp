@@ -345,6 +345,13 @@ Bridge::Options Bridge::addTo(Options o)
         if (! a.isObject() || ! a["song"].isObject()) { done(errorVar("loadSong: expected {song, outs, roles, click}")); return; }
         withCues(a, [this, a, done] { done(audio.loadSong(a)); });
     });
+    // The next song (6e): loaded into the engine's second slot in the background, its cues rendered first.
+    o = addAsync(o, "queueNext", [this](const juce::var& a, auto done) {
+        if (! a.isObject() || ! a["song"].isObject()) { done(errorVar("queueNext: expected {song, outs, roles, click}")); return; }
+        withCues(a, [this, a, done] { done(audio.queueNext(a)); });
+    });
+    o = add(o, "nextState", [this](const juce::var&) { return audio.nextState(); });
+    o = add(o, "queueJump", [this](const juce::var& a) { return audio.queueJump(a); });
     if (testScript != juce::File()) // tests only: the song rendered offline exactly as it would load (AudioHost::renderOffline)
         o = addAsync(o, "testRender", [this](const juce::var& a, auto done) {
             withCues(a["payload"], [this, a, done] { done(audio.renderOffline(a["payload"], a)); });

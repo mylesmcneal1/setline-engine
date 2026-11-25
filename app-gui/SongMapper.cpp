@@ -3,6 +3,7 @@
 #include "../core/LiveGain.h"
 #include "../core/TempoMap.h"
 #include "Media.h"
+#include "../core/Versions.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <cmath>
 #include <set>
@@ -110,6 +111,10 @@ MappedSong mapSong(const juce::var& payload, double sr, int numOutputs,
     const double songSeconds = toDouble(s["audio"], 0);
     auto toSamples = [&](const juce::var& seconds) { return (int64_t) std::llround(toDouble(seconds, 0) * sr); }; // one rounding rule
     int noFile = 0;
+    const juce::var version = payload["version"], vOnly = version["only"];
+    struct Extra { int tag; juce::String track; StemDef stem; };
+    std::vector<Extra> extras;
+    auto& extraStems = extras;
     bool haveClick = false;
     std::vector<juce::String> moreClickNames; // click tracks other than "Click", in track order
     if (auto* ts = tracks.getArray())
@@ -174,6 +179,8 @@ MappedSong mapSong(const juce::var& payload, double sr, int numOutputs,
                     clips.push_back({ 0, songSeconds > 0 ? std::min(len, toSamples(songSeconds)) : len, 0, 0, 0, 0, false });
                 }
                 d.clips = std::move(clips);
+                // version-only audio (6e): its clips are placed in the version's own part, after the version is laid out
+                if (vOnly.isObject() && vOnly.hasProperty(tid)) { extraStems.push_back({ (int) vOnly[tid], t, std::move(d) }); continue; }
                 def.stems.push_back(std::move(d));
                 out.engineTrack[t] = (int) def.stems.size() - 1;
             }
@@ -328,6 +335,29 @@ MappedSong mapSong(const juce::var& payload, double sr, int numOutputs,
                 }
             }
         }
+    // ---- song version (6e): its parts laid end to end; version-only audio in its own part ----
+    if (auto* ps = version["parts"].getArray(); ps != nullptr && ! ps->isEmpty()) {
+        VersionDef v;
+        v.crossfadeMs = toDouble(version["crossfadeMs"], 5);
+        for (auto& p : *ps) {
+            VersionPart vp;
+            vp.bar = (bool) p["extra"] ? 0 : std::max(1, toInt(p["bar"], 1));
+            vp.bars = std::max(0, toInt(p["bars"], 0));
+            vp.bpm = toDouble(p["bpm"], 0);
+            if (auto* sg = p["sig"].getArray(); sg && sg->size() == 2) { vp.num = (int) (*sg)[0]; vp.den = (int) (*sg)[1]; }
+            vp.tag = toInt(p["tag"], -1);
+            v.parts.push_back(vp);
+        }
+        VersionLayout lay;
+        def = applyVersion(def, v, sr, out.warnings, &lay);
+        for (auto& x : extras) {
+            const auto* part = [&]() -> const VersionLayout::Part* { for (auto& lp : lay.parts) if (lp.tag == x.tag) return &lp; return nullptr; }();
+            if (part == nullptr) continue; // its part isn't in this version
+            for (auto& c : *x.stem.clips) { c.start += part->verStart; c.end += part->verStart; }
+            def.stems.push_back(std::move(x.stem));
+            out.engineTrack[x.track] = (int) def.stems.size() - 1;
+        }
+    }
     return out;
 }
 

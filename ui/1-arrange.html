@@ -841,6 +841,55 @@
   .cpk input{width:calc(100% - 12px);margin:6px;background:#1c1c1e;border:1px solid #48484e;border-radius:6px;padding:5px 8px;color:#fff;font-size:12.5px}
   .cpked{display:block;width:100%;text-align:left;padding:5px 9px;color:var(--muted);font-size:12px;border-radius:6px} .cpked:hover{background:#3a3a40;color:#fff}
   .phr{display:flex;gap:4px;align-items:center;margin-bottom:4px} .phr input{flex:1}
+  /* ---- 6e: versions strip, skipped sections, setlist stacks ---- */
+  .vstrip{position:sticky;left:0;width:var(--vw,100%);padding:8px 14px 10px;background:#111112;border-bottom:1px solid #050607;z-index:4}
+  .vstrip .vh{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;color:var(--muted);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+  .vstrip .vadd{color:#c9c9cf;font-size:11.5px;text-transform:none;letter-spacing:0;font-weight:500}
+  .vstrip .vr{display:grid;grid-template-columns:170px minmax(0,1fr) 48px;align-items:center;gap:12px;padding:5px 10px;border-radius:8px;margin-bottom:3px;border:1.5px solid transparent;cursor:pointer}
+  .vstrip .vr:hover{background:#18181a} .vstrip .vr.on{background:#1a2624;border-color:#22c3a6}
+  .vstrip .vnm{font-weight:500;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .vstrip .vnm em{font-style:normal;color:var(--muted);font-size:10.5px;margin-left:4px} .vdia{color:#bf5af2}
+  .vstrip .st{display:flex;gap:2px;height:16px} .vstrip .st i{border-radius:3px;display:block}
+  .vstrip small{color:var(--muted);text-align:right;font:11.5px var(--code,monospace)}
+  .vskip{position:absolute;top:0;bottom:0;z-index:2;pointer-events:none;background:repeating-linear-gradient(135deg,rgba(0,0,0,.5) 0 6px,rgba(0,0,0,.32) 6px 12px)}
+  .sec.voff{opacity:.35} .sec.voff .sn{text-decoration:line-through}
+  .sec .vord{display:inline-block;min-width:14px;margin-right:5px;padding:0 3px;border-radius:4px;background:rgba(0,0,0,.35);color:#fff;font-size:10px;text-align:center}
+  .song.stk{box-shadow:6px 5px 0 -1px #2a2a2e,12px 10px 0 -2px #232326;margin:0 12px 12px 0;background:#1a1d1c;outline:1px solid #22c3a644}
+  .song.stk.on{outline-color:#22c3a6}
+  .song .t .vn{display:block;font-size:11px;color:#7fe0cf;font-weight:400} .song .dots{display:flex;gap:3px;margin-top:3px} .song .dots i{width:5px;height:5px;border-radius:50%;background:#3d5a55} .song .dots i.on{background:#22c3a6}
+  .song .var{display:flex;gap:2px} .song .var button{width:22px;height:22px;border-radius:6px;background:#33333a;color:#e4e4e8;font-size:13px}
+  .song .var button:hover{background:#44444c}
+  .song.fl{animation:vfl .25s ease} .song.fr{animation:vfr .25s ease}
+  @keyframes vfl{from{transform:translateX(14px);opacity:.4}to{transform:none;opacity:1}} @keyframes vfr{from{transform:translateX(-14px);opacity:.4}to{transform:none;opacity:1}}
+  .secl{display:flex;align-items:center;gap:9px;padding:5px 2px;font-size:12.5px;border-radius:6px}
+  .secl.over{background:#26262a} .secl.dragging{opacity:.4}
+  .secl .sq{width:11px;height:11px;border-radius:3px;flex:none} .secl .sn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .secl .sn small{color:var(--muted);font-size:11px}
+  .secl .grip{color:#5a5a62;font-size:11px;cursor:grab}
+  .secl .ck{margin-left:auto;width:18px;height:18px;border-radius:5px;background:var(--blue,#0a84ff);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;flex:none}
+  .secl .ck.off{background:#3a3a40;color:transparent}
+  .secl.out .sn{color:var(--muted);text-decoration:line-through}
+  .rsong summary{cursor:pointer;list-style:none} .rsong summary::-webkit-details-marker{display:none} .rsong summary h3{margin:0}
+  /* ---- 6e: Perform ---- */
+  .perf{display:none;padding:22px 26px;grid-template-columns:minmax(0,1fr) 400px;gap:22px;overflow:auto;min-height:0}
+  body.pf .main{display:none} body.pf .perf{display:grid}
+  .perf .now{background:#1c1c1e;border-radius:14px;padding:22px;align-self:start}
+  .perf .now h1{font-size:40px;line-height:1.1;margin-top:4px} .perf .pmeta{color:var(--muted)} .perf .psub{color:var(--muted);margin-top:4px;font:13px var(--code,monospace)}
+  .pprog{height:10px;border-radius:5px;background:#2a2a2e;margin:18px 0 8px;position:relative;overflow:hidden} .pprog i{position:absolute;left:0;top:0;bottom:0}
+  .psecs{display:flex;gap:6px;margin-top:18px} .psec{flex:1;min-width:0;height:48px;border-radius:8px;background:var(--sc);opacity:.35;display:flex;align-items:center;padding:0 10px;color:#111;font-weight:700;font-size:13px;overflow:hidden;white-space:nowrap}
+  .psec span{overflow:hidden;text-overflow:ellipsis} .psec.on{opacity:1} .psec:not([disabled]):hover{opacity:.7} .psec.on:hover{opacity:1} .psec.px{cursor:default}
+  .psec.queued{opacity:1;animation:pblink .5s steps(2,start) infinite;box-shadow:0 0 0 2px #fff}
+  @keyframes pblink{to{filter:brightness(1.6)}}
+  .prow{display:flex;align-items:flex-end;gap:22px;margin-top:26px;flex-wrap:wrap} .pleft small,.pjt small{display:block;color:var(--muted);font-size:12px;margin-bottom:4px} .pleft b{font-size:64px;font-weight:700;line-height:1}
+  .ploop{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:10px;background:rgba(255,159,10,.15);color:var(--accent,#ff9f0a)} .ploop b{font-size:18px;letter-spacing:.06em}
+  .ploop[hidden]{display:none} .ploop .btn{background:var(--accent,#ff9f0a);color:#2b1600;font-weight:600} .ploop kbd,.pjt kbd{font:inherit;opacity:.7;margin-left:4px}
+  .pjt{margin-left:auto;display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+  .perf .nextc{background:#1c1c1e;border-radius:14px;padding:16px 18px;margin-bottom:12px} .perf .nextc h3{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px}
+  .pstack{position:relative;height:112px} .pstack .c{position:absolute;border-radius:12px} .pstack:not(.many) .b1,.pstack:not(.many) .b2{display:none}
+  .pstack .b2{top:20px;left:28px;right:0;height:86px;background:#232326} .pstack .b1{top:10px;left:14px;right:14px;height:92px;background:#2a2a2e}
+  .pstack .front{top:0;left:0;right:28px;height:100px;background:#1f2a28;border:2px solid #22c3a6;padding:12px 14px}
+  .pnt{display:flex;align-items:center;gap:10px} .pnt .bar{width:4px;height:30px;border-radius:2px} .pnt b{font-size:20px} .pvn{color:#7fe0cf;font-size:13px}
+  .pst{display:flex;gap:2px;height:16px;margin-top:12px} .pst i{border-radius:3px;display:block}
+  .par{position:absolute;right:12px;top:12px;display:flex;gap:6px} .par button{width:38px;height:38px;border-radius:10px;background:#33333a;font-size:18px;color:#fff} .par button:hover{background:#44444c}
+  .pload{font-size:12px;color:var(--muted);margin-top:8px} .pafter{font-size:12px;color:#c9c9cf;margin-top:4px} .pthen{padding:6px 4px}
   .rdet{margin:6px 0} .rdet summary{cursor:pointer;color:#c9c9cf;font-size:12.5px;padding:5px 0}
   /* ---- 6d: Settings sheet, status pill, gear ---- */
   .scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:900;display:flex;align-items:center;justify-content:center}
@@ -873,8 +922,8 @@
   <button class="ibtn on" id="tglR" title="Inspector  ]"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M10 2.5v11"/></svg></button>
   <div class="filebar"><button class="fbtn" id="fileBtn" title="New, Open, Open Recent, Save, Save As, Close">File ▾</button></div>
   <nav class="tabs">
-    <a class="on" href="1-arrange.html">Show</a>
-    <a href="3-satellite.html?mac" title="This computer’s own screen, full window">Perform</a>
+    <a class="on" href="#show" data-tab="show">Show</a>
+    <a href="#perform" data-tab="perform" title="The song playing, what’s next, live jumps and loops">Perform</a>
     <a href="5-band.html" title="The band’s screens">Band</a>
   </nav>
   <div class="transport">
@@ -935,6 +984,8 @@
     <div class="ibody" id="insp"></div>
   </aside>
 </div>
+
+<section class="perf" id="perf"></section>
 
 <div class="modalbg" id="modal"><div class="modal nsong" role="dialog" aria-label="New song">
   <header><span>New Song</span><button class="xbtn" id="mClose" title="Close  Esc"><svg viewBox="0 0 12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 3l6 6M9 3l-6 6"/></svg></button></header>
@@ -1160,18 +1211,107 @@ function altsOf(s,t){ s.malts=s.malts||{}; s.muse=s.muse||{}; if(!s.malts[t]){ c
 const curAlt=(s,t)=>altsOf(s,t).find(a=>a.id===s.muse[t])||altsOf(s,t)[0];
 function useAlt(s,t,id){ const a=altsOf(s,t).find(x=>x.id===id); if(!a) return; s.muse[t]=a.id; s.midi[t]=a.events; }
 function newAlt(s,t,copy,name){ const list=altsOf(s,t), src=curAlt(s,t); const a={id:'a'+altSeq++,name:name||(copy?src.name+' (alt)':'Alternate '+list.length),events:copy?src.events.map(e=>({...e,id:evId++})):[]}; list.push(a); useAlt(s,t,a.id); return a; }
-// ---------- song versions: each keeps its own sections, audio edits, levels, transition and choice of MIDI alternates ----------
+// ---------- song versions (6e): sections of one source arrangement ----------
+// The song's own tracks, clips, tempo map, sections, cues and MIDI are its source arrangement ("Album": everything in
+// order). A version is an ordered list of the source's sections (each on or off) plus optional version-only parts:
+// N bars with their own audio on a track only that version plays (s.vonly[track] = version id). Same stems, no copies.
+//   {id, name, def (default in new sets), order: [{k:'sec', id, on} | {k:'x', id, on}], extras: [{id, name, bars, track}]}
+// Versions from before 6e kept whole copies of the song's fields; one that can't be said as sections of the source
+// stays a "custom" version {id, name, custom: true, state} and plays exactly as it did (its sections can't be edited).
+// Each setlist entry plays its own version: list.vers[songId]; and has its own "After this song": list.after[songId].
 const VER_FIELDS=['secs','clips','gain','mute','solo','muse','trans','ck','cues'];
-let verSeq=1;
-function versOf(s){ if(!s.versions){ s.versions=[{id:'v'+verSeq++,name:'Album'}]; s.ver=s.versions[0].id; } return s.versions; }
-const curVer=s=>versOf(s).find(v=>v.id===s.ver)||versOf(s)[0];
+let verSeq=1, xSeq=1;
 const snapVer=s=>{ s.tracks.filter(t=>isMidiTrack(s,t)).forEach(t=>altsOf(s,t)); return JSON.parse(JSON.stringify(VER_FIELDS.reduce((o,k)=>(o[k]=s[k],o),{}))); };
-function switchVer(s,id){ if(id===s.ver) return; const from=curVer(s), to=versOf(s).find(v=>v.id===id); if(!to) return; from.state=snapVer(s);
-  if(to.state){ VER_FIELDS.forEach(k=>{ s[k]=JSON.parse(JSON.stringify(to.state[k]??null))??(k==='secs'?s.secs:k==='trans'?s.trans:undefined); }); if(!s.clips) s.clips={}; if(!s.muse) s.muse={}; }
-  s.ver=id; s.tracks.filter(t=>isMidiTrack(s,t)).forEach(t=>{ const a=altsOf(s,t).find(x=>x.id===s.muse[t])||altsOf(s,t)[0]; useAlt(s,t,a.id); });
-  if(selSec&&selSec.song===s.id) selSec=null; if(selClip&&selClip.song===s.id) selClip=null; buildBars(s); }
-function newVer(s,name){ const st=snapVer(s); curVer(s).state=st; const v={id:'v'+verSeq++,name:name||'Version '+(versOf(s).length+1),state:JSON.parse(JSON.stringify(st))}; s.versions.push(v); s.ver=v.id; return v; }
-function delVer(s,id){ const list=versOf(s); if(list.length<2) return; if(s.ver===id) switchVer(s,list.find(v=>v.id!==id).id); s.versions=list.filter(v=>v.id!==id); }
+function putFields(s,st){ VER_FIELDS.forEach(k=>{ if(k==='trans') return; /* transitions live on setlist entries now */ const v=st?st[k]:undefined; if(v===undefined||v===null){ if(k==='secs') s.secs=s.secs||[]; else if(k!=='trans') delete s[k]; } else s[k]=JSON.parse(JSON.stringify(v)); });
+  if(!s.clips) s.clips={}; if(!s.muse) s.muse={}; s.tracks.filter(t=>isMidiTrack(s,t)).forEach(t=>{ const a=altsOf(s,t).find(x=>x.id===s.muse[t])||altsOf(s,t)[0]; useAlt(s,t,a.id); }); }
+const fullOrder=s=>[...(s.secs||[])].sort((a,b)=>a.start-b.start).map(x=>({k:'sec',id:x.id,on:true}));
+function versOf(s){ if(!s.versions||!s.versions.length){ s.versions=[{id:'v'+verSeq++,name:'Album',def:true,order:fullOrder(s),extras:[]}]; s.ver=s.versions[0].id; }
+  if(!s.versions.some(v=>v.id===s.ver)) s.ver=s.versions[0].id; return s.versions; }
+const curVer=s=>versOf(s).find(v=>v.id===s.ver)||versOf(s)[0];
+const defVer=s=>versOf(s).find(v=>v.def)||versOf(s)[0];
+// the source's sections (the song's own, or kept aside while a custom version is shown)
+const srcSecs=s=>(curVer(s).custom&&s.srcState?s.srcState.secs:s.secs)||[];
+// Keeps a version's order in step with the source: new sections join where they are in the source (on), deleted ones go.
+function normVer(s,v){ if(v.custom) return v; const secs=[...srcSecs(s)].sort((a,b)=>a.start-b.start), ids=new Set(secs.map(x=>x.id)); v.extras=v.extras||[];
+  const xs=new Set(v.extras.map(x=>x.id)); v.order=(v.order||[]).filter(o=>o.k==='sec'?ids.has(o.id):xs.has(o.id));
+  secs.forEach((x,i)=>{ if(v.order.some(o=>o.k==='sec'&&o.id===x.id)) return; const prev=secs.slice(0,i).reverse().find(p=>v.order.some(o=>o.k==='sec'&&o.id===p.id));
+    const at=prev?v.order.findIndex(o=>o.k==='sec'&&o.id===prev.id)+1:0; v.order.splice(at,0,{k:'sec',id:x.id,on:true}); });
+  v.extras.forEach(x=>{ if(!v.order.some(o=>o.k==='x'&&o.id===x.id)) v.order.unshift({k:'x',id:x.id,on:true}); }); return v; }
+// Plays the whole source as it is (everything on, in order, nothing extra): no version layout at all.
+function isFullVer(s,v){ if(!v||v.custom) return !v; normVer(s,v); const full=fullOrder(s); return v.order.length===full.length&&v.order.every((o,i)=>o.k==='sec'&&o.on&&o.id===full[i].id); }
+// The parts a version plays, in order: source sections {bar, bars, secId} and version-only parts {extra, bars, xId}.
+function verParts(s,v){ normVer(s,v); const secs=srcSecs(s); return v.order.filter(o=>o.on).map(o=>{ if(o.k==='sec'){ const x=secs.find(q=>q.id===o.id); return x?{bar:x.start,bars:x.bars,secId:x.id,name:x.name,type:x.type}:null; }
+  const x=v.extras.find(q=>q.id===o.id); return x?{extra:true,bars:Math.max(1,x.bars|0),xId:x.id,name:x.name,track:x.track}:null; }).filter(Boolean); }
+// Version bar <-> source bar: [{vb, sb (0 for a version-only part), bars, extra, secId}]
+function verMap(s,v){ let vb=1; return verParts(s,v).map(p=>{ const m={vb,sb:p.extra?0:p.bar,bars:p.bars,extra:!!p.extra,secId:p.secId,xId:p.xId,name:p.name,type:p.type,track:p.track}; vb+=p.bars; return m; }); }
+// A version-only part's bar length in seconds: the tempo where it plays (the next section's start, else the previous one's end).
+function extraBarDur(s,m,i){ const nb=m.slice(i+1).find(x=>!x.extra), pb=m.slice(0,i).reverse().find(x=>!x.extra), b=nb?s.bars[nb.sb-1]:pb?s.bars[Math.min(pb.sb+pb.bars-1,s.total)-1]:s.bars[0]; return b?b.dur:2; }
+// How long a version plays, in seconds.
+function verLen(s,v){ if(!v||isFullVer(s,v)) return s.audio; if(v.custom) return v.state&&v.state.audio||s.audio; const m=verMap(s,v); let t=0;
+  m.forEach((p,i)=>{ if(p.extra){ t+=p.bars*extraBarDur(s,m,i); return; } const a=s.bars[p.sb-1], b=s.bars[Math.min(p.sb-1+p.bars,s.bars.length-1)]; if(a&&b) t+=b.t-a.t;
+    if(i===m.length-1&&p.sb+p.bars-1>=s.total) t+=Math.max(0,s.audio-s.len); });
+  return t; }
+// What the engine gets for a version (SongMapper: payload.version), or null for the whole source.
+function verPayload(s,v){ if(!v||v.custom||isFullVer(s,v)) return null; const only={}, parts=verParts(s,v).map((p,i)=>{ if(p.extra){ if(p.track) only[p.track]=i; return {extra:true,bars:p.bars,tag:i}; } return {bar:p.bar,bars:p.bars,tag:i}; });
+  return {parts,crossfadeMs:5,only}; }
+// Version-only tracks: shown and played only with their version.
+const vonlyOf=(s,t)=>(s.vonly||{})[t];
+const trackInVer=(s,t,v)=>!vonlyOf(s,t)||(v&&vonlyOf(s,t)===v.id);
+// ---- setlist entries ----
+const setOf=id=>setlists.find(l=>l.order.includes(id));
+function entryVerId(s,list){ list=list||curSetObj(); const id=list&&list.vers&&list.vers[s.id]; return versOf(s).some(v=>v.id===id)?id:defVer(s).id; }
+const entryVer=(s,list)=>versOf(s).find(v=>v.id===entryVerId(s,list));
+function setEntryVer(s,id,list){ list=list||curSetObj(); if(!list) return; (list.vers||(list.vers={}))[s.id]=id; }
+// The version a song plays now: its setlist entry's (in the current set), else the one shown in the Song view.
+const playVer=s=>setOrder.includes(s.id)?entryVer(s):curVer(s);
+const AFTER={stop:['','Stop'],segue:['↘','Segue'],auto:['⏵','Auto-next']};
+function afterOf(s,list){ list=list||curSetObj(); const a=list&&list.after&&list.after[s.id]; return a&&AFTER[a.mode]?{mode:a.mode,sec:a.sec||4}:{mode:'stop',sec:4}; }
+function setAfter(s,mode,sec,list){ list=list||curSetObj(); if(!list) return; snap(); const m=list.after||(list.after={}); if(mode==='stop') delete m[s.id]; else m[s.id]={mode,sec:Math.max(1,Math.min(60,Math.round(sec||4)))}; refresh(); }
+const afterLabel=a=>a.mode==='segue'?'↘ Segue':a.mode==='auto'?`⏵ Auto-next ${a.sec} s`:'';
+// ---- the version shown in the Song view (and the current set's entry) ----
+function showVer(s,id,keepEntry){ const to=versOf(s).find(v=>v.id===id); if(!to) return; const from=curVer(s);
+  if(from.id!==to.id){
+    if(from.custom){ from.state=snapVer(s); putFields(s,s.srcState); delete s.srcState; }
+    if(to.custom){ s.srcState=snapVer(s); putFields(s,to.state); }
+    s.ver=to.id; if(selSec&&selSec.song===s.id) selSec=null; if(selClip&&selClip.song===s.id) selClip=null; buildBars(s); }
+  if(!keepEntry&&setOrder.includes(s.id)) setEntryVer(s,to.id); }
+const switchVer=(s,id)=>showVer(s,id);
+// + Version: a copy of the version shown (its sections, order, version-only parts; a custom one its whole state)
+function newVer(s,name){ const v0=curVer(s); let v;
+  if(v0.custom) v={id:'v'+verSeq++,name:name||v0.name+' copy',custom:true,state:snapVer(s)};
+  else { normVer(s,v0); v={id:'v'+verSeq++,name:name||v0.name+' copy',order:v0.order.map(o=>({...o})),extras:v0.extras.map(x=>({...x}))}; }
+  versOf(s).push(v); showVer(s,v.id); return v; }
+function delVer(s,id){ const list=versOf(s); if(list.length<2) return; const v=list.find(x=>x.id===id); if(!v) return; if(s.ver===id) showVer(s,list.find(x=>x.id!==id).id,true);
+  s.versions=list.filter(x=>x.id!==id); if(v.def) s.versions[0].def=true;
+  (v.extras||[]).forEach(x=>{ const i=s.tracks.indexOf(x.track); if(i>=0&&vonlyOf(s,x.track)===id){ s.tracks.splice(i,1); delete s.vonly[x.track]; } });
+  setlists.forEach(l=>{ if(l.vers&&l.vers[s.id]===id) delete l.vers[s.id]; }); }
+// Version-only audio: one part of N bars (long enough for the file at the tempo where it plays) on its own track.
+function addVerAudio(s,v,list,refs,copy){ if(!v||v.custom) return; normVer(s,v); s.vonly=s.vonly||{};
+  list.forEach(x=>{ const base=(x.info.name||'Audio').replace(/\.[^.]+$/,'').trim()||'Audio'; let name=base+' ◆', n=2; while(s.tracks.includes(name)) name=base+' '+(n++)+' ◆';
+    const xid='x'+xSeq++; s.tracks.push(name); s.vonly[name]=v.id; s.files=s.files||{}; s.files[name]={path:refs[x.info.path]||x.info.path,ch:x.info.channels,rate:x.info.rate,frames:x.info.frames,len:x.info.seconds,fmt:x.info.format,copy:!!copy};
+    const firstSec=verMap(s,v).find(p=>!p.extra), bd=firstSec?s.bars[firstSec.sb-1].dur:s.bars[0].dur, bars=Math.max(1,Math.ceil((x.info.seconds||bd)/bd-1e-6));
+    v.extras.push({id:xid,name:base,bars,track:name}); v.order.unshift({k:'x',id:xid,on:true});
+    (s.clips||(s.clips={}))[name]=[{id:clipSeq++,start:0,end:x.info.seconds||bars*bd,off:0,gain:0,fi:0,fo:0,mute:false}]; });
+  buildBars(s); }
+// ---- shows saved before 6e: versions were whole copies of the song's fields ----
+// Sections were only markers then (nothing stopped or skipped at them), so what a version played came from its clips,
+// levels, mutes, MIDI alternates, click and cues. A version whose sound is the song's own becomes a version with every
+// section, in order (it played exactly that); one that sounds different stays a custom version with its own copy and
+// plays exactly as before. The version that played in the set (s.ver) is each setlist's entry, with its transition.
+function migrateVersions(o){ const tidyJ=v=>JSON.stringify(v===undefined?null:v,(k,x)=>x===false?undefined:x);
+  (o.songs||[]).forEach(s=>{ const L=s.versions; if(!Array.isArray(L)||!L.length||L.some(v=>v.order||v.custom)) return;
+    const v0=L[0], live=JSON.parse(JSON.stringify(VER_FIELDS.reduce((m,k)=>(m[k]=s[k],m),{}))), was=L.some(v=>v.id===s.ver)?s.ver:v0.id;
+    // the first version's fields become the song's own (the source); the one showing keeps its copy
+    if(was!==v0.id){ const cv=L.find(v=>v.id===was); cv.state=live; if(v0.state) VER_FIELDS.forEach(k=>{ if(v0.state[k]!==undefined) s[k]=JSON.parse(JSON.stringify(v0.state[k])); }); }
+    const trans=(was===v0.id?live:(L.find(v=>v.id===was).state||{})).trans||s.trans;
+    const secs=[...(s.secs||[])].filter(x=>x&&!Array.isArray(x)).sort((a,b)=>a.start-b.start), all=()=>secs.map(x=>({k:'sec',id:x.id,on:true}));
+    s.versions=L.map((v,i)=>{ if(i===0||!v.state) return {id:v.id,name:v.name,...(i===0?{def:true}:{}),order:all(),extras:[]};
+      const same=['clips','gain','mute','solo','muse','ck','cues'].every(k=>tidyJ(v.state[k])===tidyJ(s[k]));
+      return same?{id:v.id,name:v.name,order:all(),extras:[]}:{id:v.id,name:v.name,custom:true,state:v.state}; });
+    s.ver=v0.id; s.showVer=was;
+    (o.setlists||[]).forEach(l=>{ if(l.order&&l.order.includes(s.id)){ (l.vers||(l.vers={}))[s.id]=was; if(trans&&trans!=='stop') (l.after||(l.after={}))[s.id]={mode:trans==='auto'?'auto':'segue',sec:4}; } }); });
+  // every song's transition moves to its setlist entries
+  (o.songs||[]).forEach(s=>{ if(s.trans&&s.trans!=='stop') (o.setlists||[]).forEach(l=>{ if(l.order&&l.order.includes(s.id)&&!(l.after&&l.after[s.id])) (l.after||(l.after={}))[s.id]={mode:s.trans==='auto'?'auto':'segue',sec:4}; }); delete s.trans; }); }
 
 // An event's time; beats may be fractional (2.5 = an 8th after beat 2), placed on the grid.
 const evTime=(s,e)=>{ const b=s.bars[Math.min(e.bar,s.total)-1], u=Math.max(0,Math.min(b.sig[0]-1e-9,(e.beat||1)-1)), k=Math.floor(u), f=u-k, t0=b.beatT[k], t1=k+1<b.beatT.length?b.beatT[k+1]:b.t+b.dur; return t0+f*(t1-t0); };
@@ -1204,6 +1344,7 @@ function songMenu(e,id,where){ if(songSel.size>1&&songSel.has(id)){ const ids=[.
   ctxMenu(e,[{label:open.has(id)?'Close':'Open',icon:'›',act:()=>{ open.has(id)?open.delete(id):open.add(id); select(id,false); renderFolders(); }},
     {label:'Rename…',icon:'✎',act:()=>renameSong(id)},
     {label:'Colour ▸',icon:'●',act:()=>swatchPop({left:e.clientX+150,right:e.clientX+150,top:e.clientY},s.col,c=>{ snap(); s.col=c; refresh(); })},
+    ...(inSet?[{label:'After this song ▸',icon:'↘',act:()=>afterMenu(e,s)}]:[]),
     '-',
     inSet?{label:'Remove from this setlist',icon:'−',act:()=>{ setOrder.splice(i,1); refresh(); toast(`Removed “${s.name}” from ${curSetObj().name}`,()=>{ setOrder.splice(i,0,id); refresh(); }); }}:{label:`Add to ${curSetObj().name}`,icon:'＋',act:()=>{ setOrder.push(id); refresh(); }},
     ...(inSet?[{label:'Move to top',icon:'↑',dis:i===0,act:()=>{ setOrder.splice(i,1); setOrder.unshift(id); refresh(); }},{label:'Move to bottom',icon:'↓',dis:i===setOrder.length-1,act:()=>{ setOrder.splice(i,1); setOrder.push(id); refresh(); }}]:[]),
@@ -1248,6 +1389,7 @@ function deleteSongs(ids,from){ ids=ids.filter(id=>songs.some(s=>s.id===id)); if
   confirmBox('Delete '+(n>1?n+' songs':'“'+esc(names[0])+'”')+'?',body,n>1?'Delete '+n+' songs':'Delete song',del); }
 // New songs get the palette colour after the last song's (6d).
 function nextSongCol(){ const last=songs[songs.length-1], i=last?PAL.indexOf(String(last.col).toLowerCase()):-1; return PAL[(i>=0?i+1:songs.length)%PAL.length]; }
+function renameVerBox(s,id,el){ const v=versOf(s).find(x=>x.id===id); if(!v) return; const r=el.getBoundingClientRect(); floatInput(r.left,r.top-2,Math.max(160,r.width),24,v.name,n=>{ if(!n||n===v.name) return; snap(); v.name=n; refresh(); }); }
 function renameSong(id){ const s=songs.find(x=>x.id===id); open.add(id); select(id,false); renderFolders(); const nm=document.querySelector(`.folder[data-id="${id}"] .fh .nm`); if(!nm) return;
   nm.innerHTML=`<input value="${esc(s.name)}" style="font:inherit;width:100%;height:26px;padding:2px 6px">`; const i=nm.firstChild; i.onclick=e=>e.stopPropagation(); i.onpointerdown=e=>e.stopPropagation(); i.focus(); i.select();
   const done=()=>{ s.name=i.value.trim()||s.name; refresh(); }; i.onblur=done; i.onkeydown=e=>{ if(e.key==='Enter') i.blur(); if(e.key==='Escape'){ i.value=s.name; i.blur(); } }; }
@@ -1322,17 +1464,30 @@ function aboutBox(info){ const bg=document.createElement('div'); bg.className='c
 function toast(msg,undo){ let t=$('toastE'); if(!t){ t=document.createElement('div'); t.id='toastE'; t.className='toastE'; document.body.appendChild(t); }
   t.innerHTML=`<span></span>${undo?'<button>Undo</button>':''}`; t.firstChild.textContent=msg; t.classList.add('show'); clearTimeout(toast.h);
   if(undo) t.querySelector('button').onclick=()=>{ t.classList.remove('show'); undo(); }; toast.h=setTimeout(()=>t.classList.remove('show'),undo?7000:2600); }
+// Flip the version a setlist entry plays (the setlist's ‹ ›, the wheel, Perform's Up next). The song playing can't change.
+function flipVer(s,d,list){ list=list||curSetObj(); const vs=versOf(s); if(vs.length<2) return false; if(playing&&playId===s.id&&list===curSetObj()){ toast('“'+s.name+'” is playing: its version changes after it'); return false; }
+  const i=vs.findIndex(v=>v.id===entryVerId(s,list)), n=vs[(i+d+vs.length)%vs.length]; setEntryVer(s,n.id,list); if(selId===s.id) showVer(s,n.id,true);
+  const row=document.querySelector(`#songs .song[data-id="${s.id}"]`); refresh(); const r2=document.querySelector(`#songs .song[data-id="${s.id}"]`); if(r2){ r2.classList.add(d>0?'fl':'fr'); setTimeout(()=>r2.classList.remove('fl','fr'),260); }
+  if(window.SLE&&SLE.nextChanged) SLE.nextChanged(); return true; }
+// "After this song": Stop (the default), Segue, Auto-next after N s; per setlist entry.
+function afterMenu(e,s){ const a=afterOf(s), it=(m,sec,label)=>({label,icon:a.mode===m&&(m!=='auto'||a.sec===sec)?'✓':'',act:()=>setAfter(s,m,sec)});
+  ctxMenu(e,[{cap:'After this song'},it('stop',4,'Stop, ready for Play'),it('segue',4,'Segue into the next song'),it('auto',2,'Auto-next after 2 s'),it('auto',4,'Auto-next after 4 s'),it('auto',8,'Auto-next after 8 s'),
+    {label:'Auto-next after…',icon:a.mode==='auto'&&![2,4,8].includes(a.sec)?'✓':'',act:()=>{ const r=e.target&&e.target.getBoundingClientRect?e.target.getBoundingClientRect():{left:e.clientX,top:e.clientY,height:20}; floatInput(r.left,r.top,90,24,String(a.sec),v=>{ const n=parseFloat(v); if(n>0) setAfter(s,'auto',n); }); }}]); }
 function renderSetlist(){
   syncSet(); if(!$('setName')) renderSetHead();
   const el=$('songs'); el.innerHTML='';
   setOrder.forEach((id,i)=>{
     const s=songs.find(x=>x.id===id);
-    el.insertAdjacentHTML('beforeend',`<div class="song ${s.id===selId?'on':''}" draggable="true" data-id="${s.id}"><span class="n">${i+1}</span><span class="sbar" style="background:${s.col||'#5a5a62'}"></span><span class="t">${esc(s.name)}</span><span class="d">${fmt(s.audio)}</span><button class="rmx" data-id="${s.id}" title="Remove from this setlist">×</button>${s.id===selId&&versOf(s).length>1?`<span class="vrow">${verSelect(s)}</span>`:''}</div>`);
-    if(i<setOrder.length-1){ const [ic,lab]=TRANS[s.trans]; el.insertAdjacentHTML('beforeend',`<div class="tr ${s.trans}" data-id="${s.id}" title="Click to change"><i>${ic}</i>${lab}</div>`); }
+    // a song with 2+ versions is a stack of cards: the front card says which version this set plays (‹ › or the wheel flips it)
+    const vs=versOf(s), ev=entryVer(s), many=vs.length>1, vi=vs.indexOf(ev), xtra=!ev.custom&&verParts(s,ev).some(p=>p.extra);
+    el.insertAdjacentHTML('beforeend',`<div class="song ${s.id===selId?'on':''} ${many?'stk':''}" draggable="true" data-id="${s.id}"><span class="n">${i+1}</span><span class="sbar" style="background:${s.col||'#5a5a62'}"></span><span class="t">${esc(s.name)}${many?`<span class="vn">${esc(ev.name)}${xtra?' ◆':''} · ${fmt(verLen(s,ev))}</span><span class="dots">${vs.map((_,j)=>`<i class="${j===vi?'on':''}"></i>`).join('')}</span>`:''}</span>${many?`<span class="var"><button class="vprev" title="Previous version">‹</button><button class="vnext" title="Next version">›</button></span>`:`<span class="d">${fmt(verLen(s,ev))}</span>`}<button class="rmx" data-id="${s.id}" title="Remove from this setlist">×</button></div>`);
+    const al=afterLabel(afterOf(s)); if(al&&i<setOrder.length-1) el.insertAdjacentHTML('beforeend',`<div class="tr ${afterOf(s).mode}" data-id="${s.id}" title="After this song (right-click the song to change)">${al}</div>`);
   });
-  wireVerSelects(el);
+  el.querySelectorAll('.song.stk').forEach(row=>{ const s=songs.find(x=>x.id===row.dataset.id); const flip=d=>{ flipVer(s,d); row.classList.remove('fl','fr'); };
+    row.querySelector('.vprev').onclick=e=>{ e.stopPropagation(); flipVer(s,-1); }; row.querySelector('.vnext').onclick=e=>{ e.stopPropagation(); flipVer(s,1); };
+    row.onwheel=e=>{ e.preventDefault(); const now=performance.now(); if(now-(row._w||0)<220) return; row._w=now; flipVer(s,e.deltaY>0||e.deltaX>0?1:-1); }; });
   if(!setOrder.length) el.innerHTML='<div class="blank sm" style="padding:28px 10px"><div class="bs">'+(songs.length?'Drag songs here from below to build the set.':'Songs you add will show up below. Drag them here to build the set.')+'</div></div>';
-  $('setLen').textContent=fmt(setOrder.reduce((a,id)=>a+songs.find(x=>x.id===id).audio,0));
+  $('setLen').textContent=fmt(setOrder.reduce((a,id)=>{ const s=songs.find(x=>x.id===id); return a+verLen(s,entryVer(s)); },0));
   const pool=songs.filter(s=>!setOrder.includes(s.id)).sort(byName);
   $('poolSum').innerHTML=`<span>Not in this set · ${pool.length}</span>`;
   $('pool').innerHTML=pool.map(s=>`<div class="ps" draggable="true" data-id="${s.id}" title="Drag into the set, or double-click"><span class="sbar" style="background:${s.col||'#5a5a62'}"></span><span>${esc(s.name)}</span><span>${fmt(s.audio)}</span><button class="addx" data-id="${s.id}" title="Add to the end of this setlist">＋</button></div>`).join('')||'<div class="faint" style="font-size:11.5px;padding:4px 8px 8px">Every song is in this setlist.</div>';
@@ -1342,7 +1497,7 @@ function renderSetlist(){
   $('pool').querySelectorAll('.ps').forEach(r=>r.onclick=e=>{ if(e.target.closest('.addx')) return; if(songRowClick(e,r.dataset.id,'pool',poolOrder())) return; select(r.dataset.id,true); });
   markSongSel();
   el.querySelectorAll('.song').forEach(row=>{
-    row.onclick=e=>{ if(e.target.closest('.rmx,.xs')) return; if(songRowClick(e,row.dataset.id,'set',[...setOrder])) return; select(row.dataset.id,true); };
+    row.onclick=e=>{ if(e.target.closest('.rmx,.xs,.var')) return; if(songRowClick(e,row.dataset.id,'set',[...setOrder])) return; select(row.dataset.id,true); };
     row.oncontextmenu=e=>{ e.preventDefault(); songMenu(e,row.dataset.id,'set'); };
     row.ondragstart=()=>{dragId=row.dataset.id; dragFrom='set'; row.classList.add('dragging');};
     row.ondragend=()=>row.classList.remove('dragging');
@@ -1350,7 +1505,7 @@ function renderSetlist(){
     row.ondragleave=()=>row.classList.remove('over');
     row.ondrop=e=>{e.preventDefault(); e.stopPropagation(); const to=setOrder.indexOf(row.dataset.id); setOrder=setOrder.filter(x=>x!==dragId); setOrder.splice(to,0,dragId); refresh();};
   });
-  el.querySelectorAll('.tr').forEach(tr=>tr.onclick=()=>{ const s=songs.find(x=>x.id===tr.dataset.id); const o=['segue','stop','auto']; s.trans=o[(o.indexOf(s.trans)+1)%3]; renderSetlist(); });
+  el.querySelectorAll('.tr').forEach(tr=>tr.onclick=e=>{ const s=songs.find(x=>x.id===tr.dataset.id); afterMenu(e,s); });
   document.querySelectorAll('#pool .ps').forEach(p=>{ p.ondragstart=()=>{dragId=p.dataset.id; dragFrom='pool';}; p.ondblclick=()=>{setOrder.push(p.dataset.id); refresh();}; });
 }
 $('songs').ondragover=e=>{e.preventDefault(); $('songs').classList.add('dropzone');};
@@ -1409,7 +1564,7 @@ function renderHero(){ const h=$('hero'), s=focusSong(); document.querySelector(
     <div class="hl"><button class="hback" id="hBack">←&nbsp; All songs</button>
       <div class="htitle">${si>=0?`<span class="hnum">${String(si+1).padStart(2,'0')}</span>`:''}<h2>${esc(s.name)}</h2>${verSelect(s,'hver')}</div>
       <div class="hmeta"><span><b>${+s.tmap[0].bpm}</b> BPM${ch?` <em>· ${ch} change${ch>1?'s':''}</em>`:''}</span><span><b>${s.tmap[0].sig.join('/')}</b></span><span>Key <b>${esc(s.key)}</b></span><span><b>${fmt(s.audio)}</b></span><span><b>${s.total}</b> bars</span>
-        ${si>=0?`<span class="hnext">${nx?`Then <b>${esc(nx.name)}</b> <i class="${s.trans}">${TRANS[s.trans][0]} ${TRANS[s.trans][1]}</i>`:'<b>Last song</b> in the set'}</span>`:'<span class="hnext">Not in this setlist</span>'}</div></div>
+        ${si>=0?`<span class="hnext">${nx?`Then <b>${esc(nx.name)}</b> <i class="${afterOf(s).mode}">${afterLabel(afterOf(s))||'■ Stop'}</i>`:'<b>Last song</b> in the set'}</span>`:'<span class="hnext">Not in this setlist</span>'}</div></div>
     <div class="hr"><button class="hnav" id="hPrev" ${prev?'':'disabled'} title="${prev?esc(prev.name):''}">‹</button><button class="hplay" id="hPlay">▶&nbsp; Play from top</button><button class="hnav" id="hNext" ${next?'':'disabled'} title="${next?esc(next.name):''}">›</button></div></div>
     <div class="hsec">${s.secPos.map(p=>`<button style="left:${x(p.start)}%;width:${x(p.start+p.bars)-x(p.start)}%;--sc:${SEC_C[p.type]}" data-t="${s.bars[p.start-1].t}" title="${esc(p.name)} · ${p.bars} bars"><span>${esc(p.name)}</span></button>`).join('')}<i class="hph" id="hph"></i></div>`;
   $('hBack').onclick=closeSong; if(prev) $('hPrev').onclick=()=>openSong(prev.id); if(next) $('hNext').onclick=()=>openSong(next.id);
@@ -1627,6 +1782,24 @@ function wireSecLane(lane){ const s=songs.find(x=>x.id===lane.dataset.song), tAt
         el.style.left=(xOf(so.start)+1)+'px'; el.style.width=(xOf(so.start+so.bars)-xOf(so.start)-2)+'px'; showTip(`${so.name} · bars ${so.start}–${so.start+so.bars-1} (${so.bars})`,m); };
       const up=()=>{ document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up); hideTip(); if(moved){ undoS.push(pre); redoS=[]; buildBars(s); } selectSec(s.id,id); };
       document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); }; }); }
+// ---- the Versions strip (6e): one row per version, its parts as section colours on a shared bar scale ----
+const VX_COL='#bf5af2';
+function verStrip(s,v,max){ let parts, bars=0;
+  if(v.custom) parts=[...((v.state&&v.state.secs)||[])].filter(x=>!Array.isArray(x)).sort((a,b)=>a.start-b.start).map(x=>({bars:x.bars,type:x.type,name:x.name}));
+  else parts=verParts(s,v);
+  parts.forEach(p=>bars+=p.bars);
+  return parts.map(p=>`<i style="flex:${p.bars};background:${p.extra?VX_COL:SEC_C[p.type]||'#7d8696'}" title="${esc(p.name||'')} · ${p.bars} bars"></i>`).join('')+(bars<max?`<i style="flex:${max-bars};background:transparent"></i>`:''); }
+function verBars(s,v){ return v.custom?((v.state&&v.state.secs)||[]).reduce((a,x)=>a+(x.bars||0),0):verParts(s,v).reduce((a,p)=>a+p.bars,0); }
+function verStripHTML(s){ const vs=versOf(s), max=Math.max(1,...vs.map(v=>verBars(s,v)));
+  return `<div class="vstrip" data-song="${s.id}"><div class="vh"><span>Versions</span><button class="vadd" data-song="${s.id}" title="A copy of the version shown">＋ Version</button></div>${vs.map(v=>{ const x=!v.custom&&verParts(s,v).some(p=>p.extra);
+    return `<div class="vr ${v.id===s.ver?'on':''}" data-song="${s.id}" data-v="${v.id}"><span class="vnm" title="Double-click to rename">${esc(v.name)}${x?' <b class="vdia">◆</b>':''}${v.custom?' <em>custom</em>':''}${v.def&&vs.length>1?' <em>default</em>':''}</span><div class="st">${verStrip(s,v,max)}</div><small>${fmt(verLen(s,v))}</small></div>`; }).join('')}</div>`; }
+// sections the version shown leaves out (dimmed on the timeline); a reordered version numbers its sections
+const secOff=(s,id)=>{ const v=curVer(s); if(v.custom) return false; normVer(s,v); const o=v.order.find(q=>q.k==='sec'&&q.id===id); return !!o&&!o.on; };
+function secOrd(s,id){ const v=curVer(s); if(v.custom||isFullVer(s,v)) return 0; const on=v.order.filter(o=>o.on), i=on.findIndex(o=>o.k==='sec'&&o.id===id); if(i<0) return 0;
+  const src=[...s.secs].sort((a,b)=>a.start-b.start).map(x=>x.id).filter(x=>on.some(o=>o.k==='sec'&&o.id===x)), mine=on.filter(o=>o.k==='sec').map(o=>o.id);
+  return JSON.stringify(src)===JSON.stringify(mine)&&!on.some(o=>o.k==='x')?0:i+1; }
+function verSkipHTML(s,x){ const v=curVer(s); if(v.custom||isFullVer(s,v)) return '';
+  return s.secPos.filter(p=>secOff(s,p.id)).map(p=>`<i class="vskip" style="left:calc(var(--head) + ${x(p.start)}px);width:${x(p.start+p.bars)-x(p.start)}px" title="Not in “${esc(v.name)}”"></i>`).join(''); }
 function renderFolders(){
   const sc=$('scroller'); sc.style.setProperty('--vw',sc.clientWidth+'px'); const keepT=sc.scrollTop, keepL=sc.scrollLeft; sc.innerHTML='';
   $('sessCount').textContent=`${songs.length} song${songs.length===1?'':'s'}`;
@@ -1641,7 +1814,7 @@ function renderFolders(){
           <button class="fmore" data-song="${id}" title="Song options">⋯</button><button class="fplay" data-song="${id}" title="Play from the top">▶</button><span class="num ${si<0?'':'in'}" data-tip="${si<0?'Not in this setlist':'Position in this setlist'}">${si<0?'':String(si+1).padStart(2,'0')}</span></div>
         <div class="lane" style="width:${W}px"><div class="freg" data-song="${id}" style="--c:${s.col};width:${s.audio*PXS}px"><span class="frl">${esc(s.name)}${versOf(s).length>1?` <span style="color:var(--cyan);font-weight:500">· ${esc(curVer(s).name)}</span>`:''}<em>${s.tmap[0].bpm} BPM · ${s.tmap[0].sig.join('/')} · ${esc(s.key)} · ${fmt(s.audio)}</em></span>
           <span class="fsec">${s.secPos.map(p=>`<i data-t="${s.bars[p.start-1].t}" title="${esc(p.name)}" style="left:${x(p.start)}px;width:${x(p.start+p.bars)-x(p.start)-1}px;background:${SEC_C[p.type]}"><em>${esc(p.name)}</em></i>`).join('')}</span><i class="fph" data-ph="${id}"></i></div></div></div>
-      <div class="fbody"><canvas class="fgrid" data-song="${id}"></canvas>`;
+      <div class="fbody"><canvas class="fgrid" data-song="${id}"></canvas>${verStripHTML(s)}${verSkipHTML(s,x)}`;
     // ruler with meter changes inline
     const labs=[]; s.bars.slice(0,s.total).forEach(b=>{ const ev=s.tmap.find(e=>e.bar===b.bar&&e.sig&&b.bar>1); const X=b.t*PXS, prev=labs[labs.length-1];
       if(ev && prev && X-prev.x<prev.w && prev.ev){ prev.extra+=` → ${b.bar} ${b.sig.join('/')}`; prev.w=(String(prev.bar).length+prev.extra.length+1)*6.2+10; return; }
@@ -1656,9 +1829,10 @@ function renderFolders(){
     const pts=s.tmap.map((e,i)=>e.bpm?`<div class="tp ${tsel&&tsel.song===id&&tsel.i===i?'sel':''} ${i===0?'first':''} ${yy(e.bpm)<22?'dn':''}" data-i="${i}" style="left:${x(e.bar)}px;top:${yy(e.bpm)}px" data-tip="Drag up/down for tempo, sideways to move. Alt = fine. Double-click to type."><b>${e.ramp?'↗ ':''}${+e.bpm.toFixed(2)}</b></div>`:'').join('');
     h+=`<div class="row tempo"><div class="lh" data-tip="Drag points to change tempo · double-click the lane to add one">Tempo<span class="lhv">${+bpmAt(s,1).toFixed(2)}</span></div><div class="lane" data-song="${id}" style="width:${W}px;height:${TL}px"><svg width="${W}" height="${TL}" style="position:absolute;inset:0;pointer-events:none"><defs><linearGradient id="tg-${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--cyan)" stop-opacity=".22"/><stop offset="1" stop-color="var(--cyan)" stop-opacity="0"/></linearGradient></defs><path d="${area}" fill="url(#tg-${id})"/><path d="${path}" fill="none" stroke="var(--cyan)" stroke-width="1.5"/></svg>${pts}</div></div>`;
     const EB={loop:'⟲',hold:'⏸',stop:'■'};
-    h+=`<div class="row secs"><div class="lh" data-tip="Drag across empty space to add a section · drag to move · edges resize · double-click to rename · right-click for options">Sections<button class="lhadd" data-song="${id}" title="Add a section at the playhead">＋</button></div><div class="lane" data-song="${id}" style="width:${W}px">${s.secPos.length?'':'<span class="lanehint">Drag across this lane to add a section</span>'}${s.secPos.map(p=>`<div class="sec ${selSec&&selSec.song===id&&selSec.id===p.id?'sel':''}" data-sid="${p.id}" style="left:${x(p.start)+1}px;width:${x(p.start+p.bars)-x(p.start)-2}px;background:${SEC_C[p.type]}"><i class="se l"></i>${EB[p.end]?`<span class="eb">${EB[p.end]}</span>`:''}<span class="sn">${esc(p.name)}</span><i class="se r"></i></div>`).join('')}</div></div>`;
+    h+=`<div class="row secs"><div class="lh" data-tip="Drag across empty space to add a section · drag to move · edges resize · double-click to rename · right-click for options">Sections<button class="lhadd" data-song="${id}" title="Add a section at the playhead">＋</button></div><div class="lane" data-song="${id}" style="width:${W}px">${s.secPos.length?'':'<span class="lanehint">Drag across this lane to add a section</span>'}${s.secPos.map(p=>`<div class="sec ${selSec&&selSec.song===id&&selSec.id===p.id?'sel':''} ${secOff(s,p.id)?'voff':''}" data-sid="${p.id}" ${secOff(s,p.id)?`title="Not in “${esc(curVer(s).name)}”"`:''} style="left:${x(p.start)+1}px;width:${x(p.start+p.bars)-x(p.start)-2}px;background:${SEC_C[p.type]}"><i class="se l"></i>${EB[p.end]?`<span class="eb">${EB[p.end]}</span>`:''}<span class="sn">${secOrd(s,p.id)?`<b class="vord">${secOrd(s,p.id)}</b>`:''}${esc(p.name)}</span><i class="se r"></i></div>`).join('')}</div></div>`;
     // Track headers (6d): colour tab, type icon, name, output chip, fader, M / S, meter (MIDI: port · channel, M only)
     s.tracks.forEach((t,ti)=>{
+      if(!trackInVer(s,t,curVer(s))) return; // another version's own audio
       const mid=isMidiTrack(s,t), kind=trackKind(s,t), c=trackCol(s,t), off=mid?!!(s.mute||{})[t]:isOff(s,t), solo=!!(s.solo||{})[t], v=gainOf(s,t), dt=esc(t);
       const chip=mid?`${esc(portShort(s.midiCfg[t].port))} · Ch ${s.midiCfg[t].ch}`:(routeOf(s,t)?esc(routeOf(s,t)):'No output');
       h+=`<div class="row trk ${mid?'midi':''} ${off?'muted':''}"><div class="lh" data-song="${id}" data-track="${dt}">
@@ -1685,6 +1859,9 @@ function renderFolders(){
   sc.querySelectorAll('.tempo .lane').forEach(l=>l.ondblclick=e=>{ if(e.target.closest('.tp')) return; const s=songs.find(x=>x.id===l.dataset.song), t=(e.clientX-l.getBoundingClientRect().left)/PXS;
     const b=s.bars.find((bb,i)=>t>=bb.t&&t<s.bars[i+1]?.t); if(!b||b.bar===1) return; addPoint(s,{bar:b.bar,bpm:Math.round(bpmAt(s,b.bar))}); tsel={song:s.id,i:s.tmap.findIndex(x=>x.bar===b.bar)}; setTimeout(()=>openTpop(true),30); });
   sc.querySelectorAll('.addT').forEach(b=>b.onclick=()=>addTrack(songs.find(x=>x.id===b.dataset.song),b.dataset.k));
+  sc.querySelectorAll('.vstrip .vr').forEach(r=>{ r.onclick=()=>{ const s=songs.find(x=>x.id===r.dataset.song); snap(); showVer(s,r.dataset.v); selId=s.id; selSec=null; trackOpen=null; refresh(); if(window.SLE&&SLE.nextChanged) SLE.nextChanged(); };
+    r.querySelector('.vnm').ondblclick=e=>{ e.stopPropagation(); renameVerBox(songs.find(x=>x.id===r.dataset.song),r.dataset.v,r.querySelector('.vnm')); }; });
+  sc.querySelectorAll('.vstrip .vadd').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const s=songs.find(x=>x.id===b.dataset.song); snap(); const v=newVer(s); selId=s.id; trackOpen=null; selSec=null; refresh(); const el=document.querySelector(`.vstrip .vr[data-v="${v.id}"] .vnm`); if(el) renameVerBox(s,v.id,el); });
   sc.querySelectorAll('.trk .lh').forEach(lh=>lh.onclick=e=>{ if(e.target.closest('button,input,select,label,.hf,.ms,.hm,.ctab')) return; const s=songs.find(x=>x.id===lh.dataset.song); openTrack(s,lh.dataset.track); });
   sc.querySelectorAll('.trk .lh .tn').forEach(n=>n.ondblclick=e=>{ e.stopPropagation(); const lh=n.closest('.lh'), s=songs.find(x=>x.id===lh.dataset.song), t=lh.dataset.track; renameTrackBox(s,t,n); });
   sc.querySelectorAll('.trk .lh .ctab').forEach(c=>c.onclick=e=>{ e.stopPropagation(); const lh=c.closest('.lh'), s=songs.find(x=>x.id===lh.dataset.song), t=lh.dataset.track;
@@ -2435,17 +2612,32 @@ function renderInsp(){
   if(ctxHTML){ $('inspTitle').innerHTML=`<button class="iback" id="iBack">‹ ${esc(s.name)}</button>`; $('insp').innerHTML=ctxHTML; wireMultiPanel(s); wireTrackPanel(s); $('iBack').onclick=()=>{ clearMulti(); trackOpen=null; setTimeout(markTrack); clickOpen=false; cueOpen=false; selClip=null; selSec=null; const p=pick; pick=null; if(p){ const so=songs.find(x=>x.id===p.song); so&&redrawSong(so); } refresh(); };
     wireSecPanel(s); wireClipPanel(s); wireClickPanel(s); wireCuePanel(s); wirePickPanel(s); return; }
   $('inspTitle').textContent='Song';
-  $('insp').innerHTML=`
-    <div class="ititle"><i style="background:${s.col}"></i>${esc(s.name)}</div>
-    <div class="isub">${s.total} bars · ${fmt(s.audio)}</div>
-    <div class="sect verlist" style="border-top:0;padding-top:4px"><h3><span data-tip="Each version keeps its own sections, audio edits, levels, transition and MIDI alternates. Stems and tempo map are shared.">Versions</span><button id="verAdd" title="New version (copy of the current one)">＋</button></h3>
-      ${versOf(s).map(v=>`<div class="vr ${v.id===s.ver?'on':''}" data-v="${v.id}"><span class="dot2" title="Use this version"></span><input value="${esc(v.name)}">${versOf(s).length>1?`<button class="x" title="Delete version">×</button>`:''}</div>`).join('')}
-      <div class="faint" style="font-size:11px;margin-top:4px">The selected version is what plays in the set.</div></div>
-    <div class="sect"><div class="kv" style="margin:0"><label>Key</label><input value="${esc(s.key)}"></div></div>
+  // Nothing selected (6e): the version shown — its sections (tick, drag to reorder), version-only audio, name, default,
+  // delete — the setlist entry's "After this song", then the song itself (key, tempo map) in a closed card.
+  const V=curVer(s), vs=versOf(s), vi=vs.indexOf(V)+1, inSet=setOrder.includes(s.id), af=afterOf(s);
+  let vh='';
+  if(V.custom) vh=rcard('Sections in this version','<p class="rnote" id="vCustom">A version kept from before song versions: its own sections and edits, played exactly as before. Its sections can’t be picked here; make a new version to use the song’s sections.</p>');
+  else { normVer(s,V); const secs=srcSecs(s);
+    vh=rcard('Sections in this version',`<div id="vSecs">${V.order.map((o,i)=>{ const x=o.k==='sec'?secs.find(q=>q.id===o.id):V.extras.find(q=>q.id===o.id); if(!x) return '';
+      const col=o.k==='x'?VX_COL:SEC_C[x.type]||'#7d8696';
+      return `<div class="secl ${o.on?'':'out'}" draggable="true" data-i="${i}"><span class="grip" title="Drag to reorder">⋮⋮</span><span class="sq" style="background:${col}"></span><span class="sn">${esc(x.name)}${o.k==='x'?' <small>· this version only</small>':''}</span><button class="ck ${o.on?'':'off'}" data-i="${i}" title="${o.on?'In this version (click to drop it)':'Left out (click to put it back)'}">✓</button></div>`; }).join('')}</div>
+      <p class="rnote">Untick to drop a section, drag to reorder. Same stems, no copies.</p>`); }
+  vh+=rcard('Version',rrow('Name',`<input id="vName" value="${esc(V.name)}" spellcheck="false">`)
+    +rrow('Default in new sets',tog('vDef',!!V.def,'The version a song plays when it’s added to a setlist'))
+    +(V.custom?'':rrow('Add audio just for this version',`<button class="sel2" id="vAudio" data-vaudio="${V.id}" title="Pick files, or drop them here">Drop files…</button>`))
+    +`<button class="rdanger" id="vDel" ${vs.length<2?'disabled style="opacity:.4" title="A song keeps at least one version"':''}>Delete version…</button>`);
+  if(inSet) vh+=rcard('After this song',rrow('In '+esc(curSetObj().name),segm('vAfter',[['stop','Stop'],['segue','Segue'],['auto','Auto-next']],af.mode))
+    +(af.mode==='auto'?rrow('Wait',`<span class="rsl"><input type="number" id="vAfterSec" min="1" max="60" step="1" value="${af.sec}" style="width:60px"> s</span>`):'')
+    +`<p class="rnote">${af.mode==='segue'?'The next song starts on the very next sample (gapless).':af.mode==='auto'?'Stops, waits, then starts the next song.':'Stops at the end and selects the next song, ready for Play.'}</p>`);
+  $('insp').innerHTML=`<div class="rh"><span class="sq" style="background:${s.col}"></span><h2 title="${esc(s.name)}">${esc(V.name)}</h2><small>${vs.length>1?`Version ${vi} of ${vs.length}`:esc(s.name)}</small></div>${vh}
+    <details class="rcard rsong" ${songCardOpen?'open':''} id="songCard"><summary><h3 style="display:inline">Song</h3> <span class="faint" style="font-size:11px">${esc(s.name)} · ${s.total} bars · ${fmt(s.audio)}</span></summary>
+    <div class="sect"><div class="kv" style="margin:0"><label>Key</label><input id="sKey" value="${esc(s.key)}"></div></div>
     <div class="sect" style="margin-top:12px"><h3><span data-tip="Moves the grid only (click, cues, jumps, MIDI). Stems never change. Ramp = glide from the previous tempo to this one. Arrow keys nudge BPM (Shift ±10, Alt ±0.1).">Tempo map</span><button id="addRow" title="Add change">＋</button></h3>
       <table class="tmap"><tr><th>Bar</th><th>BPM</th><th>Meter</th><th></th><th></th><th></th></tr>${rows}</table>
       <div class="acts"><button class="btn line">Import MIDI file…</button><button class="btn" id="resetMap">Revert</button></div></div>
+    <div class="acts" style="margin-top:10px"><button class="btn line" id="sDup">Duplicate song</button><button class="btn danger" id="sDelSong">Delete song…</button></div></details>
 `;
+  wireVerPanel(s,V);
   $('insp').querySelectorAll('.tmap tr[data-i]').forEach(tr=>{ const e=s.tmap[+tr.dataset.i];
     tr.querySelectorAll('input[data-f=bpm],input[data-f=bar]').forEach(inp=>inp.onkeydown=ev=>{ if(ev.key==='Enter'){ inp.blur(); return; } if(ev.key!=='ArrowUp'&&ev.key!=='ArrowDown') return; ev.preventDefault(); const f=inp.dataset.f, st=f==='bar'?1:(ev.shiftKey?10:ev.altKey?.1:1), d=ev.key==='ArrowUp'?st:-st;
       if(f==='bpm'&&e.bpm!==undefined){ e.bpm=Math.round(Math.max(20,Math.min(300,e.bpm+d))*10)/10; } else if(f==='bar'&&tr.dataset.i!=='0'){ const n=e.bar+Math.sign(d); if(n>1&&n<=s.total&&!s.tmap.some(o=>o!==e&&o.bar===n)) e.bar=n; } else return;
@@ -2462,15 +2654,26 @@ function renderInsp(){
   $('resetMap').onclick=()=>{ s.tmap=JSON.parse(s.origMap); buildBars(s); refresh(); };
   wireVol($('insp'));
   wireSecPanel(s); wireClipPanel(s); wireClickPanel(s);
-  $('insp').insertAdjacentHTML('beforeend',`<div class="sect"><h3>Song</h3><div class="acts"><button class="btn line" id="sDup">Duplicate song</button><button class="btn danger" id="sDelSong">Delete song…</button></div></div>`);
   $('sDup').onclick=()=>dupSong(s.id); $('sDelSong').onclick=()=>deleteSong(s.id);
-  const vl=document.querySelector('.verlist'); if(vl){ $('verAdd').onclick=()=>{ newVer(s); refresh(); setTimeout(()=>{ const i=document.querySelector('.verlist .vr.on input'); i&&(i.focus(),i.select()); },40); };
-    vl.querySelectorAll('.vr').forEach(r=>{ const v=versOf(s).find(x=>x.id===r.dataset.v);
-      r.querySelector('.dot2').onclick=()=>{ switchVer(s,v.id); refresh(); };
-      r.querySelector('input').onchange=e=>{ v.name=e.target.value.trim()||v.name; renderSetlist(); renderFolders(); };
-      r.querySelector('input').onkeydown=e=>{ if(e.key==='Enter') e.target.blur(); };
-      const x=r.querySelector('.x'); if(x) x.onclick=()=>{ delVer(s,v.id); refresh(); }; }); }
+  $('sKey').onchange=e=>{ snap(); s.key=e.target.value.trim()||'—'; refresh(); };
+  $('songCard').ontoggle=()=>{ songCardOpen=$('songCard').open; };
 }
+let songCardOpen=false;
+function wireVerPanel(s,V){
+  const box=$('vSecs');
+  if(box){ let drag=-1;
+    box.querySelectorAll('.ck').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const o=V.order[+b.dataset.i]; if(o.on&&V.order.filter(x=>x.on).length<2){ toast('A version plays at least one section'); return; } snap(); o.on=!o.on; refresh(); if(window.SLE&&SLE.nextChanged) SLE.nextChanged(); });
+    box.querySelectorAll('.secl').forEach(r=>{ r.ondragstart=e=>{ drag=+r.dataset.i; e.dataTransfer.effectAllowed='move'; r.classList.add('dragging'); };
+      r.ondragend=()=>r.classList.remove('dragging');
+      r.ondragover=e=>{ e.preventDefault(); r.classList.add('over'); }; r.ondragleave=()=>r.classList.remove('over');
+      r.ondrop=e=>{ e.preventDefault(); e.stopPropagation(); r.classList.remove('over'); const to=+r.dataset.i; if(drag<0||drag===to) return; snap(); const [m]=V.order.splice(drag,1); V.order.splice(to,0,m); drag=-1; refresh(); if(window.SLE&&SLE.nextChanged) SLE.nextChanged(); }; }); }
+  const nm=$('vName'); nm.onkeydown=e=>{ if(e.key==='Enter') nm.blur(); if(e.key==='Escape'){ nm.value=V.name; nm.blur(); } };
+  nm.onchange=()=>{ const v=nm.value.trim(); if(!v){ nm.value=V.name; return; } snap(); V.name=v; refresh(); };
+  $('vDef').onclick=()=>{ snap(); versOf(s).forEach(v=>v.def=false); V.def=true; refresh(); };
+  if($('vAudio')) $('vAudio').onclick=()=>{ if(NATIVE&&window.SLE&&SLE.addVerAudio) SLE.addVerAudio(s,V); else toast('In the app this picks audio files for this version'); };
+  $('vDel').onclick=()=>{ if(versOf(s).length<2) return; confirmBox(`Delete the version “${esc(V.name)}”?`,'Its sections stay in the song (they’re the song’s own). Audio only this version used stays on disk.','Delete version',()=>{ snap(); delVer(s,V.id); refresh(); }); };
+  if($('vAfter')) $('vAfter').querySelectorAll('button').forEach(b=>b.onclick=()=>setAfter(s,b.dataset.v,afterOf(s).sec));
+  if($('vAfterSec')) $('vAfterSec').onchange=e=>setAfter(s,'auto',+e.target.value||4); }
 function refresh(){ renderSetlist(); renderFolders(); renderInsp(); if(ed.song) renderDrawer(); }
 function select(id,scroll){ if(selSec&&selSec.song!==id) selSec=null; selId=id; newBar=null; renderSetlist(); renderInsp(); document.querySelectorAll('.folder').forEach(f=>f.classList.toggle('sel',f.dataset.id===id));
   if(scroll){ open.add(id); renderFolders(); document.querySelector(`.folder[data-id="${id}"]`)?.scrollIntoView({block:'start',behavior:'smooth'}); } if(!playing) lcd(); }
@@ -2733,15 +2936,28 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
   redraw(){ lcd(); },
   // Everything a .setline session holds.
   sessionData(){ const o=JSON.parse(ser()); o.presets=presets.filter(p=>!p.built); o.click=CLICK; if(Object.keys(CLICKT).length) o.clickT=CLICKT; o.cueVoice=CUEV; if(Object.keys(PRON).length) o.pron=PRON; if(CUEWORDS.length) o.cueWords=CUEWORDS; return o; },
-  loadSession(o){ ROUTE_LOG=[]; migrateRouting(o); migrateMidi(o); if(Array.isArray(o.presets)){ presets=[...o.presets]; } if(o.click) CLICK={...CLICK,...o.click}; CLICKT={...(o.clickT||{})}; CUEV={voice:'',name:'',speed:1,...(o.cueVoice||{})}; cuevFresh=false; PRON={...(o.pron||{})}; UNKNOWN=[]; CUEWORDS=Array.isArray(o.cueWords)?o.cueWords:[]; cwSeq=1+Math.max(0,...allWords().map(w=>+String(w.id).slice(1)||0));
+  loadSession(o){ ROUTE_LOG=[]; migrateRouting(o); migrateMidi(o); migrateVersions(o); if(Array.isArray(o.presets)){ presets=[...o.presets]; } if(o.click) CLICK={...CLICK,...o.click}; CLICKT={...(o.clickT||{})}; CUEV={voice:'',name:'',speed:1,...(o.cueVoice||{})}; cuevFresh=false; PRON={...(o.pron||{})}; UNKNOWN=[]; CUEWORDS=Array.isArray(o.cueWords)?o.cueWords:[]; cwSeq=1+Math.max(0,...allWords().map(w=>+String(w.id).slice(1)||0));
     restore(JSON.stringify({songs:o.songs||[],setlists:o.setlists&&o.setlists.length?o.setlists:[{id:'L1',name:'Setlist 1',order:[]}],curSet:o.curSet||'L1'}));
     // ids made from now on must not collide with the loaded ones
     let num=0; const pre={}; const walk=v=>{ if(Array.isArray(v)) v.forEach(walk); else if(v&&typeof v==='object'){ if(typeof v.id==='number') num=Math.max(num,v.id); else if(typeof v.id==='string'){ const m=v.id.match(/^([a-zA-Z])(\d+)$/); if(m) pre[m[1]]=Math.max(pre[m[1]]||0,+m[2]); } Object.values(v).forEach(walk); } };
-    walk(o); sid=Math.max(sid,num+1); evId=Math.max(evId,num+1); clipSeq=Math.max(clipSeq,num+1); altSeq=Math.max(altSeq,(pre.a||0)+1); verSeq=Math.max(verSeq,(pre.v||0)+1);
+    walk(o); sid=Math.max(sid,num+1); evId=Math.max(evId,num+1); clipSeq=Math.max(clipSeq,num+1); altSeq=Math.max(altSeq,(pre.a||0)+1); verSeq=Math.max(verSeq,(pre.v||0)+1); xSeq=Math.max(xSeq,(pre.x||0)+1);
+    songs.forEach(x=>{ if(x.showVer){ const w=x.showVer; delete x.showVer; showVer(x,w,true); } });
     regSeq=Math.max(regSeq,(pre.r||0)+1,(pre.c||0)+1); setSeq=Math.max(setSeq,(pre.L||0)+1); pid=Math.max(pid,(pre.u||0)+1);
     undoS=[]; redoS=[]; if(!songs.find(x=>x.id===selId)) selId=songs[0]&&songs[0].id; open.clear(); if(selId) open.add(selId); refresh(); },
   setSessionName(n){ $('crumbAll').textContent=n||'Untitled session'; },
   routeLog:()=>ROUTE_LOG,
+  // 6e: versions and the setlist flow (src/pages/arrange.ts)
+  ver:{ play:s=>playVer(s), cur:s=>curVer(s), payload:(s,v)=>verPayload(s,v), map:(s,v)=>verMap(s,v), fields:(s,v)=>verFields(s,v), inVer:(s,t,v)=>trackInVer(s,t,v), nextOf:s=>nextInSet(s), after:s=>afterOf(s) },
+  nextState(m){ NEXTST=m; if(perfOn) renderPerform(); },
+  // the song after the one that ended (Stop) or segued into: selected, at its start
+  readySong(id,keepPlaying){ const s=songs.find(x=>x.id===id); if(!s) return; playId=id; pos=0; open.add(id); if(focusId) focusId=id; loopExitId=null; jumpQueuedSec=null;
+    document.querySelectorAll('.folder').forEach(f=>f.classList.toggle('playing',f.dataset.id===playId)); select(id,false); renderFolders(); if(!keepPlaying){ playing=false; $('playBtn').classList.remove('on'); } lcd(); renderPerform(true); },
+  autoNext(sec){ autoLeft=sec; if(sec>0) toast('Next song in '+sec+'…'); renderPerform(); },
+  jumpQueued(id){ jumpQueuedSec=id; renderPerform(true); },
+  setEngineBar(b,bt){ engBar=b; engBeat=bt; },
+  get loopIsSection(){ return !loopOn; },
+  addVerAudio(s,v,list,refs,copy){ snap(); addVerAudio(s,v,list,refs,copy); refresh(); },
+  perform:on=>setPerform(on), actions:()=>window.SLActions,
   evName:(e,s,t)=>evName(e,s,t),
   patchSheet:to=>exportPatchSheet(to), // Settings › Outputs › Export PDF (tests: straight to a path)
   openSettings:tab=>openSettings(tab), settingsChanged:()=>{ if(settingsOpen()&&['audio','out','midi','voices'].includes(SET_TAB)) renderSettings(); },
@@ -2774,7 +2990,7 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
   addNative, openNewSong, modalOpen:()=>modal.classList.contains('show'), dropZone:()=>dz,
   addStems(s,list,refs,copy){ snap(); const a=s.audio; attachStems(s,list,refs,copy); if(s.audio!==a) buildBars(s); refresh(); } };
 const isOff=(s,t)=>!!(s.mute||{})[t]||(Object.values(s.solo||{}).some(Boolean)&&!(s.solo||{})[t]);
-function loopRange(s){ if(!loopOn||s.id!==(playId||selId)) return null; if(selSec&&selSec.song===s.id){ const p=s.secPos.find(x=>x.id===selSec.id); if(p) return [s.bars[p.start-1].t,s.bars[p.start-1+p.bars].t]; } return [0,s.audio]; }
+function loopRange(s){ if(!loopOn||s.id!==(playId||selId)) return sectionLoopRange(s); if(selSec&&selSec.song===s.id){ const p=s.secPos.find(x=>x.id===selSec.id); if(p) return [s.bars[p.start-1].t,s.bars[p.start-1+p.bars].t]; } return [0,s.audio]; }
 function barAtPos(s){ return s.bars.find((bb,i)=>pos>=bb.t&&pos<s.bars[i+1]?.t)||s.bars[0]; }
 function follow(){ if(!playing) return; const sc=$('scroller'), f=document.querySelector(`.folder.open[data-id="${playId}"]`); if(!f) return; const X=pos*PXS, vis=sc.clientWidth-headW(); if(X<sc.scrollLeft||X>sc.scrollLeft+vis-40) sc.scrollLeft=Math.max(0,X-40); }
 function placePH(){ follow(); const hp=$('hph'), fs=focusSong(); if(hp&&fs){ hp.style.display=playId===fs.id?'block':'none'; hp.style.left=(pos/fs.len*100)+'%'; } document.querySelectorAll('[data-ph]').forEach(el=>{ el.style.left=(el.dataset.ph===playId?pos*PXS:0)+'px'; });
@@ -2783,7 +2999,7 @@ function lcd(){ const s=songs.find(x=>x.id===(playId||selId)); if(!s){ $('lcdSon
   const p0=s.id===playId?pos:0, b=s.bars.find((bb,i)=>p0>=bb.t&&p0<s.bars[i+1]?.t)||s.bars[0]; let k=0; b.beatT.forEach((bt,i)=>{ if(p0>=bt) k=i; });
   const bl=b.dur/b.sig[0], six=Math.min(4,Math.floor((p0-b.beatT[k])/bl*4)+1), sec=secOfBar(s,b.bar);
   $('lcdSong').textContent=s.name; $('lcdSec').textContent=sec?sec.name:'–'; $('lcdBar').textContent=`${b.bar} . ${k+1} . ${six}`; $('lcdBpm').textContent=(Math.round(bpmAt(s,b.bar+k/b.sig[0])*10)/10).toFixed(1); $('lcdSig').textContent=b.sig.join('/'); $('lcdTime').textContent=fmtMs(p0);
-  placePH(); }
+  placePH(); if(perfOn) renderPerform(); }
 function locate(s,t){ if(!s) return; if(playId!==s.id){ playId=s.id; document.querySelectorAll('.folder').forEach(f=>f.classList.toggle('playing',f.dataset.id===playId)); }
   if(selId!==s.id){ select(s.id,false); } pos=Math.max(0,Math.min(s.audio-.01,t)); lcd(); if(NATIVE&&playing&&window.SLE) SLE.playFrom(s,pos); }
 const ROLE_E={drums:1,bass:.8,keys:.6,guitars:.75,bgvs:.5,synth:.45,fx:.4,strings:.55}; const mv={};
@@ -2811,7 +3027,7 @@ $('stopBtn').onclick=()=>{ if(!playing) pos=0; if(NATIVE&&window.SLE) SLE.stop()
 $('rtz').onclick=()=>{ const s=songs.find(x=>x.id===(playId||selId)); if(s){ const cy=loopRange(s); locate(s,cy?cy[0]:0); } };
 const order=()=>setOrder.length?setOrder.map(id=>songs.find(x=>x.id===id)).filter(Boolean):[...songs].sort(byName);
 function stepSong(d){ const L=order(); if(!L.length) return; const cur=L.findIndex(x=>x.id===(playId||selId)); const n=L[Math.max(0,Math.min(L.length-1,cur<0?0:cur+d))]; const was=playing; playing=false;
-  playId=n.id; pos=0; open.add(n.id); if(focusId) focusId=n.id; select(n.id,false); renderFolders(); document.querySelector(`.folder[data-id="${n.id}"]`)?.scrollIntoView({block:'nearest'}); if(was){ playing=true; $('playBtn').classList.add('on'); last=performance.now(); requestAnimationFrame(tick); if(NATIVE&&window.SLE) SLE.playFrom(n,0); } lcd(); }
+  playId=n.id; pos=0; open.add(n.id); if(focusId) focusId=n.id; select(n.id,false); renderFolders(); document.querySelector(`.folder[data-id="${n.id}"]`)?.scrollIntoView({block:'nearest'}); if(was){ playing=true; $('playBtn').classList.add('on'); last=performance.now(); requestAnimationFrame(tick); if(NATIVE&&window.SLE){ if(d>0&&SLE.nextSong) SLE.nextSong(n); else SLE.playFrom(n,0); } } lcd(); renderPerform(true); }
 $('prevSong').onclick=()=>stepSong(-1); $('nextSong').onclick=()=>stepSong(1);
 function setLoop(on){ loopOn=on; $('loopBtn').classList.toggle('on',on); renderFolders(); }
 $('loopBtn').onclick=()=>setLoop(!loopOn);
@@ -2832,8 +3048,8 @@ $('statusChip').onclick=()=>openSettings('audio'); $('gearBtn').onclick=()=>open
 $('newTrackB').onclick=()=>{ const s=songs.find(x=>x.id===selId); if(!s){ toast('Select a song first'); return; } const r=$('newTrackB').getBoundingClientRect();
   ctxMenu({clientX:r.left,clientY:r.bottom+4},[{label:'Audio track…',icon:'∿',act:()=>addTrack(s,'audio')},{label:'Click track',icon:'◔',act:()=>addTrack(s,'click')},{label:'MIDI track',icon:'⎍',act:()=>addTrack(s,'midi')},{label:'Cues track',icon:'❝',dis:s.tracks.includes('Cues'),act:()=>addTrack(s,'cues')}]); };
 $('listenOffB').onclick=()=>{ if(window.SLE) SLE.listen({on:false}); };
-document.querySelectorAll('.tabs a').forEach(a=>{ if(/3-satellite\.html\?mac/.test(a.getAttribute('href'))) a.addEventListener('click',e=>{ if(!LISTEN.on) return; e.preventDefault();
-  confirmBox('You’re listening on this computer','The show is playing on '+esc(LISTEN.current||'this computer')+', not on its outputs. Start the performance anyway?','Perform anyway',()=>{ location.href=a.getAttribute('href'); }); }); });
+document.querySelectorAll('.tabs a[data-tab]').forEach(a=>a.addEventListener('click',e=>{ e.preventDefault(); const pf=a.dataset.tab==='perform';
+  if(pf&&LISTEN.on&&!perfOn){ confirmBox('You’re listening on this computer','The show is playing on '+esc(LISTEN.current||'this computer')+', not on its outputs. Perform anyway?','Perform anyway',()=>setPerform(true)); return; } setPerform(pf); }));
 $('zoom').value=zToSlider(PXS); $('zoom').oninput=e=>setZoom(sliderToZ(+e.target.value)); $('zIn').onclick=()=>setZoom(Math.max(PXS+1,Math.round(PXS*1.4))); $('zOut').onclick=()=>setZoom(Math.min(PXS-1,Math.round(PXS/1.4)));
 $('scroller').addEventListener('scroll',()=>{ if(viewRaf) return; viewRaf=requestAnimationFrame(()=>{ viewRaf=0; redrawView(false); }); },{passive:true});
 addEventListener('resize',()=>redrawView(true));
@@ -2847,6 +3063,83 @@ const THS=[36,50,72]; $('thBtn').onclick=()=>{ TH=THS[(THS.indexOf(TH)+1)%THS.le
 // The mixer drawer is gone (6d): every track's fader, M / S and meter are on its header; levels per song as before.
 const mixOpen=false; function setMixer(){}
 
+
+// ======================= SETLIST FLOW (6e): next song, loops, queued jumps, Perform =======================
+// The setlist's next song after s (in the current set), in the version its entry plays.
+function nextInSet(s,d=1){ const i=setOrder.indexOf(s.id); if(i<0) return null; const n=songs.find(x=>x.id===setOrder[i+d]); return n?{song:n,ver:entryVer(n)}:null; }
+// a version's fields for the engine: the song as saved, with a custom version's own fields (or the source's while a
+// custom version is the one shown)
+function verFields(s,v){ const o=JSON.parse(JSON.stringify(s,function(k,x){ return this===s&&(k==='bars'||k==='secPos'||k==='_yy'||k==='srcState'||k==='versions')?undefined:x; })), cv=curVer(s);
+  // a field a copy doesn't have (saved files leave out empty maps) is empty, never the shown version's
+  const take=st=>VER_FIELDS.forEach(k=>{ if(k==='trans') return; if(st[k]===undefined||st[k]===null) delete o[k]; else o[k]=JSON.parse(JSON.stringify(st[k])); });
+  if(v&&v.custom&&cv.id!==v.id&&v.state) take(v.state);
+  else if(v&&!v.custom&&cv.custom&&s.srcState) take(s.srcState);
+  if(o.malts) Object.keys(o.malts).forEach(t=>{ const a=o.malts[t].find(y=>y.id===(o.muse||{})[t])||o.malts[t][0]; if(a) (o.midi||(o.midi={}))[t]=a.events; });
+  return o; }
+// ---- loops: a section marked Loop repeats until Exit loop (L); it leaves at the end of the pass that's playing ----
+let loopExitId=null, engBar=1, engBeat=1;
+const loopSecAt=s=>{ if(!s||!s.secPos) return null; const b=barAtTime(s,pos); return s.secPos.find(x=>x.end==='loop'&&b>=x.start&&b<x.start+x.bars)||null; };
+function sectionLoopRange(s){ if(!playing||s.id!==playId) return null; const p=loopSecAt(s); if(!p){ loopExitId=null; return null; } if(loopExitId===p.id) return null;
+  return [s.bars[p.start-1].t,s.bars[p.start-1+p.bars].t]; }
+const looping=()=>{ const s=songs.find(x=>x.id===playId); return !!(playing&&s&&sectionLoopRange(s)); };
+function exitLoop(){ const s=songs.find(x=>x.id===playId), p=loopSecAt(s); if(!p||!playing){ return false; } loopExitId=p.id; toast(`Leaving “${p.name}” at the end of this pass`); if(window.SLE&&SLE.nextChanged){ /* the loop is released by the next transport tick (syncLoop) */ } renderPerform(); return true; }
+// ---- queued jumps (Perform: tap a section while playing) ----
+let JUMP_WHEN='bar', jumpQueuedSec=null;
+async function queueJumpTo(secId){ const s=songs.find(x=>x.id===playId); if(!s) return;
+  if(jumpQueuedSec===secId){ cancelQueuedJump(); return; }
+  if(!playing){ const p=s.secPos.find(x=>x.id===secId); if(p) locate(s,s.bars[p.start-1].t); return; }
+  if(NATIVE&&window.SLE&&SLE.queueJump){ await SLE.queueJump(s,secId,JUMP_WHEN); }
+  else { jumpQueuedSec=secId; renderPerform(); } }
+function cancelQueuedJump(){ if(jumpQueuedSec===null) return false; if(NATIVE&&window.SLE&&SLE.cancelJump) SLE.cancelJump(); else { jumpQueuedSec=null; renderPerform(); } return true; }
+// ---- the action list: every live action in one place (keys now; MIDI-learn / footswitches can map them later) ----
+const ACTIONS=[
+  {id:'playStop',name:'Play / Stop',key:'Space',run:()=>toggle()},
+  {id:'nextSong',name:'Next song',key:'N',run:()=>stepSong(1)},
+  {id:'prevSong',name:'Previous song',key:'P',run:()=>stepSong(-1)},
+  {id:'nextVersion',name:'Next version of the next song',key:'V',run:()=>{ const cur=songs.find(x=>x.id===(playId||selId)), n=cur&&nextInSet(cur); if(n) flipVer(n.song,1); else toast('No next song in this setlist'); }},
+  {id:'exitLoop',name:'Exit loop',key:'L',run:()=>{ if(!exitLoop()) toast('Not in a loop'); }},
+  {id:'cancelJump',name:'Cancel queued jump',key:'Esc',run:()=>cancelQueuedJump()},
+];
+window.SLActions={ list:()=>ACTIONS.map(({id,name,key})=>({id,name,key})), run:id=>{ const a=ACTIONS.find(x=>x.id===id); if(a){ a.run(); return true; } return false; } };
+// ---- Perform: the song playing (or ready), its sections, bars left, LOOPING; up next as a stack of versions ----
+let perfOn=false, NEXTST=null, autoLeft=0;
+function setPerform(on){ perfOn=on; document.body.classList.toggle('pf',on); document.querySelectorAll('.tabs a').forEach(a=>a.classList.toggle('on',on?a.dataset.tab==='perform':a.dataset.tab==='show')); if(on) renderPerform(true); }
+function perfSong(){ return songs.find(x=>x.id===(playId||selId))||null; }
+function perfParts(s,v){ if(!v||v.custom||isFullVer(s,v)) return s.secPos.map(p=>({secId:p.id,name:p.name,type:p.type,bars:p.bars,sb:p.start})); let vb=1; return verMap(s,v).map(p=>({secId:p.secId,name:p.name,type:p.extra?'x':p.type,bars:p.bars,sb:p.sb,extra:p.extra,vb:p.vb})); }
+function renderPerform(full){ const el=$('perf'); if(!el||!perfOn) return; const s=perfSong();
+  if(!s){ el.innerHTML='<div class="now"><h1>No song</h1><p class="psub">Add songs to a setlist on the Show page.</p></div>'; return; }
+  const v=s.id===playId&&playing&&window.SLE?playVer(s):playVer(s), parts=perfParts(s,v), i=setOrder.indexOf(s.id), n=nextInSet(s), lp=loopSecAt(s), loopingNow=looping();
+  const tot=parts.reduce((a,p)=>a+p.bars,0), bar=barAtTime(s,s.id===playId?pos:0), curPart=parts.find(p=>!p.extra&&bar>=p.sb&&bar<p.sb+p.bars), done=curPart?parts.slice(0,parts.indexOf(curPart)).reduce((a,p)=>a+p.bars,0)+(bar-curPart.sb):0;
+  const left=Math.max(0,tot-done), prog=tot?Math.min(1,done/tot):0;
+  if(full||el.dataset.song!==s.id+'|'+(v&&v.id)+'|'+(n?n.song.id+'|'+n.ver.id:'')+'|'+jumpQueuedSec+'|'+setOrder.join(',')){
+    el.dataset.song=s.id+'|'+(v&&v.id)+'|'+(n?n.song.id+'|'+n.ver.id:'')+'|'+jumpQueuedSec+'|'+setOrder.join(',');
+    const nv=n?versOf(n.song):[], ni=n?nv.indexOf(n.ver):0, nx=n&&!n.ver.custom&&verParts(n.song,n.ver).some(p=>p.extra), af=afterOf(s);
+    const then=setOrder.slice(i+2,i+6).map((id,k)=>{ const x=songs.find(q=>q.id===id); return x?`<div class="pthen">${i+3+k} · ${esc(x.name)}</div>`:''; }).join('');
+    el.innerHTML=`<div class="now"><div class="pmeta">${i>=0?`${i+1} of ${setOrder.length} · `:''}<span id="pfState">${playing&&s.id===playId?'Now playing':'Ready'}</span></div>
+        <h1>${esc(s.name)}</h1><div class="psub">${+bpmAt(s,1).toFixed(2)} BPM · ${s.tmap[0].sig.join('/')} · ${esc(s.key)}${versOf(s).length>1?` · <span style="color:#7fe0cf">${esc(v.name)}</span>`:''}</div>
+        <div class="pprog"><i id="pfProg" style="width:${(prog*100).toFixed(2)}%;background:${s.col}"></i></div>
+        <div class="psecs" id="pfSecs">${parts.map(p=>`<button class="psec ${p===curPart?'on':''} ${jumpQueuedSec!==null&&p.secId===jumpQueuedSec?'queued':''} ${p.extra?'px':''}" data-sec="${p.secId??''}" style="flex:${p.bars};--sc:${p.extra?VX_COL:SEC_C[p.type]||'#7d8696'}" title="${esc(p.name)}${p.extra?'':' · tap to jump here'}" ${p.extra?'disabled':''}><span>${esc(p.name)}</span></button>`).join('')}</div>
+        <div class="prow"><div class="pleft"><small>BARS LEFT</small><b id="pfLeft">${left}</b></div>
+          <div class="ploop" id="pfLoop" ${loopingNow?'':'hidden'}><b>LOOPING</b> <span id="pfLoopName">${lp?esc(lp.name):''}</span><button class="btn" id="pfExit">Exit loop <kbd>L</kbd></button></div>
+          <div class="pjt"><small>JUMP TIMING</small>${segm('pfWhen',[['bar','Next bar'],['section','End of section'],['beat','Now']],JUMP_WHEN)}${jumpQueuedSec!==null?'<button class="btn line" id="pfCancel">Cancel jump <kbd>Esc</kbd></button>':''}</div></div></div>
+      <div class="pside"><div class="nextc"><h3>Up next${n&&nv.length>1?' · tap ‹ › to change version':''}</h3>
+        ${n?`<div class="pstack ${nv.length>1?'many':''}"><div class="c b2"></div><div class="c b1"></div><div class="c front"><div class="pnt"><span class="bar" style="background:${n.song.col}"></span><div><b>${esc(n.song.name)}</b><div class="pvn">${esc(n.ver.name)}${nx?' ◆':''} · ${fmt(verLen(n.song,n.ver))}${nv.length>1?` · ${ni+1} of ${nv.length}`:''}</div></div></div>
+          <div class="pst">${verStrip(n.song,n.ver,Math.max(1,verBars(n.song,n.ver)))}</div>${nv.length>1?'<div class="par"><button id="pfPrevV" title="Previous version">‹</button><button id="pfNextV" title="Next version  V">›</button></div>':''}</div></div>
+          <div class="pload" id="pfLoad">${autoLeft>0?`Next in ${autoLeft}…`:nextLoadText(n)}</div><div class="pafter">${af.mode==='stop'?'Stops after this song':esc(afterLabel(af))}</div>`:'<div class="pload">Last song in the set</div>'}</div>
+        ${then?`<div class="nextc"><h3>Then</h3>${then}</div>`:''}</div>`;
+    el.querySelectorAll('.psec[data-sec]').forEach(b=>{ if(b.dataset.sec!=='') b.onclick=()=>queueJumpTo(+b.dataset.sec); });
+    if($('pfExit')) $('pfExit').onclick=()=>exitLoop();
+    if($('pfCancel')) $('pfCancel').onclick=()=>cancelQueuedJump();
+    $('pfWhen').querySelectorAll('button').forEach(b=>b.onclick=()=>{ JUMP_WHEN=b.dataset.v; renderPerform(true); });
+    if($('pfPrevV')) $('pfPrevV').onclick=()=>{ flipVer(n.song,-1); renderPerform(true); };
+    if($('pfNextV')) $('pfNextV').onclick=()=>{ flipVer(n.song,1); renderPerform(true); };
+    return; }
+  // per frame: only what moves
+  const pr=$('pfProg'); if(pr) pr.style.width=(prog*100).toFixed(2)+'%'; const lf=$('pfLeft'); if(lf) lf.textContent=left; const stt=$('pfState'); if(stt) stt.textContent=playing&&s.id===playId?'Now playing':'Ready';
+  el.querySelectorAll('.psec').forEach(b=>b.classList.toggle('on',!!curPart&&b.dataset.sec===String(curPart.secId)));
+  const lo=$('pfLoop'); if(lo){ lo.hidden=!loopingNow; if(lp) $('pfLoopName').textContent=lp.name; }
+  const ld=$('pfLoad'); if(ld&&n) ld.textContent=autoLeft>0?`Next in ${autoLeft}…`:nextLoadText(n); }
+function nextLoadText(n){ if(!NATIVE) return 'Loaded and ready'; const m=NEXTST; if(!m||m.songId!==n.song.id||m.verId!==n.ver.id) return 'Loads in the background when '+(perfSong()?'“'+perfSong().name+'”':'this song')+' plays'; return m.error?'Couldn’t load: '+m.error:m.ready?'Loaded and ready':'Loading…'; }
 
 // ======================= SETTINGS (6d) =======================
 // One sheet: ⚙ in the top bar, File › Preferences…, Ctrl/⌘+,. These belong to this computer (the rig), not the show,
@@ -2998,6 +3291,8 @@ document.addEventListener('keydown',e=>{ if(/INPUT|SELECT|TEXTAREA/.test(documen
   if(multiOn()&&(e.key==='Delete'||e.key==='Backspace')){ e.preventDefault(); groupDelete(); return; }
   if(multiOn()&&e.key==='Escape'){ clearMulti(); renderInsp(); return; }
   if(document.querySelector('.pop')&&e.key==='Escape'){ closePops(); return; }
+  if(e.key==='Escape'&&jumpQueuedSec!==null){ cancelQueuedJump(); return; }
+  if(!e.metaKey&&!e.ctrlKey&&!e.altKey&&!e.shiftKey){ const k=e.key.toLowerCase(), act={n:'nextSong',p:'prevSong',v:'nextVersion',l:'exitLoop'}[k]; if(act&&!(k==='v'&&selClip)){ e.preventDefault(); SLActions.run(act); return; } }
   if(trackOpen&&e.key==='Escape'){ closeTrack(); return; }
   if(pick&&(e.key==='Delete'||e.key==='Backspace')){ e.preventDefault(); doDelete(); return; }
   if(pick&&e.key==='Escape'){ setPick(null); return; }
@@ -3027,12 +3322,15 @@ let tipT=0; document.addEventListener('mouseover',e=>{ clearTimeout(tipT); const
 function tipShow(e){ const el=e.target.closest('[data-tip]'); if(!el||!el.dataset.tip){ tip.style.display='none'; return; } tip.textContent=el.dataset.tip; tip.style.display='block'; const r=el.getBoundingClientRect(); tip.style.left=Math.min(innerWidth-270,r.left)+'px'; tip.style.top=(r.bottom+6)+'px'; }
 document.addEventListener('pointerdown',()=>{ clearTimeout(tipT); tip.style.display='none'; },true);
 window.addEventListener('resize',()=>$('scroller').style.setProperty('--vw',$('scroller').clientWidth+'px'));
-// example: a festival cut of Glasshouse that stops after Chorus 2 and skips scene changes on the guitar rig; a festival rig alternate on Neon Rivers' lights
-(()=>{ const g=songs.find(x=>x.id==='glass'); if(g){ versOf(g); g.tracks.filter(t=>isMidiTrack(g,t)).forEach(t=>altsOf(g,t));
-    const qc=g.tracks.find(t=>t==='Guitar rig'); const cutAlt=qc?{id:'a'+altSeq++,name:'Clean only',events:[{...g.midi[qc][0],id:evId++}]}:null; if(cutAlt) g.malts[qc].push(cutAlt);
-    newVer(g,'Festival cut'); const c2=g.secs.find(x=>/chorus 2/i.test(x.name)); if(c2) c2.end='stop'; (g.mute||(g.mute={})).Strings=true; if(cutAlt) useAlt(g,qc,cutAlt.id); buildBars(g);
-    switchVer(g,g.versions[0].id); }
-  const n=songs.find(x=>x.id==='neon'); if(n){ const ax=n.tracks.find(t=>t==='Lights'); if(ax){ altsOf(n,ax); const cur=n.muse[ax]; newAlt(n,ax,true,'Festival looks'); useAlt(n,ax,cur); } } })();
+// example: Glasshouse has a "With intro" version (an intro pad only it plays, then everything from Verse 1) and a
+// "Festival cut" (Verse 1, Chorus 1, Chorus 2, Outro); the Full show plays "With intro" and segues out of Neon Rivers.
+(()=>{ const g=songs.find(x=>x.id==='glass'); if(g){ versOf(g); const secs=[...g.secs].sort((a,b)=>a.start-b.start), id=n=>(secs.find(x=>x.name===n)||{}).id;
+    const wi={id:'v'+verSeq++,name:'With intro',order:secs.map(x=>({k:'sec',id:x.id,on:x.name!=='Intro'})),extras:[{id:'x'+xSeq++,name:'Intro pad',bars:8,track:'Intro pad ◆'}]};
+    wi.order.unshift({k:'x',id:wi.extras[0].id,on:true}); g.tracks.push('Intro pad ◆'); (g.vonly||(g.vonly={}))['Intro pad ◆']=wi.id; (g.tcol||(g.tcol={}))['Intro pad ◆']='#bf5af2';
+    const fc={id:'v'+verSeq++,name:'Festival cut',order:secs.map(x=>({k:'sec',id:x.id,on:['Verse 1','Chorus 1','Chorus 2','Outro (rit.)'].includes(x.name)})),extras:[]};
+    g.versions.push(wi,fc); buildBars(g); const L1=setlists.find(l=>l.id==='L1'); if(L1){ (L1.vers||(L1.vers={})).glass=wi.id; (L1.after||(L1.after={})).neon={mode:'segue',sec:4}; L1.after.low={mode:'auto',sec:4}; L1.after.sat={mode:'segue',sec:4}; } }
+  const n=songs.find(x=>x.id==='neon'); if(n){ const ax=n.tracks.find(t=>t==='Lights'); if(ax){ altsOf(n,ax); const cur=n.muse[ax]; newAlt(n,ax,true,'Festival looks'); useAlt(n,ax,cur); } }
+  songs.forEach(s=>delete s.trans); })();
 // Start empty. Set EXAMPLE=true to load the demo session again.
 const EXAMPLE=true;
 if(!EXAMPLE){ songs.length=0; selId=null; open.clear(); setlists=[{id:'L1',name:'Setlist 1',order:[]}]; curSet='L1'; setOrder=setlists[0].order; setSeq=2; }

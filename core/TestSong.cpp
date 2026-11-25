@@ -2,6 +2,7 @@
 #include "LiveGain.h"
 #include "Engine.h"
 #include "TempoMap.h"
+#include "Versions.h"
 #include "Wav.h"
 #include <algorithm>
 #include <cmath>
@@ -911,6 +912,109 @@ bool runSelfTest(bool verbose)
         check(std::fabs(peak0 - want) < 1e-5f && std::fabs(peak1 - want) < 1e-5f, "cue level: a cue at -3 dB plays at exactly 0.7071 of its level on both sides");
     }
 
+    // ---- Phase 6e: song versions, segues, queued jumps, loop exit ----
+    // A "ramp" stem: sample i holds base + i * 1e-6, so any output sample says exactly which source sample it is.
+    auto rampStem = [&](int64_t len, float base, int out) {
+        auto src = std::make_shared<InMemorySource>(); src->sr = sr; src->data.assign(1, std::vector<float>((size_t) len));
+        for (int64_t i = 0; i < len; ++i) src->data[0][(size_t) i] = base + (float) i * 1e-6f;
+        StemDef d; d.name = "Ramp"; d.source = src; d.outs = { out }; return d;
+    };
+    auto renderAll = [&](const SongDef& s, int outs, int block, OfflineRun& r) { r.load(s, sr, outs, block); r.start(0); r.runToEnd(); };
+    {
+        // Source: 8 bars of 4/4 at 120 (96000 samples a bar): sections A 1-2, B 3-4, C 5-6, D 7-8.
+        const int64_t bar = 96000;
+        SongDef src; src.name = "Source"; src.tempo = { { 1, 120, 4, 4 } }; src.lengthBars = 8;
+        src.stems.push_back(rampStem(8 * bar, 0.0f, 0));
+        src.clickHits = std::vector<ClickHitDef> {};
+        for (int b = 1; b <= 8; ++b) { ClickHitDef h; h.bar = b; h.beat = 1; h.accent = true; src.clickHits->push_back(h); }
+        src.clickOuts = { 1 };
+        const auto& ramp = static_cast<InMemorySource*>(src.stems[0].source.get())->data[0];
+        // Version: A, then C and D (B skipped). C and D are contiguous in the source: merged, no join between them.
+        VersionDef v; v.parts = { { 1, 2 }, { 5, 2 }, { 7, 2 } };
+        std::vector<std::string> w; VersionLayout lay;
+        SongDef ver = applyVersion(src, v, sr, w, &lay);
+        OfflineRun r; renderAll(ver, 2, 97, r);
+        const auto& o = r.out[0];
+        const int64_t J = 2 * bar, half = lay.crossfade / 2;
+        check(lay.parts.size() == 2 && r.e.lengthSamples() == 6 * bar, "version A + C + D: exactly 6 bars long (" + std::to_string(r.e.lengthSamples()) + " samples); C and D merged into one part");
+        bool before = true, after = true;
+        for (int64_t i = 0; i < J - half; ++i) before &= o[(size_t) i] == ramp[(size_t) i];
+        for (int64_t i = J + half; i < 6 * bar; ++i) after &= o[(size_t) i] == ramp[(size_t) (i + 2 * bar)];
+        check(before && after, "the join lands on the right samples: A up to it, C from it (version sample = source sample - 2 bars)");
+        bool xfOk = lay.crossfade == 240;
+        for (int64_t i = J - half; i < J + half; ++i) {
+            const double u = (double) (i - (J - half)) / (double) lay.crossfade;
+            const double want = ramp[(size_t) i] * std::cos(1.5707963267948966 * u) + ramp[(size_t) (i + 2 * bar)] * std::sin(1.5707963267948966 * u);
+            xfOk &= std::fabs(o[(size_t) i] - want) < 2e-6;
+        }
+        check(xfOk, "a 5 ms equal-power crossfade is centred on the join (cos out, sin in): no click");
+        check(maxStep(o, (size_t) (J - half - 2), (size_t) (J + half + 2)) < 0.02f, "no step at the join");
+        bool cd = true;
+        for (int64_t i = 4 * bar - 500; i < 4 * bar + 500; ++i) cd &= o[(size_t) i] == ramp[(size_t) (i + 2 * bar)];
+        check(cd, "where C meets D (contiguous in the source) the audio is untouched");
+        const auto ck = onsets(r, 1, 0.02f, 1000);
+        std::vector<int64_t> wantCk; for (int b = 0; b < 6; ++b) wantCk.push_back(b * bar);
+        check(ck == wantCk, "click hits follow their bars into the version (one per bar, on its downbeat)");
+        // Reordered: D then A (D starts inside the song: faded in; A after the join, from its source start).
+        VersionDef v2; v2.parts = { { 7, 2 }, { 1, 2 } };
+        SongDef ver2 = applyVersion(src, v2, sr, w, &lay);
+        OfflineRun r2; renderAll(ver2, 2, 128, r2);
+        const auto& o2 = r2.out[0];
+        bool okA = true; for (int64_t i = 2 * bar + half; i < 4 * bar - 2000; ++i) okA &= o2[(size_t) i] == ramp[(size_t) (i - 2 * bar)];
+        bool okD = true; for (int64_t i = lay.crossfade; i < 2 * bar - half; ++i) okD &= o2[(size_t) i] == ramp[(size_t) (i + 6 * bar)];
+        check(r2.e.lengthSamples() == 4 * bar && okA && okD && std::fabs(o2[0]) < 1e-6f, "reordered D, A: 4 bars, each part from its own source samples, the start faded in from silence");
+    }
+    {
+        // Segue: song A ends on sample LA (not on a bar line), song B starts on the very next sample.
+        const int64_t LA = 100003, LB = 60000;
+        SongDef a; a.name = "A"; a.tempo = { { 1, 120, 4, 4 } }; a.stems.push_back(rampStem(LA, 0.1f, 0));
+        SongDef b; b.name = "B"; b.tempo = { { 1, 120, 4, 4 } }; b.stems.push_back(rampStem(LB, 0.6f, 0));
+        b.clickHits = std::vector<ClickHitDef> { ClickHitDef { 1, 1, true, 0 } }; b.clickOuts = { 1 };
+        OfflineRun r; r.load(a, sr, 2, 128);
+        std::vector<std::string> w;
+        const auto err = r.e.prepareNext(b, w);
+        r.e.setSegue(true);
+        r.start(0); r.runToEnd();
+        const auto& o = r.out[0];
+        bool okA = true, okB = true;
+        for (int64_t i = 0; i < LA; ++i) okA &= o[(size_t) i] == 0.1f + (float) i * 1e-6f;
+        for (int64_t i = 0; i < LB; ++i) okB &= o[(size_t) (LA + i)] == 0.6f + (float) i * 1e-6f;
+        const auto ck = onsets(r, 1, 0.02f, 1000);
+        check(err.empty() && r.e.segues() == 1 && r.e.songName() == "B" && o.size() >= (size_t) (LA + LB),
+              "segue: B takes over by itself at the end of A (mid-block, block 128)");
+        check(okA && okB, "segue: no gap, no overlap: B's first sample immediately follows A's last (A ends on sample " + std::to_string(LA) + ")");
+        check(ck.size() == 1 && ck[0] == LA, "segue: B's click on its bar 1 sounds on that exact sample");
+    }
+    {
+        // A queued jump (Next bar): armed mid-bar, it lands exactly on the next bar line.
+        const int64_t bar = 96000;
+        SongDef s; s.name = "Jump"; s.tempo = { { 1, 120, 4, 4 } }; s.stems.push_back(rampStem(8 * bar, 0.0f, 0));
+        OfflineRun r; r.load(s, sr, 1, 128); r.start(0);
+        while (r.e.position() < bar + bar / 3) r.step(); // inside bar 2
+        const auto& tm = r.e.tempoMap();
+        const int64_t at = tm.nextBarStart(r.e.position()), to = tm.sampleAt(6, 1);
+        r.e.setJump(at, to, false);
+        while (r.e.position() < to + bar / 2 && r.e.isPlaying()) r.step();
+        const auto& o = r.out[0];
+        check(at == 2 * bar && o[(size_t) (at - 1)] == (float) (at - 1) * 1e-6f && o[(size_t) at] == (float) to * 1e-6f,
+              "a queued jump lands exactly on the next bar line (bar 3 -> bar 6)");
+    }
+    {
+        // A loop (bars 2-3) repeats; Exit loop leaves at the end of the pass that's playing.
+        const int64_t bar = 96000;
+        SongDef s; s.name = "Loop"; s.tempo = { { 1, 120, 4, 4 } }; s.stems.push_back(rampStem(8 * bar, 0.0f, 0));
+        OfflineRun r; r.load(s, sr, 1, 128);
+        r.e.setLoop(bar, 3 * bar); r.start(0);
+        // two full passes, then exit in the middle of the third
+        while ((int64_t) r.out[0].size() < bar + 2 * (2 * bar) + bar / 2) r.step();
+        r.e.clearJump();
+        while ((int64_t) r.out[0].size() < bar + 3 * (2 * bar) + bar) r.step();
+        const auto& o = r.out[0];
+        const int64_t endOfThird = bar + 3 * (2 * bar); // output index where the third pass ends
+        check(o[(size_t) (endOfThird - 1)] == (float) (3 * bar - 1) * 1e-6f && o[(size_t) endOfThird] == (float) (3 * bar) * 1e-6f
+              && o[(size_t) (bar + 2 * bar)] == (float) bar * 1e-6f,
+              "loop: repeats while armed; Exit loop leaves at the end of the pass (then plays on into bar 4)");
+    }
     std::printf(ok ? "ALL CHECKS PASSED\n" : "SOME CHECKS FAILED\n");
     return ok;
 }
