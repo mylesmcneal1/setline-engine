@@ -951,7 +951,7 @@
   .pmidi div{background:#2a2a2e;border-radius:10px;padding:10px 14px;min-width:0} .pmidi div>span{color:#c9c9cf;font-size:.92em;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .pmidi b{display:block;font-size:clamp(17px,1.3vw,28px);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .pmidi b small{color:#64d2ff;font-weight:600;font-size:.85em}
   .psl{display:flex;flex-direction:column;padding:clamp(12px,1vw,22px) clamp(10px,.8vw,18px);min-height:0;overflow:hidden}
-  .psl .sh{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:0 8px 10px}
+  .psl .pslh{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:0 8px 10px;flex:none} .psl .pslh .lb2{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .psl .clk{font:13px var(--code,monospace);color:#c9c9cf;white-space:nowrap} .psl .clk.over{color:var(--red,#ff453a)}
   .psl .list{overflow:auto;min-height:0;display:flex;flex-direction:column}
   .psl .it{display:flex;align-items:center;gap:10px;padding:9px 8px;border-radius:8px;cursor:pointer;min-height:clamp(46px,4vh,64px)}
@@ -3615,12 +3615,13 @@ function midiNow(s,t){ return s.tracks.filter(tr=>isMidiTrack(s,tr)&&!isOff(s,tr
 // a section's seconds in the source (version-only parts: their bars at the tempo where they sit)
 function partSecs(s,p){ if(p.extra){ const b=s.bars[Math.max(0,Math.min(s.total,p.sb||1)-1)]; return p.bars*(b?b.dur:2); } const a=s.bars[p.sb-1], e=s.bars[p.sb-1+p.bars]; return a?(e?e.t:a.t+a.dur*p.bars)-a.t:0; }
 function perfState(s){ const v=playVer(s), parts=perfParts(s,v), here=s.id===playId, bar=barAtTime(s,here?pos:0), beat=here&&playing?Math.floor(engBeat||1):0;
-  const ci=parts.findIndex(p=>!p.extra&&bar>=p.sb&&bar<p.sb+p.bars), cur=ci>=0?parts[ci]:null;
-  const tot=parts.reduce((a,p)=>a+p.bars,0), done=cur?parts.slice(0,ci).reduce((a,p)=>a+p.bars,0)+(bar-cur.sb):0;
+  let ci=parts.findIndex(p=>!p.extra&&bar>=p.sb&&bar<p.sb+p.bars); if(ci>0&&parts[ci-1].extra&&(!here||!playing)&&(here?pos:0)<=1e-3) ci=0; if(ci<0&&parts.length&&(here?pos:0)<=1e-3) ci=0; const cur=ci>=0?parts[ci]:null;
+  const X=!!(cur&&cur.extra); // a version's own part (stopped at its start): all of it is ahead
+  const tot=parts.reduce((a,p)=>a+p.bars,0), done=cur?parts.slice(0,ci).reduce((a,p)=>a+p.bars,0)+(X?0:bar-cur.sb):0;
   const b=s.bars[bar-1], sig=b?b.sig[0]:4, frac=here&&b?Math.max(0,Math.min(1,(pos-b.t)/(b.dur||1))):0;
-  const curEnd=cur?(s.bars[cur.sb-1+cur.bars]?s.bars[cur.sb-1+cur.bars].t:s.audio):0;
-  const left=cur?Math.max(0,curEnd-(here?pos:0))+parts.slice(ci+1).reduce((a,p)=>a+partSecs(s,p),0):parts.reduce((a,p)=>a+partSecs(s,p),0);
-  return {v,parts,ci,cur,next:ci>=0?parts[ci+1]||null:parts[0]||null,tot,done,bar,beat,sig,frac,barsLeft:cur?cur.sb+cur.bars-bar:0,left}; }
+  const curEnd=X?0:cur?(s.bars[cur.sb-1+cur.bars]?s.bars[cur.sb-1+cur.bars].t:s.audio):0;
+  const left=X?parts.slice(ci).reduce((a,p)=>a+partSecs(s,p),0):cur?Math.max(0,curEnd-(here?pos:0))+parts.slice(ci+1).reduce((a,p)=>a+partSecs(s,p),0):parts.reduce((a,p)=>a+partSecs(s,p),0);
+  return {v,parts,ci,cur,next:ci>=0?parts[ci+1]||null:parts[0]||null,tot,done,bar,beat,sig,frac,barsLeft:X?cur.bars:cur?cur.sb+cur.bars-bar:0,left}; }
 const secCol=p=>p.extra?'#5a5a62':SEC_C[p.type]||'#7d8696';
 function patchAt(s,sb){ const b=s.bars[sb-1]; if(!b) return ''; const m=midiNow(s,b.t+1e-4)[0]; return m?(m.name||m.label):''; }
 function perfClock(){ const L=curSetObj(), now=new Date(), hh=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
@@ -3630,7 +3631,7 @@ function perfClock(){ const L=curSetObj(), now=new Date(), hh=String(now.getHour
   const over=(now.getTime()+left*1000-f.getTime())/1000, a=Math.abs(over);
   return {text:`${hh} · curfew ${over>0?'+':'−'}${Math.floor(a/60)}:${String(Math.floor(a%60)).padStart(2,'0')}`,over:over>0}; }
 function perfSetlist(s){ const L=curSetObj(), cl=perfClock();
-  return `<div class="sh"><span class="lb2">Setlist · ${esc(L.name)}</span><span class="clk ${cl.over?'over':''}" id="pfClock">${esc(cl.text)}</span></div><div class="list">${setOrder.map((id,k)=>{ const x=songs.find(q=>q.id===id); if(!x) return ''; const vs=versOf(x), ev=entryVer(x), isNow=playing&&x.id===playId, a=afterOf(x);
+  return `<div class="pslh"><span class="lb2">Setlist · ${esc(L.name)}</span><span class="clk ${cl.over?'over':''}" id="pfClock">${esc(cl.text)}</span></div><div class="list">${setOrder.map((id,k)=>{ const x=songs.find(q=>q.id===id); if(!x) return ''; const vs=versOf(x), ev=entryVer(x), isNow=playing&&x.id===playId, a=afterOf(x);
     return `<div class="it ${isNow?'now':''} ${!playing&&x.id===s.id?'sel':''}" data-id="${esc(x.id)}"><span class="n">${k+1}</span><span class="bar" style="background:${x.col}"></span><span class="t"><b>${esc(x.name)}</b><small>${esc(ev?ev.name:'')}${vs.length>1&&!isNow?`<button data-v="-1" title="Previous version">‹</button><button data-v="1" title="Next version">›</button>`:''}</small></span>${isNow?'<span class="badge">NOW</span>':''}<span class="tm">${fmt(verLen(x,ev))}</span></div>`
       +(k<setOrder.length-1?`<div class="tr">${a.mode==='stop'?'■ Stop':esc(afterLabel(a))}</div>`:''); }).join('')}</div>`; }
 function renderPerform(full){ const el=$('perf'); if(!el||!perfOn) return; const s=perfSong();
