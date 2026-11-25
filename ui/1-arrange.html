@@ -1015,6 +1015,10 @@
   .ctlact .dotm{width:8px;height:8px;border-radius:50%;background:#30d158}
   .ctlrow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end} .ctlkey{font:11px var(--code,monospace);color:var(--muted);min-width:40px;text-align:right}
   .ctlmap{font-size:11px;background:#0a84ff22;color:#9ccaff;border-radius:6px;padding:3px 8px} .ctlmap:hover{background:#0a84ff44}
+  /* ---- 7d: backup rig ---- */
+  .rigstat{display:inline-flex;align-items:center;gap:6px;font-size:12px;background:#1f2a22;color:#bff0cb;border-radius:14px;padding:4px 10px;margin-left:6px;white-space:nowrap;cursor:pointer} .rigstat.warn{background:#3a2a12;color:#ffd08a} .rigstat.bad{background:#3a1515;color:#ffb3b3} .rigstat button{background:#ff453a;color:#fff;border-radius:10px;padding:2px 8px;font-weight:700;font-size:11px}
+  .rigbanner{display:flex;align-items:center;gap:14px;justify-content:center;background:#c81e1e;color:#fff;font-size:22px;padding:10px 16px;letter-spacing:.02em} .rigbanner[hidden]{display:none}
+  .rigcode{font:700 40px var(--code,monospace);letter-spacing:.2em;color:#fff}
   .pftoast{position:fixed;left:50%;top:84px;transform:translateX(-50%);background:#0a84ff;color:#fff;font-weight:700;font-size:clamp(18px,1.5vw,30px);padding:10px 22px;border-radius:12px;z-index:950;box-shadow:0 10px 30px rgba(0,0,0,.5);pointer-events:none}
   /* ---- 6d: Settings sheet, status pill, gear ---- */
   .scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:900;display:flex;align-items:center;justify-content:center}
@@ -1069,10 +1073,11 @@
   </div>
   <div class="listenc" title="Where you hear the show: its own outputs (normal), or this computer's speakers / headphones"><div class="seg" id="listenSeg"><button data-v="show" class="on">Show outputs</button><button data-v="pc">This computer</button></div></div>
   <div class="listenbar" id="listenBar" hidden><span id="listenPre">Listening on </span><span id="listenDev"></span><span id="listenWhat" style="font-weight:500"></span><button id="listenOffB">Back to show outputs</button></div>
-  <span class="mididot" id="midiDot" hidden title="MIDI in: flashes when a pedal or controller sends something (blue: it triggered an action)"></span><span class="bandstat" id="bandStat" hidden></span><button class="btn line syncb" id="syncBtn" hidden title="Send this setlist’s MIDI sync point to every device">Sync MIDI</button><button class="btn line pfonly" id="pfSetBtn" title="Setlists">Setlist ▾</button><button class="btn line pfonly lockb" id="lockBtn" title="Lock Perform: clicks and taps do nothing until you hold this (keys and pedals still work)">Lock</button>
+  <span class="rigstat" id="rigStat" hidden></span><span class="mididot" id="midiDot" hidden title="MIDI in: flashes when a pedal or controller sends something (blue: it triggered an action)"></span><span class="bandstat" id="bandStat" hidden></span><button class="btn line syncb" id="syncBtn" hidden title="Send this setlist’s MIDI sync point to every device">Sync MIDI</button><button class="btn line pfonly" id="pfSetBtn" title="Setlists">Setlist ▾</button><button class="btn line pfonly lockb" id="lockBtn" title="Lock Perform: clicks and taps do nothing until you hold this (keys and pedals still work)">Lock</button>
   <button class="status" id="statusChip" title="Audio settings"><span class="dot" id="statusDot"></span><span id="statusTxt">No audio device</span></button><button class="ibtn gear" id="gearBtn" title="Settings  ⌘,">⚙</button>
 </header>
 
+<div class="rigbanner" id="rigBanner" hidden><b>PRIMARY LOST, backup is live</b><span id="rigBannerT"></span></div>
 <div class="main">
   <!-- SETLIST -->
   <aside class="side">
@@ -3179,6 +3184,67 @@ function ableSummary(lines,logPath,firstId){ const bg=document.createElement('di
   $('abSumShow').onclick=()=>{ bg.remove(); if(perfOn) setPerform(false); if(firstId){ open.add(firstId); select(firstId,true); refresh(); document.querySelector(`.folder[data-id="${firstId}"]`)?.scrollIntoView({block:'start'}); } }; }
 window.SLAble={ song:ableSong, dups:ableDups, box:ableBox, progress:ableProgress, add:ableAdd, summary:ableSummary };
 
+// ======================= BACKUP RIG (7d): a second computer in lockstep, ready to take over =======================
+// Settings › Backup rig: the role (Off / Primary / Backup), pairing (the backup shows a code and its address; the
+// primary picks it or types them), the extra latency, the failover message, which ports the backup also sends to,
+// the library check and Send setlist. Top bar: the rig's status on both computers; the backup's Take over now.
+let RIG={role:'off',paired:false,failover:false}, RIGLIB=null, RIGPROG=null;
+const rigFollowing=()=>RIG.role==='backup'&&RIG.paired&&!RIG.failover;
+function rigInfoIn(ri){ if(!ri) return; const was=JSON.stringify([RIG.role,RIG.paired,RIG.failover]); RIG=ri; renderRigStat(); if(settingsOpen()&&SET_TAB==='rig'&&was!==JSON.stringify([RIG.role,RIG.paired,RIG.failover])) renderSettings(); }
+function renderRigStat(){ const el=$('rigStat'); if(!el) return; const r=RIG; let t='', cls='';
+  if(r.role==='primary'&&r.paired){ const st=r.status||{}, age=r.statusAge;
+    if(age<0||age>1500){ t='Backup: offline'; cls='bad'; } else if(st.failover){ t='Backup: LIVE (it took over)'; cls='bad'; } else if(st.missing){ t='Backup: missing songs'; cls='warn'; } else if(Math.abs(+st.driftMs||0)>5){ t='Backup: behind'; cls='warn'; } else t=`Backup: in sync ✓ (offset ${Math.abs(+st.driftMs||0).toFixed(1)} ms)`; }
+  else if(r.role==='backup'&&r.paired){ if(r.failover){ t='BACKUP IS LIVE'; cls='bad'; } else if(r.since<0||r.since>1000){ t='Primary: offline'; cls='bad'; } else t=`Following the primary ✓ (clock ${(+r.offsetMs).toFixed(1)} ms)`; }
+  else if(r.role!=='off'){ t=r.role==='backup'?`Backup: not paired (code ${r.code})`:'Primary: no backup paired'; cls='warn'; }
+  el.hidden=!t; el.className='rigstat '+cls; el.innerHTML=esc(t)+(r.role==='backup'&&r.paired&&!r.failover?' <button id="rigTake" title="Play from this computer now (failover by hand)">Take over now</button>':'');
+  el.onclick=e=>{ if(e.target.id==='rigTake'){ e.stopPropagation(); confirmBox('Take over now?','This computer becomes the live one: its MIDI goes out and the primary is no longer followed.','Take over',()=>ncall('rigTakeOver')); return; } openSettings('rig'); }; }
+// failover: keep playing, MIDI on (the app unmutes it), the failover message, the current patches out, the banner
+async function rigLost(m){ RIG.failover=true; renderRigStat(); $('rigBanner').hidden=false; $('rigBannerT').textContent=m&&m.manual?'(taken over by hand)':'';
+  const fm=String((m&&m.failoverMsg)||''); if(fm.includes('|')){ const [port,text]=fm.split('|'); const {msgs}=syncLines(text,1); if(msgs.length) await ncall('sendMidiNow',{port,msgs}); }
+  const s=songs.find(x=>x.id===playId); if(s) s.tracks.filter(t=>isMidiTrack(s,t)).forEach(t=>{ const cfg=s.midiCfg[t]||{}; let last=null; (s.midi[t]||[]).forEach(e=>{ if(e.kind==='pc'&&evTime(s,e)<=pos+1e-6&&(!last||evTime(s,e)>=evTime(s,last))) last=e; });
+    if(last&&cfg.port){ const c=Math.max(0,(+cfg.ch||1)-1), msgs=[]; if(last.msb!==undefined) msgs.push([0xB0|c,0,last.msb]); if(last.lsb!==undefined) msgs.push([0xB0|c,32,last.lsb]); msgs.push([0xC0|c,last.pc&127]); ncall('sendMidiNow',{port:cfg.port,msgs}); } });
+  toast('PRIMARY LOST: this computer is live'); }
+function rigBack(){ confirmBox('The primary is back','Return control to it? This computer goes back to following it (its MIDI stops).','Return control',async()=>{ await ncall('rigReturn'); RIG.failover=false; $('rigBanner').hidden=true; renderRigStat(); }); }
+function rigPaired(m){ if(m&&m.error) toast('Backup rig: '+m.error); else if(m&&m.peer) toast('Backup rig: paired with '+m.peer); else toast('Backup rig: unpaired'); if(settingsOpen()&&SET_TAB==='rig') renderSettings(); }
+// primary: the backup's library against this one, for the current setlist
+function rigLibrary(l){ if(!Array.isArray(l)){ RIGLIB={error:(l&&l.error)||'No answer'}; } else { const by=new Map(l.map(x=>[x.id,x])), diffs=[];
+    curSetObj().order.forEach(id=>{ const s=songs.find(x=>x.id===id); if(!s) return; const b=by.get(id); if(!b){ diffs.push(`${s.name}: not on the backup`); return; }
+      const vs=(s.versions||[]).map(v=>v.id).filter(v=>!b.vers.includes(v)); if(vs.length) diffs.push(`${s.name}: ${vs.length} version${vs.length===1?'':'s'} missing`);
+      const au=Object.values(s.files||{}).map(f=>f&&f.path).filter(p=>p&&!b.audio.includes(p)); if(au.length) diffs.push(`${s.name}: ${au.length} audio file${au.length===1?'':'s'} differ`); });
+    RIGLIB={diffs,at:Date.now()}; }
+  if(settingsOpen()&&SET_TAB==='rig') renderSettings(); }
+function rigProgress(m){ RIGPROG=m.fraction; const el=$('rigProg'); if(el) el.textContent=`Sending… ${Math.round(100*m.fraction)}%`; }
+async function rigHTML(){ const r=(await ncall('rigInfo'))||RIG, ports=PORTS.filter(Boolean);
+  const roleSeg=segm('rigRole',[['off','Off'],['primary','Primary'],['backup','Backup']],r.role);
+  let body='';
+  if(r.role==='backup') body=r.paired?sgrp([sf('Paired with the primary',`<span class="faint">${esc(r.peer)}</span> <button class="sel2" id="rigUnpair">Unpair</button>`),sf('Following',r.failover?'<b style="color:var(--red)">This computer is live</b>':`clock offset ${(+r.offsetMs).toFixed(2)} ms · round trip ${(+r.rttMs).toFixed(1)} ms · drift ${(+r.driftMs).toFixed(2)} ms (worst ${(+r.driftWorstMs).toFixed(2)})`),sf('Failover by hand',r.failover?'<button class="sel2" id="rigRet">Follow the primary again</button>':'<button class="btn" id="rigTake2" style="background:#ff453a;color:#fff">Take over now</button>')])
+      :`<p class="d">On the primary, pick this computer or type its address, then this code:</p><div class="rigcode">${esc(r.code)}</div><p class="d">Address: ${esc((r.addresses||[]).join(', ')||'not on a network')}</p>`;
+  if(r.role==='primary') body=r.paired?sgrp([sf('Paired with the backup',`<span class="faint">${esc(r.peer)}</span> <button class="sel2" id="rigUnpair">Unpair</button>`),
+      sf('Library check',`<span class="faint" style="font-size:12px">${RIGLIB?RIGLIB.error?esc(RIGLIB.error):RIGLIB.diffs.length?`<span style="color:var(--amber)">${RIGLIB.diffs.length} difference${RIGLIB.diffs.length===1?'':'s'}</span>`:'Same setlist, songs, versions and audio ✓':''}</span> <button class="sel2" id="rigCheck">Check</button>`),
+      sf('Send this setlist to the backup',`<span class="faint" id="rigProg"></span> <button class="sel2" id="rigSend">Send “${esc(curSetObj().name)}”</button>`)])+(RIGLIB&&RIGLIB.diffs&&RIGLIB.diffs.length?`<p class="d">${RIGLIB.diffs.map(esc).join('<br>')}</p>`:'')
+      :`<p class="d">Backups on this network: ${(r.found||[]).length?(r.found||[]).map(f=>`<button class="sel2 rigfound" data-ip="${esc(f.ip)}">${esc(f.name)} (${esc(f.ip)})</button>`).join(' '):'none found yet (set the other computer to Backup)'}</p>
+        ${sgrp([sf('Backup address',`<input class="tx" id="rigIp" placeholder="192.168.1.20">`),sf('Its code',`<input class="tx" id="rigCode" placeholder="4 digits" style="width:90px"> <button class="btn pri" id="rigPair">Pair</button>`)])}`;
+  const common=r.role==='off'?'':sgrp([sf('Extra latency (both start together)',`<span class="rsl"><input type="number" id="rigLat" min="20" max="100" step="5" value="${r.latencyMs}" style="width:64px"> ms</span>`),
+      sf('Primary lost after',`<span class="rsl"><input type="number" id="rigTo" min="200" max="5000" step="100" value="${r.timeoutMs}" style="width:70px"> ms without a heartbeat</span>`),
+      sf('Failover MIDI message',`<span class="clkrow"><select id="rigFmPort"><option value="">None</option>${ports.map(p=>`<option ${String(r.failoverMsg||'').split('|')[0]===p?'selected':''}>${esc(p)}</option>`).join('')}</select><input class="tx" id="rigFmText" placeholder="PC 12 · CC 7 100 · raw B0 07 64" value="${esc(String(r.failoverMsg||'').split('|')[1]||'')}" style="width:170px"></span>`),
+      ...(r.role==='backup'?ports.map(p=>sf(`Backup also sends MIDI to ${esc(p)}`,tog('rigAlso_'+btoa(unescape(encodeURIComponent(p))).replace(/=/g,''),(r.alsoSends||[]).includes(p),'For setups with separate devices per rig'))):[])]);
+  return `<h3>Backup rig</h3><p class="d">A second computer plays the same thing at the same moment. If the primary fails, the backup is already playing: switch to it. Its MIDI stays quiet until it takes over. Audio device, outputs, MIDI ports and controller mappings stay per computer.</p>${sgrp([sf('This computer is',roleSeg)])}${body}${common}`; }
+function wireRig(){ const q=id=>$(id), re=()=>renderSettings();
+  q('rigRole').querySelectorAll('button').forEach(b=>b.onclick=async()=>{ await ncall('rigRole',{role:b.dataset.v}); re(); });
+  if(q('rigUnpair')) q('rigUnpair').onclick=async()=>{ await ncall('rigUnpair'); re(); };
+  if(q('rigTake2')) q('rigTake2').onclick=()=>ncall('rigTakeOver').then(re);
+  if(q('rigRet')) q('rigRet').onclick=async()=>{ await ncall('rigReturn'); $('rigBanner').hidden=true; re(); };
+  document.querySelectorAll('#sbody .rigfound').forEach(b=>b.onclick=()=>{ q('rigIp').value=b.dataset.ip; q('rigCode').focus(); });
+  if(q('rigPair')) q('rigPair').onclick=()=>{ const ip=q('rigIp').value.trim(), c=q('rigCode').value.trim(); if(!ip||!/^\d{4}$/.test(c)){ toast('The backup’s address and its 4-digit code'); return; } ncall('rigPair',{ip,code:c}); toast('Pairing…'); };
+  if(q('rigCheck')) q('rigCheck').onclick=()=>{ RIGLIB=null; ncall('rigLibrary'); toast('Asking the backup…'); };
+  if(q('rigSend')) q('rigSend').onclick=()=>{ if(window.SLE&&SLE.rigSendSetlist) SLE.rigSendSetlist(); };
+  const opt=o=>ncall('rigOptions',o);
+  if(q('rigLat')) q('rigLat').onchange=e=>opt({latencyMs:+e.target.value});
+  if(q('rigTo')) q('rigTo').onchange=e=>opt({timeoutMs:+e.target.value});
+  const fm=()=>opt({failoverMsg:q('rigFmPort').value?q('rigFmPort').value+'|'+q('rigFmText').value:''});
+  if(q('rigFmPort')){ q('rigFmPort').onchange=fm; q('rigFmText').onchange=fm; }
+  document.querySelectorAll('#sbody .tog[id^="rigAlso_"]').forEach(b=>b.onclick=async()=>{ const p=decodeURIComponent(escape(atob(b.id.slice(8)))), cur=new Set(RIG.alsoSends||[]); cur.has(p)?cur.delete(p):cur.add(p); await opt({alsoSends:[...cur]}); RIG.alsoSends=[...cur]; re(); }); }
+
 // ======================= BAND (6g): song fields, curfew, MIDI sync point, Soundcheck, Vamp, the band's screens =======================
 // Song fields: definitions in the library (FIELDS, Settings › Band), values per song (s.fields) and per version
 // (v.fields: the version's value wins). The band's screens (BAND.screens): their layouts, also in the library.
@@ -3524,7 +3590,7 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
     soundcheck:(id,v)=>soundcheck(id,v), endSoundcheck:()=>endSoundcheck(), vamp:()=>vamp(), jump:id=>queueJumpTo(id), cancelJump:()=>cancelQueuedJump(), syncMidi:()=>syncMidi(), fillSync:()=>fillSyncFromFirst(), syncLines:(t,c)=>syncLines(t,c),
     view:on=>setBand(on), addWidget:(sc,type,x,y)=>addWidget(sc,type,x,y), select:(id,ori)=>{ BSEL=id; if(ori) BORI=ori; renderBand(); }, fields:()=>FIELDS, setFields:f=>{ FIELDS=f; refresh(); }, fieldVal:(s,f,v)=>fieldVal(s,f,v), setFieldVal:(s,f,val,v)=>setFieldVal(s,f,val,v), newField:n=>newField(n), table:()=>fieldsTable(), finishBy:v=>{ const L=curSetObj(); if(v) L.finishBy=v; else delete L.finishBy; } },
   midiReconnected(names){ /* 7a: Sync MIDI is one button only; nothing goes out by itself */ },
-  selectSong:id=>{ select(id,false); refresh(); }, midiAction:m=>onMidiAction(m), midiIn:m=>onMidiIn(m), midiLearned:m=>{ if(window.SLLearn) SLLearn(m); }, setMidiMap:(l,ins)=>{ MIDI_MAP=Array.isArray(l)?l:[]; MIDI_INS=ins||[]; if(settingsOpen()&&SET_TAB==='controls') renderSettings(); }, midiMap:()=>MIDI_MAP,
+  selectSong:id=>{ select(id,false); refresh(); }, rigLost:m=>rigLost(m), rigBack:()=>rigBack(), rigPaired:m=>rigPaired(m), rigLibrary:l=>rigLibrary(l), rigProgress:m=>rigProgress(m), rigInfo:ri=>rigInfoIn(ri), rigFollowing:()=>rigFollowing(), midiAction:m=>onMidiAction(m), midiIn:m=>onMidiIn(m), midiLearned:m=>{ if(window.SLLearn) SLLearn(m); }, setMidiMap:(l,ins)=>{ MIDI_MAP=Array.isArray(l)?l:[]; MIDI_INS=ins||[]; if(settingsOpen()&&SET_TAB==='controls') renderSettings(); }, midiMap:()=>MIDI_MAP,
   setlistOpened(){},
   // 6f: the Library
   setlistCmd:cmd=>setlistCmd(cmd), curSetId:()=>curSet,
@@ -3589,13 +3655,13 @@ function tick(t){ if(playing&&!NATIVE){ const w=Math.max(0,Math.min(.1,(t-last)/
   const cy=loopRange(s); if(cy&&pos>=cy[1]) pos=cy[0]+(pos-cy[1]); }
   if(!NATIVE&&pos>=s.audio){ pos=s.audio-.01; playing=false; $('playBtn').classList.remove('on'); }
   lcd(); meters(); requestAnimationFrame(tick); }
-function toggle(){ if(!NATIVE) audio(); if(!selId&&!playing) return; playing=!playing; if(!playing) try{ speechSynthesis.cancel(); }catch(e){} $('playBtn').classList.toggle('on',playing); if(playing){ if(playId!==selId){ playId=selId; pos=0; } const s=songs.find(x=>x.id===playId); if(pos>=s.audio-.05) pos=0; const cy=loopRange(s); if(cy&&(pos<cy[0]||pos>=cy[1])) pos=cy[0]; document.querySelectorAll('.folder').forEach(f=>f.classList.toggle('playing',f.dataset.id===playId)); } last=performance.now(); requestAnimationFrame(tick);
+function toggle(){ if(rigFollowing()){ toast('This is the backup: it follows the primary. Take over now to play here.'); return; } if(!NATIVE) audio(); if(!selId&&!playing) return; playing=!playing; if(!playing) try{ speechSynthesis.cancel(); }catch(e){} $('playBtn').classList.toggle('on',playing); if(playing){ if(playId!==selId){ playId=selId; pos=0; } const s=songs.find(x=>x.id===playId); if(pos>=s.audio-.05) pos=0; const cy=loopRange(s); if(cy&&(pos<cy[0]||pos>=cy[1])) pos=cy[0]; document.querySelectorAll('.folder').forEach(f=>f.classList.toggle('playing',f.dataset.id===playId)); } last=performance.now(); requestAnimationFrame(tick);
   if(NATIVE&&window.SLE){ if(playing) SLE.playFrom(songs.find(x=>x.id===playId),pos); else SLE.stop(); } }
 $('playBtn').onclick=toggle;
 $('stopBtn').onclick=()=>{ if(!playing) pos=0; if(NATIVE&&window.SLE) SLE.stop(); playing=false; $('playBtn').classList.remove('on'); lcd(); requestAnimationFrame(tick); };
 $('rtz').onclick=()=>{ const s=songs.find(x=>x.id===(playId||selId)); if(s){ const cy=loopRange(s); locate(s,cy?cy[0]:0); } };
 const order=()=>setOrder.length?setOrder.map(id=>songs.find(x=>x.id===id)).filter(Boolean):[...songs].sort(byName);
-function stepSong(d){ const L=order(); if(!L.length) return; const cur=L.findIndex(x=>x.id===(playId||selId)); const n=L[Math.max(0,Math.min(L.length-1,cur<0?0:cur+d))]; const was=playing; playing=false;
+function stepSong(d){ if(rigFollowing()){ toast('This is the backup: it follows the primary. Take over now to play here.'); return; } const L=order(); if(!L.length) return; const cur=L.findIndex(x=>x.id===(playId||selId)); const n=L[Math.max(0,Math.min(L.length-1,cur<0?0:cur+d))]; const was=playing; playing=false;
   playId=n.id; pos=0; open.add(n.id); if(focusId) focusId=n.id; select(n.id,false); renderFolders(); document.querySelector(`.folder[data-id="${n.id}"]`)?.scrollIntoView({block:'nearest'}); if(was){ playing=true; $('playBtn').classList.add('on'); last=performance.now(); requestAnimationFrame(tick); if(NATIVE&&window.SLE){ if(d>0&&SLE.nextSong) SLE.nextSong(n); else SLE.playFrom(n,0); } } lcd(); renderPerform(true); }
 $('prevSong').onclick=()=>stepSong(-1); $('nextSong').onclick=()=>stepSong(1);
 function setLoop(on){ loopOn=on; $('loopBtn').classList.toggle('on',on); renderFolders(); }
@@ -3836,7 +3902,7 @@ function nextLoadText(n){ if(!NATIVE) return 'Loaded and ready'; const m=NEXTST;
 // ======================= SETTINGS (6d) =======================
 // One sheet: ⚙ in the top bar, File › Preferences…, Ctrl/⌘+,. These belong to this computer (the rig), not the show,
 // except where a row says so. The app module (window.SLE) answers the native calls; a plain browser shows the layout.
-const SET_TABS=[['audio','Audio'],['out','Outputs'],['midi','MIDI'],['controls','Controls'],['voices','Voices'],['band','Band'],['general','General'],['look','Appearance'],['diag','Diagnostics']];
+const SET_TABS=[['audio','Audio'],['out','Outputs'],['midi','MIDI'],['controls','Controls'],['rig','Backup rig'],['voices','Voices'],['band','Band'],['general','General'],['look','Appearance'],['diag','Diagnostics']];
 let SET_TAB='audio', setRenderSeq=0, LDEV={list:[],rate:0,busy:false};
 const ncall=(n,a)=>NATIVE&&window.SLE&&SLE.call?SLE.call(n,a):Promise.resolve(null);
 function openSettings(tab){ if(tab) SET_TAB=tab; let bg=$('setSheet');
@@ -3896,6 +3962,7 @@ async function settingsHTML(tab){
       ${sgrp(patchLists().map(l=>sf(esc(l.name),`<span style="display:flex;gap:6px;align-items:center"><span style="color:var(--muted);font-size:12px">${Object.keys(l.names||{}).length} names${l.built?' · built in':''}</span><button class="sel2" style="min-width:0" data-plist="${esc(l.id)}">${l.built?'View…':'Edit…'}</button></span>`)))}
       <div class="racts"><button class="btn line" id="stNewList">＋ New list</button></div>`; }
   if(tab==='controls') return controlsHTML();
+  if(tab==='rig') return await rigHTML();
   if(tab==='voices'){ const m=VMODEL, pct=m.total?Math.floor(100*m.done/m.total):0, list=voiceList(), c=CUEV;
     const state=m.state==='ready'?'Downloaded':m.state==='downloading'?`Downloading… ${pct}%`:m.state==='failed'?'The download didn’t finish: '+esc(m.error):'Not downloaded';
     return `<h3>Voices</h3><p class="d">The voices that speak your cues. Cues are recorded ahead of time and play exactly on their beat.</p>
@@ -3925,6 +3992,7 @@ async function settingsHTML(tab){
   return ''; }
 function wireSettings(tab){ const q=id=>$(id), re=()=>renderSettings();
   if(tab==='controls') wireControls();
+  if(tab==='rig') wireRig();
   if(tab==='audio'){ const set=async req=>{ $('sbody').style.opacity='.6'; await ncall('setAudioSetup',req); $('sbody').style.opacity=''; re(); };
     if(q('stDrv')) q('stDrv').onchange=e=>set({driver:e.target.value});
     if(q('stDev')) q('stDev').onchange=e=>set({driver:q('stDrv').value,device:e.target.value});

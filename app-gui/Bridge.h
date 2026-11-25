@@ -10,6 +10,7 @@
 #include "LibraryStore.h"
 #include "BandServer.h"
 #include "MidiControl.h"
+#include "RigLink.h"
 #include <atomic>
 #include <thread>
 
@@ -74,6 +75,10 @@ private:
     BandServer band; // 6g: the band screens
     MidiControl midiControl { settings }; // 7c: footswitches / controllers
     double midiActMax = 0; int midiActCount = 0;
+    RigLink rig { settings }; // 7d: the backup rig
+    juce::var rigLib;         // backup: its library list (from the page) for the primary's match check
+    std::thread rigSender;
+    void rigMute();
     std::thread exporter;                    // writing a .setline package (one at a time)
     std::shared_ptr<std::atomic<bool>> exportCancel = std::make_shared<std::atomic<bool>>(false);
     std::unique_ptr<juce::FileChooser> packChooser;

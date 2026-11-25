@@ -376,8 +376,31 @@ void Engine::fadeOutAndStop()
 void Engine::stop()
 {
     std::lock_guard<std::mutex> lk(control);
+    startAtNs.store(0); stopAtNs.store(0); // a scheduled start / stop (7d) no longer applies
     fadeOutAndStop();
     midi.flush();
+}
+
+bool Engine::startAt(int64_t fromSample, Clock::time_point when, int timeoutMs)
+{
+    startAtNs.store(nsOf(when), std::memory_order_release); // before playing is set: the first callback already waits
+    stopAtNs.store(0);
+    if (start(fromSample, timeoutMs)) return true;
+    startAtNs.store(0);
+    return false;
+}
+
+void Engine::stopAt(Clock::time_point when) { if (playing.load()) stopAtNs.store(nsOf(when), std::memory_order_release); }
+
+int64_t Engine::sampleAtHost(Clock::time_point when) const
+{
+    return lastPos.load(std::memory_order_relaxed) + (int64_t) std::llround((double) (nsOf(when) - lastOutNs.load(std::memory_order_acquire)) * 1e-9 * cfg.sampleRate);
+}
+
+void Engine::jumpAtHost(Clock::time_point when, int64_t to)
+{
+    const int64_t at = std::max(sampleAtHost(when), pos.load(std::memory_order_relaxed) + 1);
+    setJump(at, to, false);
 }
 
 bool Engine::start(int64_t fromSample, int timeoutMs)
@@ -461,17 +484,31 @@ void Engine::clearJump()
 
 void Engine::process(float* const* outs, int numOuts, int n)
 {
-    const auto t0 = Clock::now();
+    const int64_t tn = testNowNs.load(std::memory_order_relaxed);
+    const auto t0 = tn != 0 ? Clock::time_point(std::chrono::duration_cast<Clock::duration>(std::chrono::nanoseconds(tn))) : Clock::now();
     for (int c = 0; c < numOuts; ++c) if (outs[c]) std::fill(outs[c], outs[c] + n, 0.0f);
     serial.fetch_add(1, std::memory_order_acq_rel);
     // 7a: new click hits (only when the last ones have been collected, so the hand-back slot is always free)
     if (clickOut.load(std::memory_order_acquire) == nullptr)
         if (auto* u = clickIn.exchange(nullptr, std::memory_order_acq_rel)) takeClicks(u);
     if (! playing.load(std::memory_order_acquire)) { clockIdle(n, t0); return; }
+    // 7d: when this block's first sample leaves the interface; a start / stop scheduled for a host time
+    const double srate = cfg.sampleRate;
+    const int64_t outNs = nsOf(t0) + (int64_t) std::llround(latencyBase.load(std::memory_order_relaxed) / srate * 1e9);
+    int startOff = 0;
+    if (const int64_t sa = startAtNs.load(std::memory_order_acquire); sa != 0) {
+        const double k = (double) (sa - outNs) * 1e-9 * srate;
+        if (k >= n) return; // not yet: silence, nothing moves
+        startOff = (int) std::clamp<int64_t>(std::llround(k), 0, n - 1);
+        startAtNs.store(0, std::memory_order_release);
+    }
+    if (const int64_t so = stopAtNs.load(std::memory_order_acquire); so != 0 && (double) (so - outNs) * 1e-9 * srate < n) { stopAtNs.store(0); stopReq.store(true, std::memory_order_release); }
+    lastPos.store(pos.load(std::memory_order_relaxed), std::memory_order_relaxed);
+    lastOutNs.store(outNs + (int64_t) std::llround(startOff / srate * 1e9), std::memory_order_release);
     if (! clockWasPlaying) { // Song Position (in 16ths) + Start from the top / Continue from inside the song
         clockWasPlaying = true;
         const int64_t p0 = pos.load(std::memory_order_relaxed);
-        const int off = (int) std::clamp<int64_t>(startedFrom - p0, 0, n - 1);
+        const int off = (int) std::clamp<int64_t>(startedFrom - p0 + startOff, 0, n - 1);
         const auto& ticks = cur().clockTicks;
         const int spp = (int) ((std::lower_bound(ticks.begin(), ticks.end(), startedFrom) - ticks.begin()) / 6);
         const uint32_t tm = transportMask.load(std::memory_order_relaxed);
@@ -489,7 +526,7 @@ void Engine::process(float* const* outs, int numOuts, int n)
     // Render in segments: a jump splits the block exactly at its sample and playback continues from
     // the target inside the same block; so does a segue at the end of the song (the next song from its sample 0).
     int64_t p = pos.load(std::memory_order_relaxed);
-    for (int done = 0; done < n;) {
+    for (int done = startOff; done < n;) {
         Program& P = cur();
         const bool chain = segueArmed.load(std::memory_order_acquire) && nextLoaded.load(std::memory_order_acquire) && other() != nullptr && other()->primed();
         if (chain && p >= P.songLen) { handOver(p); continue; }

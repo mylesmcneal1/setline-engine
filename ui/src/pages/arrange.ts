@@ -198,6 +198,63 @@ async function liveClicks() {
   } catch (e) { console.warn("set.Line: live click", e); } finally { clickBusy = false; }
 }
 
+// ---------------------------------------------------------------- 7d: backup rig (RigLink.h)
+// The backup follows the primary's state (every 100 ms and at once on each transport change): the same song started
+// at the same moment (rigStartAt, a host time on this clock), the primary's jumps on the same sample, and a re-align
+// whenever the two drift more than 3 ms apart (the interfaces' clocks differ; nothing is resampled).
+let rigBusy = false, rigDrift = 0, rigLibKey = "", rigSeen = new Set<string>();
+async function rigFollow(st: any) {
+  const p = page();
+  if (rigBusy) return;
+  rigBusy = true;
+  try {
+    const h = await SL.call<{ now: number; rate: number }>("hostMs");
+    const rate = h.rate || sessionRate || 48000;
+    let missing = 0;
+    if (!st.playing) { if (p.playing) { await SL.call("rigStop"); p.setPlaying(false); } }
+    else {
+      const s = p.songs.find((x) => x.id === st.songId);
+      if (!s) missing = 1;
+      else if (!p.playing || loadedSongId !== s.id || p.playId !== s.id) {
+        p.setPlayId(s.id);
+        if (await ensureLoaded(s)) {
+          const at = h.now + 80, from = Math.round(st.pos + ((at - st.atLocal) * rate) / 1000);
+          const r = await SL.call<{ error?: string }>("rigStartAt", { from, at });
+          if (!r.error) p.setPlaying(true);
+        }
+      } else if (st.synced) {
+        const mine = await SL.call<number>("rigSampleAt", { at: st.atLocal });
+        if (mine >= 0) {
+          rigDrift = ((mine - st.pos) / rate) * 1000;
+          if (Math.abs(rigDrift) > 3) { const at = h.now + 60; await SL.call("rigJumpAt", { at, to: Math.round(st.pos + ((at - st.atLocal) * rate) / 1000) }); }
+        }
+      }
+    }
+    SL.call("rigStatus", { driftMs: rigDrift, missing, playing: !!p.playing }).catch(() => {});
+  } catch (e) { console.warn("set.Line: backup rig", e); } finally { rigBusy = false; }
+}
+async function rigCommand(c: any) {
+  if (!c || rigSeen.has(String(c.id))) return;
+  rigSeen.add(String(c.id));
+  if (c.kind === "jump" && c.songId === loadedSongId) await SL.call("rigJump", { at: c.at, to: c.to });
+}
+// the backup's library, for the primary's match check (songs, versions, audio by content)
+function rigPushLibrary() {
+  const list = page().songs.map((s: any) => ({ id: s.id, name: s.name, vers: (s.versions || []).map((v: any) => v.id), audio: Object.values(s.files || {}).map((f: any) => f && f.path).filter(Boolean) }));
+  const key = JSON.stringify(list);
+  if (key !== rigLibKey) { rigLibKey = key; SL.call("rigSetLibrary", { list }).catch(() => {}); }
+}
+// primary: "Send setlist to backup": the current setlist as a package (6f), over the network; the backup imports it
+async function rigSendSetlist() {
+  if (page().playing) { page().toast("Stop playback first: a setlist can't be sent while playing"); return { error: "playing" }; }
+  const tmp = await SL.call<string>("tempPath", { name: "to-backup.setline" }).catch(() => "");
+  const e = await exportSetlist(undefined, tmp);
+  if (!e || (e as any).error || !(e as any).path) return { error: (e as any)?.error || "export failed" };
+  const r = await SL.call<{ ok?: boolean; error?: string }>("rigSendPackage", { path: (e as any).path });
+  page().toast(r.error ? "Backup: " + r.error : "Setlist sent to the backup");
+  return r;
+}
+
 // ---------------------------------------------------------------- the next song (6e)
 // While a song is loaded, the setlist's next song (in the version its entry plays) waits in the engine's next slot,
 // primed: Segue plays it on the very next sample, Next and Play start it without loading. Changing a version, the
@@ -298,6 +355,7 @@ async function run(s: Song, t: number) {
 let levelQueued: Song | null = null;
 const SLE = {
   edited: () => { setTimeout(() => liveClicks().catch(() => {}), 60); }, // 7a: after an edit (the page calls it from snap())
+  rigSendSetlist: () => rigSendSetlist(), // 7d: Settings › Backup rig
   // Play song s from page time t (seconds). Called for Play, locate while playing, next song...
   // Requests made while one is in flight coalesce (dragging the playhead sends only the latest).
   playFrom(s: Song | undefined, t: number) {
@@ -1399,6 +1457,16 @@ async function main() {
   SL.on("midiReconnected", (m: { reconnected: string[] }) => page().midiReconnected(m.reconnected || []));
   // 7c: footswitches / controllers (MidiControl.h)
   SL.on("midiAction", (m: any) => (page() as any).midiAction(m));
+  // 7d: the backup rig
+  SL.on("rigState", (st: any) => { if (st && st.t === "st") rigFollow(st); });
+  SL.on("rigCommand", (c: any) => { rigCommand(c).catch(() => {}); });
+  SL.on("rigLost", (m: any) => (page() as any).rigLost(m));
+  SL.on("rigBack", () => (page() as any).rigBack());
+  SL.on("rigPaired", (m: any) => (page() as any).rigPaired(m));
+  SL.on("rigLibrary", (l: any) => (page() as any).rigLibrary(l));
+  SL.on("rigProgress", (m: any) => (page() as any).rigProgress(m));
+  SL.on("rigPackage", (m: { path: string }) => { importPackage(m.path, async (rows: any[]) => { const d: Record<string, string> = {}; rows.forEach((x) => (d[x.id] = "theirs")); return d; }).then(() => page().toast("Setlist received from the primary")).catch(() => {}); });
+  setInterval(() => { SL.call<any>("rigInfo").then((ri) => { (page() as any).rigInfo(ri); if (ri.role === "backup" && ri.paired) rigPushLibrary(); }).catch(() => {}); }, 1000);
   SL.on("midiIn", (m: any) => (page() as any).midiIn(m));
   SL.on("midiLearned", (m: any) => (page() as any).midiLearned(m));
   SL.call<{ list: any[]; inputs: string[] }>("midiMappings").then((r) => (page() as any).setMidiMap(r.list, r.inputs)).catch(() => {});
@@ -1414,7 +1482,7 @@ async function main() {
         getRate: () => sessionRate, openPath: (p: string) => openPath(p), retryStartShow: () => retryStartShow(), docName: () => doc.name, saveTo: (path: string) => saveSession(false, path), cueList: () => cueList(), setListen: (r: Partial<ListenState>) => setListen(r), SLR: window.SLR, SLW, waves, SLC, prepareCues, remember, payload, toBarBeat, toTime, getNext: () => nextMeta, getLoaded: () => ({ id: loadedSongId, ver: curVerId, map: curMap }), isDirty: () => (lib ? sessionText() !== libText : sessionText() !== doc.savedText), setDoc: (n: string) => { doc = { name: n, savedText: "" }; },
         // 6f: the Library
         openLibrary: (n = "", empty?: boolean) => openLibrary(n, empty), libSave: () => libSave(), lib: () => lib, libFiles, exportSetlist: (id?: string, to?: string) => exportSetlist(id, to), exportText,
-        bandStart: (port: number) => SL.call("bandStart", { port, test: true }), bandHost: () => bandHost,
+        bandStart: (port: number) => SL.call("bandStart", { port, test: true }), rigFollow: (st: any) => rigFollow(st), rigSendSetlist: () => rigSendSetlist(), bandHost: () => bandHost,
         importPackage: (p: string, choose?: any) => importPackage(p, choose), importAbleton: (p: string, choose?: any, mode?: string) => importAbleton(p, choose, mode), migrateShows: (paths: string[]) => migrateShows(paths), restoreBackup: (p: string, how: "replace" | "new") => restoreBackup(p, how), switchLibrary: (n: string) => switchLibrary(n), offerMigration: () => offerMigration() };
       out = await new AsyncFn("SL", "hooks", info.testScript)(SL, hooks);
     } catch (e) { out = { error: String((e as Error)?.stack || e) }; }

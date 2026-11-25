@@ -71,6 +71,16 @@ public:
     // A MIDI output that came back (unplugged and plugged in again): names, reported to the page.
     std::function<void(const juce::StringArray&)> onMidiReconnected;
     void setEchoGuard(EchoGuard* e) { midiOuts.echo.store(e); } // 7c
+    // ---- 7d: backup rig ----
+    std::function<int()> rigDelayMs;            // primary: start this much ahead (so the backup hits the same moment)
+    std::function<void()> onTransportChange;    // primary: tell the backup now
+    std::function<void(int64_t, int64_t)> onJumpQueued; // primary: (at, to) samples
+    void setRigMute(bool on, const juce::StringArray& alsoSends);
+    juce::var rigStart(int64_t from, double atHostMs); // backup: play from `from` so it leaves at atHostMs
+    juce::var rigJump(int64_t at, int64_t to);         // backup: the primary's jump (same song, same samples)
+    juce::var rigJumpAtHost(double atHostMs, int64_t to); // backup: re-align
+    int64_t rigSampleAt(double atHostMs);              // the sample leaving at atHostMs (playing)
+    juce::var rigStop() { eng.stop(); if (emit) emit("transport", transportState()); return transportState(); }
 
     // ---- songs and transport ----
     // payload: see SongMapper.h. Returns {ok, warnings, seconds, epoch} or {error}.
@@ -123,10 +133,13 @@ private:
         std::atomic<int> count { 0 };
         std::atomic<bool>* enabled = nullptr; // "Listen on this computer" can hold MIDI back
         std::atomic<EchoGuard*> echo { nullptr }; // 7c: what we send, so an input that echoes it back is ignored
+        std::atomic<bool> rigMute { false };      // 7d: a paired backup sends no MIDI while the primary is fine...
+        std::array<std::atomic<bool>, Max> rigAllow {}; // ...except on ports set to "Backup also sends"
         std::array<std::mutex, Max> locks;    // a port reopened after a reconnect is swapped under its lock
         void sendNow(int port, const uint8_t* d, int len) override
         {
             if (enabled != nullptr && ! enabled->load(std::memory_order_relaxed)) return;
+            if (rigMute.load(std::memory_order_relaxed) && (port < 0 || port >= Max || ! rigAllow[(size_t) port].load(std::memory_order_relaxed))) return;
             if (port < 0 || port >= count.load(std::memory_order_acquire)) return;
             std::lock_guard<std::mutex> g(locks[(size_t) port]);
             if (outs[(size_t) port]) outs[(size_t) port]->sendMessageNow(juce::MidiMessage(d, len));

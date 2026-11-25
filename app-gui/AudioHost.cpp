@@ -713,6 +713,7 @@ juce::var AudioHost::queueJump(const juce::var& req)
     const int64_t to = tm.sampleAt(juce::jmax(1, (int) req["toBar"]), juce::jmax(1.0, (double) req.getProperty("toBeat", 1.0)));
     if (to >= eng.lengthSamples()) return errorObj("That's past the end of the song.");
     eng.setJump(at, to, false);
+    if (onJumpQueued) onJumpQueued(at, to); // 7d: the backup jumps on the same sample
     int ab = 1; double abt = 1; tm.barBeatAt(at, ab, abt);
     o->setProperty("queued", true);
     o->setProperty("atBar", ab);
@@ -743,15 +744,37 @@ juce::var AudioHost::transport(const juce::var& req)
         const double beat = juce::jmax(1.0, (double) req.getProperty("fromBeat", 1.0));
         const int64_t from = eng.tempoMap().sampleAt(bar, beat);
         if (from >= eng.lengthSamples()) return errorObj("That position is past the end of the song.", "end");
-        if (! eng.start(from)) return errorObj("The disk couldn't load the audio in time.", "preroll");
+        const int ahead = rigDelayMs ? rigDelayMs() : 0; // 7d: a paired primary starts a moment ahead, with the backup
+        if (! (ahead > 0 ? eng.startAt(from, Clock::now() + std::chrono::milliseconds(ahead)) : eng.start(from))) return errorObj("The disk couldn't load the audio in time.", "preroll");
     } else {
         return errorObj("transport: unknown cmd \"" + cmd + "\"");
     }
     auto st = transportState();
     if (emit) emit("transport", st);
     wasPlaying = eng.isPlaying();
+    if (onTransportChange) onTransportChange();
     return st;
 }
+
+// ---- 7d: backup rig
+namespace { Clock::time_point fromHostMs(double ms) { return Clock::now() + std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double, std::milli>(ms - juce::Time::getMillisecondCounterHiRes())); } }
+void AudioHost::setRigMute(bool on, const juce::StringArray& also)
+{
+    for (int i = 0; i < MidiOuts::Max; ++i) midiOuts.rigAllow[(size_t) i].store(i < midiOuts.count.load() && also.contains(midiOuts.names[(size_t) i]));
+    midiOuts.rigMute.store(on);
+}
+juce::var AudioHost::rigStart(int64_t from, double atHostMs)
+{
+    if (dm.getCurrentAudioDevice() == nullptr || ! loaded || loadedEpoch != deviceEpoch) return errorObj("Load the song first.", "reload");
+    if (from < 0 || from >= eng.lengthSamples()) return errorObj("Past the end.");
+    if (! eng.startAt(from, fromHostMs(atHostMs))) return errorObj("The disk couldn't load the audio in time.", "preroll");
+    if (emit) emit("transport", transportState());
+    wasPlaying = true;
+    return transportState();
+}
+juce::var AudioHost::rigJump(int64_t at, int64_t to) { if (! loaded) return errorObj("Load the song first."); eng.setJump(at, to, false); auto* o = new juce::DynamicObject(); o->setProperty("ok", true); return juce::var(o); }
+juce::var AudioHost::rigJumpAtHost(double atHostMs, int64_t to) { if (! eng.isPlaying()) return errorObj("Not playing"); eng.jumpAtHost(fromHostMs(atHostMs), to); auto* o = new juce::DynamicObject(); o->setProperty("ok", true); return juce::var(o); }
+int64_t AudioHost::rigSampleAt(double atHostMs) { return eng.isPlaying() ? eng.sampleAtHost(fromHostMs(atHostMs)) : -1; }
 
 juce::var AudioHost::setTrackLevel(const juce::var& req)
 {

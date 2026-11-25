@@ -10,6 +10,7 @@
 int main()
 {
     using namespace setline;
+    std::setvbuf(stdout, nullptr, _IONBF, 0); // every line out, even if a check crashes
     platform::enableHighResolutionTimers();
     bool ok = runSelfTest(true);
 

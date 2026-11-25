@@ -5,6 +5,7 @@
 #include "Versions.h"
 #include "Wav.h"
 #include "MidiMap.h"
+#include "Lockstep.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -1144,6 +1145,98 @@ bool runSelfTest(bool verbose)
         EchoGuard eg; const uint8_t pc[2] = { 0xC0, 7 };
         eg.sent(pc, 2, 100);
         check(eg.isEcho(pc, 2, 120) && ! eg.isEcho(pc, 2, 200), "mappings: set.Line's own messages looping back (within 40 ms) are ignored");
+    }
+    // ---- Phase 7d: backup rig in lockstep (two engines, two clocks, a network) ----
+    std::printf("Phase 7d backup rig\n");
+    {
+        // The primary's interface runs at exactly 48 kHz; the backup's crystal is 50 ppm fast (a lot: real ones are
+        // within ~20). The backup's host clock reads 7.3 ms ahead. The network takes 0.4-3 ms each way, uneven.
+        const double ppm = 50e-6, hostOff = 7.3, blk = 128;
+        auto songOf = [&](const char* name, float base, double secs) { SongDef s; s.name = name; s.tempo = { { 1, 120, 4, 4 } }; s.stems.push_back(rampStem((int64_t) (secs * sr), base, 0)); return s; };
+        struct Side { OfflineRun r; double period, next = 0, hostOff = 0; std::vector<std::pair<double, double>> heard; bool alive = true; }; // heard: (real ms of the block's first sample, song sample)
+        auto sideA = std::make_unique<Side>(), sideB = std::make_unique<Side>(); // (on the heap: two more engines on the test's stack overflow it)
+        Side& A = *sideA; Side& B = *sideB;
+        A.period = blk / sr * 1000.0; B.period = blk / (sr * (1 + ppm)) * 1000.0; B.hostOff = hostOff; B.next = 0.37;
+        const SongDef s1 = songOf("One", 0.0f, 30), s2 = songOf("Two (other version)", 0.25f, 12), s3 = songOf("Three", 0.5f, 20);
+        A.r.load(s1, sr, 1, (int) blk); B.r.load(s1, sr, 1, (int) blk);
+        A.r.out.assign(1, {}); B.r.out.assign(1, {}); // (startAt, not OfflineRun::start: the output buffers by hand)
+        uint64_t seed = 12345; auto rnd = [&] { seed = seed * 6364136223846793005ull + 1442695040888963407ull; return (double) (seed >> 11) / (double) (1ull << 53); };
+        auto net = [&] { return 0.4 + 2.6 * rnd(); };
+        auto host = [](double ms) { return Clock::time_point(std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double, std::milli>(ms))); };
+        double now = 0;
+        auto runTo = [&](double until) { // both callbacks in real time order
+            while (true) {
+                Side* s = nullptr;
+                if (A.alive && A.next <= until && (! B.alive || A.next <= B.next)) s = &A; else if (B.alive && B.next <= until) s = &B;
+                if (! s) break;
+                now = s->next;
+                s->r.e.setTestNow(host(now + s->hostOff));
+                const bool was = s->r.e.isPlaying();
+                s->r.step();
+                if (was && s->r.e.isPlaying()) { const float v = s->r.out[0].back() ; (void) v; const auto& o = s->r.out[0]; const float first = o[o.size() - (size_t) blk]; if (first != 0.0f) s->heard.push_back({ now, (double) first * 1e6 }); }
+                s->next += s->period;
+            }
+            now = until;
+        };
+        // where each side is (song sample, from its ramp) at real time t: from the last block that started before t
+        auto posAt = [&](const Side& s, double t, double rate) { double p = -1; for (auto& h : s.heard) if (h.first <= t) p = h.second + (t - h.first) * rate / 1000.0; return p; };
+        auto offMs = [&](double t, double base) { const double a = posAt(A, t, sr) - base * 1e6, b = posAt(B, t, sr * (1 + ppm)) - base * 1e6; return (b - a) / sr * 1000.0; };
+        // clock sync: 9 ping / pong exchanges, the median offset
+        RigClockSync cs;
+        for (int k = 0; k < 9; ++k) { const double r0 = 5 + k * 10, d1 = net(), d2 = net(); const double t0 = r0 + hostOff, t1 = r0 + d1, t2 = t1 + 0.1, t3 = r0 + d1 + 0.1 + d2 + hostOff; cs.add(t0, t1, t2, t3); }
+        char line[260];
+        std::snprintf(line, sizeof line, "backup rig: clock offset from the median of 9 exchanges %.2f ms (true %.2f), round trip %.2f ms", cs.offset(), hostOff, cs.rtt());
+        check(cs.ready() && std::abs(cs.offset() - hostOff) < 1.5, line);
+        // start: the primary schedules its own start 50 ms ahead; the command reaches the backup a few ms later
+        runTo(100);
+        double T = now + 50;
+        A.r.e.startAt(0, host(T)); runTo(now + net()); B.r.e.startAt(0, host(cs.toLocal(T)));
+        runTo(T + 1000);
+        const double startOff = offMs(T + 1000, 0);
+        runTo(T + 9000);
+        const double after9 = offMs(T + 9000, 0);
+        std::snprintf(line, sizeof line, "backup rig: start in lockstep: %.2f ms apart after 1 s, %.2f ms after 9 s (the 50 ppm drift)", startOff, after9);
+        check(std::abs(startOff) < 3.0 && std::abs(after9 - startOff) > 0.2 && std::abs(after9) < 4.0, line);
+        RigDrift drift; drift.songStart(); drift.add(startOff); drift.add(after9);
+        // jump at a host time: both re-align
+        T = now + 50; const int64_t to = (int64_t) (20 * sr);
+        A.r.e.jumpAtHost(host(T), to); runTo(now + net()); B.r.e.jumpAtHost(host(cs.toLocal(T)), to);
+        runTo(T + 500);
+        const double jumpOff = offMs(T + 500, 0);
+        std::snprintf(line, sizeof line, "backup rig: a jump at a host time re-aligns: %.2f ms apart after it (worst drift this song %.2f ms)", jumpOff, drift.worstMs());
+        check(posAt(A, T + 500, sr) > to && std::abs(jumpOff) < 3.0 && std::abs(jumpOff) < std::abs(after9) + 0.5, line);
+        // version change: stop at a host time, the other version loaded on both, started together again
+        T = now + 50; A.r.e.stopAt(host(T)); runTo(now + net()); B.r.e.stopAt(host(cs.toLocal(T))); runTo(T + 300);
+        const bool stopped = ! A.r.e.isPlaying() && ! B.r.e.isPlaying();
+        A.r.load(s2, sr, 1, (int) blk); B.r.load(s2, sr, 1, (int) blk); A.heard.clear(); B.heard.clear();
+        // segue armed into song Three on both
+        { std::vector<std::string> w; A.r.e.prepareNext(s3, w); B.r.e.prepareNext(s3, w); A.r.e.setSegue(true); B.r.e.setSegue(true); }
+        T = now + 50; A.r.e.startAt(0, host(T)); runTo(now + net()); B.r.e.startAt(0, host(cs.toLocal(T)));
+        runTo(T + 2000);
+        const double verOff = offMs(T + 2000, 0.25);
+        std::snprintf(line, sizeof line, "backup rig: stop, version change and start again in lockstep: %.2f ms apart", verOff);
+        check(stopped && std::abs(verOff) < 3.0, line);
+        // the segue: both hand over to song Three on their own last sample; the primary then re-aligns the backup
+        runTo(T + 13000);
+        const double segOff = offMs(T + 13000, 0.5);
+        const double R = now + 50; const int64_t aAt = A.r.e.sampleAtHost(host(R));
+        runTo(now + net()); B.r.e.jumpAtHost(host(cs.toLocal(R)), aAt);
+        runTo(R + 500);
+        const double realOff = offMs(R + 500, 0.5);
+        std::snprintf(line, sizeof line, "backup rig: segue into the next song on both (%.2f ms apart), re-aligned after it (%.2f ms)", segOff, realOff);
+        check(A.r.e.isPlaying() && B.r.e.isPlaying() && posAt(A, R + 500, sr) > 0.5e6 && std::abs(segOff) < 3.5 && std::abs(realOff) < 3.0, line);
+        // failover: the primary stops (crashed); no heartbeat for 500 ms -> the backup takes over (MIDI on), still playing
+        RigHeartbeat hb; hb.timeoutMs = 500;
+        bool backupMidi = false; double lostAt = -1, died = -1;
+        const double f0 = now;
+        for (double t = f0; t < f0 + 2000; t += 10) {
+            if (died < 0 && t >= f0 + 600) { died = t; A.alive = false; }
+            if (A.alive && std::fmod(t - f0, 100.0) < 1e-6) hb.beat(t + net());
+            runTo(t);
+            if (lostAt < 0 && hb.lost(t)) { lostAt = t; backupMidi = true; }
+        }
+        std::snprintf(line, sizeof line, "backup rig: the primary gone -> the backup takes over %.0f ms later (limit 600), MIDI on, still playing", lostAt - died);
+        check(lostAt > 0 && lostAt - died <= 600 && backupMidi && B.r.e.isPlaying(), line);
     }
     std::printf(ok ? "ALL CHECKS PASSED\n" : "SOME CHECKS FAILED\n");
     return ok;

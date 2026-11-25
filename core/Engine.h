@@ -84,6 +84,14 @@ public:
     // 5 ms *before* fromSample, so the audio is at full level exactly on fromSample.
     // Returns false if the disk couldn't preroll in time or fromSample is past the end.
     bool start(int64_t fromSample = 0, int timeoutMs = 5000);
+    // ---- 7d (backup rig): transport at a host time, so two computers do the same thing at the same moment ----
+    // fromSample leaves the interface exactly at `when` (silence until then; sample-accurate inside the block).
+    bool startAt(int64_t fromSample, Clock::time_point when, int timeoutMs = 5000);
+    void stopAt(Clock::time_point when);               // fades out in the block that contains `when`
+    void jumpAtHost(Clock::time_point when, int64_t to); // the sample playing at `when` jumps to `to` (once)
+    int64_t sampleAtHost(Clock::time_point when) const;  // the song sample that leaves the interface at `when`
+    void setTestNow(Clock::time_point t) { testNowNs.store(nsOf(t), std::memory_order_relaxed); } // tests: the callback's clock
+    static int64_t nsOf(Clock::time_point t) { return std::chrono::duration_cast<std::chrono::nanoseconds>(t.time_since_epoch()).count(); }
     // Fades every output out over 10 ms, then stops (immediately in offline mode).
     void stop();
     // Non-blocking stop: the audio thread fades out and stops by itself (also usable offline).
@@ -226,6 +234,7 @@ private:
     std::atomic<bool> playing { false }, finished { false }, deviceRunning { false }, stopReq { false };
     std::atomic<int64_t> serial { 0 };
     std::atomic<int> latencyBase { 0 };
+    std::atomic<int64_t> startAtNs { 0 }, stopAtNs { 0 }, lastOutNs { 0 }, lastPos { 0 }, testNowNs { 0 }; // 7d
 
     std::mutex control;
     std::mutex diskMx;  // the disk thread fills both slots; a slot is only replaced while holding this

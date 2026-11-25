@@ -40,6 +40,16 @@ Bridge::Bridge(AudioHost& host, juce::PropertiesFile& settings) : audio(host), s
     audio.emit = [this](const juce::Identifier& id, const juce::var& v) { emit(id, v); };
     midiControl.emit = [this](const juce::String& id, const juce::var& v) { emit(juce::Identifier(id), v); };
     audio.setEchoGuard(&midiControl.echo);
+    // 7d: the backup rig
+    rig.emit = [this](const juce::String& id, const juce::var& v) { rigMute(); emit(juce::Identifier(id), v); };
+    rig.stateNow = [this] { const double now = rig.hostMs(); const auto st = audio.transportState(); auto* o = new juce::DynamicObject();
+        o->setProperty("playing", st["playing"]); o->setProperty("songId", st["songId"]); o->setProperty("atMs", now); o->setProperty("pos", (juce::int64) audio.rigSampleAt(now)); return juce::var(o); };
+    rig.libraryList = [this] { return rigLib; };
+    rig.packageArrived = [this](const juce::File& f) { auto* o = new juce::DynamicObject(); o->setProperty("path", f.getFullPathName()); emit("rigPackage", juce::var(o)); };
+    audio.rigDelayMs = [this] { return rig.role() == "primary" && rig.paired() ? rig.latencyMs() : 0; };
+    audio.onTransportChange = [this] { rig.transportChanged(); };
+    audio.onJumpQueued = [this](int64_t at, int64_t to) { auto* o = new juce::DynamicObject(); o->setProperty("kind", "jump"); o->setProperty("at", (juce::int64) at); o->setProperty("to", (juce::int64) to); o->setProperty("songId", audio.transportState()["songId"]); o->setProperty("id", juce::Time::getHighResolutionTicks()); rig.sendCommand(juce::var(o)); };
+    rigMute();
     band.serveFile = [](const juce::String& path, juce::MemoryBlock& out, juce::String& mime) {
         auto r = WebUi::serve(path);
         if (! r) return false;
@@ -129,6 +139,7 @@ juce::String Bridge::diagnostics()
           + ", underruns " + st["underruns"].toString() + ", worst callback " + num(st["callbackMaxMs"], 2) + " ms of " + num(st["budgetMs"], 2) + " ms, CPU " + num((double) st["cpu"] * 100.0, 1) + "%"
           + ", MIDI sent " + st["midiSent"].toString() + ", dropped " + st["midiDropped"].toString() + ", latest " + num(st["midiLateMaxMs"], 2) + " ms");
     t.add("Startup: " + applog::startupSummary());
+    { const auto ri = rig.info(); t.add("Backup rig: " + ri["role"].toString() + (rig.paired() ? ", paired with " + ri["peer"].toString() + ", clock offset " + juce::String((double) ri["offsetMs"], 2) + " ms, worst drift " + juce::String((double) ri["driftWorstMs"], 2) + " ms" + ((bool) ri["failover"] ? ", BACKUP IS LIVE" : "") : juce::String(rig.role() == "off" ? "" : ", not paired"))); }
     t.add("MIDI in: " + (midiControl.inputs().isEmpty() ? juce::String("no inputs") : midiControl.inputs().joinIntoString(", ")) + ", " + juce::String(midiControl.mappings().size()) + " mappings" + (midiActCount ? ", " + juce::String(midiActCount) + " pedal actions, slowest " + juce::String(midiActMax, 1) + " ms" : juce::String()));
     t.add("Kokoro voices: " + kokoro::stateName(kokoro::status().state) + "; voice picker: " + cues.voiceListInfo());
     t.add("");
@@ -146,9 +157,11 @@ juce::var Bridge::libraryOpened(const juce::var& r)
 
 void Bridge::syncShow() { cues.setShowFolder(session.file() == juce::File() ? juce::File() : session.file().getParentDirectory()); }
 
+void Bridge::rigMute() { audio.setRigMute(rig.midiMuted(), juce::StringArray::fromLines(settings.getValue("rigAlsoSends"))); }
+
 Bridge::~Bridge() {
     exportCancel->store(true);
-    if (exporter.joinable()) exporter.join(); band.stop(); midiControl.emit = nullptr; audio.setEchoGuard(nullptr); kokoro::setListener(nullptr); *alive = nullptr; audio.onSetupChanged = nullptr; audio.emit = nullptr; audio.cueAudio = nullptr; media.emit = nullptr; }
+    if (exporter.joinable()) exporter.join(); band.stop(); if (rigSender.joinable()) rigSender.join(); rig.emit = nullptr; audio.rigDelayMs = nullptr; audio.onTransportChange = nullptr; audio.onJumpQueued = nullptr; midiControl.emit = nullptr; audio.setEchoGuard(nullptr); kokoro::setListener(nullptr); *alive = nullptr; audio.onSetupChanged = nullptr; audio.emit = nullptr; audio.cueAudio = nullptr; media.emit = nullptr; }
 
 Bridge::Options Bridge::add(Options o, const char* name, Fn fn)
 {
@@ -533,6 +546,35 @@ Bridge::Options Bridge::addTo(Options o)
                 if (tmpCues.isDirectory()) (*alive_)->cues.mergeStore(tmpCues, finish); else finish();
             });
         }).detach();
+    });
+    // ---- 7d: backup rig (RigLink.h) ----
+    auto ok = [] { auto* r = new juce::DynamicObject(); r->setProperty("ok", true); return juce::var(r); };
+    o = add(o, "rigInfo", [this](const juce::var&) { return rig.info(); });
+    o = add(o, "rigRole", [this, ok](const juce::var& a) { rig.setRole(a["role"].toString()); rigMute(); return ok(); });
+    o = add(o, "rigPair", [this, ok](const juce::var& a) { rig.pair(a["ip"].toString().trim(), a["code"].toString().trim()); return ok(); });
+    o = add(o, "rigUnpair", [this, ok](const juce::var&) { rig.unpair(); rigMute(); return ok(); });
+    o = add(o, "rigOptions", [this, ok](const juce::var& a) { rig.setOptions(a); rigMute(); return ok(); });
+    o = add(o, "rigTakeOver", [this, ok](const juce::var&) { rig.takeOver(); rigMute(); return ok(); });
+    o = add(o, "rigReturn", [this, ok](const juce::var&) { rig.returnControl(); rigMute(); return ok(); });
+    o = add(o, "rigStatus", [this, ok](const juce::var& a) { rig.sendStatus(a); return ok(); });
+    o = add(o, "rigSetLibrary", [this, ok](const juce::var& a) { rigLib = a["list"]; return ok(); });
+    o = add(o, "rigLibrary", [this, ok](const juce::var&) { rig.requestLibrary(); return ok(); });
+    o = add(o, "rigStartAt", [this](const juce::var& a) { return audio.rigStart((int64_t) (juce::int64) a["from"], (double) a["at"]); });
+    o = add(o, "rigJump", [this](const juce::var& a) { return audio.rigJump((int64_t) (juce::int64) a["at"], (int64_t) (juce::int64) a["to"]); });
+    o = add(o, "rigJumpAt", [this](const juce::var& a) { return audio.rigJumpAtHost((double) a["at"], (int64_t) (juce::int64) a["to"]); });
+    o = add(o, "rigSampleAt", [this](const juce::var& a) { return juce::var((juce::int64) audio.rigSampleAt((double) a["at"])); });
+    o = add(o, "rigStop", [this](const juce::var&) { return audio.rigStop(); });
+    o = add(o, "tempPath", [](const juce::var& a) { return juce::var(juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile(juce::File::createLegalFileName(a["name"].toString().isNotEmpty() ? a["name"].toString() : juce::String("setline.tmp"))).getFullPathName()); });
+    o = add(o, "hostMs", [this](const juce::var&) { auto* r = new juce::DynamicObject(); r->setProperty("now", juce::Time::getMillisecondCounterHiRes()); r->setProperty("rate", audio.sampleRate()); return juce::var(r); });
+    // primary: a setlist package (exported by the page) to the backup, on a thread, with progress
+    o = addAsync(o, "rigSendPackage", [this](const juce::var& a, auto done) {
+        if (rigSender.joinable()) rigSender.join();
+        const juce::File f(a["path"].toString());
+        auto alive_ = alive;
+        rigSender = std::thread([this, f, done, alive_] {
+            const auto err = rig.sendPackage(f, [alive_](double p) { juce::MessageManager::callAsync([alive_, p] { if (*alive_) { auto* o = new juce::DynamicObject(); o->setProperty("fraction", p); (*alive_)->emit("rigProgress", juce::var(o)); } }); });
+            juce::MessageManager::callAsync([alive_, err, done] { if (! *alive_) return; auto* r = new juce::DynamicObject(); if (err.isNotEmpty()) r->setProperty("error", err); else r->setProperty("ok", true); done(juce::var(r)); });
+        });
     });
     // ---- 7c: footswitches / MIDI controllers (MidiControl.h) ----
     o = add(o, "midiMappings", [this](const juce::var&) { juce::Array<juce::var> ins; for (auto& n : midiControl.inputs()) ins.add(n); auto* r = new juce::DynamicObject(); r->setProperty("list", midiControl.mappings()); r->setProperty("inputs", ins); return juce::var(r); });
