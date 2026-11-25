@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <mutex>
 #include <chrono>
 #include <cstdio>
 #include <iostream>
@@ -51,10 +52,13 @@ struct JuceSource : SampleSource {
 struct JuceMidiSink : MidiSink {
     std::vector<std::unique_ptr<juce::MidiOutput>> outs;
     juce::StringArray names;
+    std::mutex lock; // 7a: the clock and the other MIDI are sent from two threads
     void sendNow(int port, const uint8_t* d, int len) override
     {
-        if (port >= 0 && port < (int) outs.size() && outs[(size_t) port])
+        if (port >= 0 && port < (int) outs.size() && outs[(size_t) port]) {
+            std::lock_guard<std::mutex> g(lock);
             outs[(size_t) port]->sendMessageNow(juce::MidiMessage(d, len));
+        }
     }
     // "" = first available port, otherwise a case-insensitive part of the port name.
     int resolve(const juce::String& want, std::vector<std::string>& warnings)
@@ -282,6 +286,20 @@ static int play(const Args& args)
     const auto t0 = std::chrono::steady_clock::now();
     int songsPlayed = 0, tick = 0;
     const int xr0 = dev->getXRunCount();
+    // 7a: every send over 2 ms late, once, with what the scheduler thread was doing just before
+    int seenLate[2] = { 0, 0 };
+    auto reportLate = [&] {
+        MidiScheduler* sch[2] = { &engine.midi, &engine.midiClock };
+        for (int k = 0; k < 2; ++k)
+            for (const int n = sch[k]->lateCount.load(std::memory_order_acquire); seenLate[k] < n; ++seenLate[k]) {
+                const auto& L = sch[k]->late(seenLate[k]);
+                char b[400];
+                std::snprintf(b, sizeof b, "  LATE %s %02X port %d: %.2f ms late (woke %.2f ms late, the driver call took %.2f ms); before it: slept %.2f ms (asked %.2f), previous send took %.2f ms and ended %.2f ms earlier; %d queued behind",
+                              k ? "clock" : "midi ", L.status, L.port, L.lateUs / 1000.0, L.wakeLateUs / 1000.0, L.sendUs / 1000.0, L.sleepTookUs / 1000.0, L.sleepAskUs / 1000.0,
+                              L.prevSendUs / 1000.0, L.sincePrevUs / 1000.0, L.queued);
+                say(b);
+            }
+    };
     while (true) {
         std::this_thread::sleep_for(std::chrono::milliseconds(250));
         if (cmd == 2) break;
@@ -295,7 +313,8 @@ static int play(const Args& args)
         if (++tick % (soakMin > 0 ? 40 : 4) != 0) continue;
 
         int bar; double beat; engine.tempoMap().barBeatAt(engine.position(), bar, beat);
-        const auto sent = engine.midi.sent.load();
+        reportLate();
+        const auto sent = engine.midi.sent.load() + engine.midiClock.sent.load();
         const int xr = dev->getXRunCount();
         juce::String line;
         line << (engine.isPlaying() ? "  > " : "    ") << "bar " << juce::String(bar).paddedLeft(' ', 3) << "." << (int) beat
@@ -304,17 +323,18 @@ static int play(const Args& args)
              << " | worst cb " << juce::String(engine.stats.cbMaxUs.load() / 1000.0, 2) << "/" << juce::String(bufMs, 2) << " ms"
              << " | xruns " << (xr < 0 ? juce::String("n/a") : juce::String(xr - xr0))
              << " | underruns " << engine.stats.underruns.load()
-             << " | midi " << sent << " sent, late avg " << juce::String(sent ? engine.midi.lateSumUs.load() / 1000.0 / (double) sent : 0.0, 2)
-             << " max " << juce::String(engine.midi.lateMaxUs.load() / 1000.0, 2) << " ms";
+             << " | midi " << sent << " sent, late avg " << juce::String(sent ? (engine.midi.lateSumUs.load() + engine.midiClock.lateSumUs.load()) / 1000.0 / (double) sent : 0.0, 2)
+             << " max " << juce::String(std::max(engine.midi.lateMaxUs.load(), engine.midiClock.lateMaxUs.load()) / 1000.0, 2) << " ms";
         say(line);
     }
 
     engine.stop();
     dm.removeAudioCallback(&cb);
+    reportLate();
     const int xr = dev->getXRunCount();
     const auto sent = engine.midi.sent.load();
-    const bool pass = engine.stats.underruns.load() == 0 && (xr < 0 || xr - xr0 == 0) && engine.midi.dropped.load() == 0
-                   && engine.midi.lateMaxUs.load() < 2000 && engine.stats.cbOverBudget.load() == 0;
+    const bool pass = engine.stats.underruns.load() == 0 && (xr < 0 || xr - xr0 == 0) && engine.midi.dropped.load() == 0 && engine.midiClock.dropped.load() == 0
+                   && engine.midi.lateMaxUs.load() < 2000 && engine.midiClock.lateMaxUs.load() < 2000 && engine.stats.cbOverBudget.load() == 0;
     say("\nSummary");
     say("  songs played        " + juce::String(songsPlayed));
     say("  audio callbacks     " + juce::String(engine.stats.callbacks.load()) + ", worst " + juce::String(engine.stats.cbMaxUs.load() / 1000.0, 3)
@@ -324,6 +344,11 @@ static int play(const Args& args)
     say("  MIDI                " + juce::String(sent) + " sent, " + juce::String(engine.midi.dropped.load()) + " dropped, late avg "
         + juce::String(sent ? engine.midi.lateSumUs.load() / 1000.0 / (double) sent : 0.0, 3) + " ms, max "
         + juce::String(engine.midi.lateMaxUs.load() / 1000.0, 3) + " ms, over 1 ms: " + juce::String(engine.midi.over1ms.load()));
+    { const auto cs = engine.midiClock.sent.load();
+      say("  MIDI clock          " + juce::String(cs) + " sent, " + juce::String(engine.midiClock.dropped.load()) + " dropped, late avg "
+          + juce::String(cs ? engine.midiClock.lateSumUs.load() / 1000.0 / (double) cs : 0.0, 3) + " ms, max "
+          + juce::String(engine.midiClock.lateMaxUs.load() / 1000.0, 3) + " ms, over 1 ms: " + juce::String(engine.midiClock.over1ms.load())); }
+    say("  late sends (>2 ms)  " + juce::String(engine.midi.lateCount.load() + engine.midiClock.lateCount.load()) + (engine.midi.lateCount.load() + engine.midiClock.lateCount.load() ? " (each listed above as LATE)" : ""));
     if (soakMin > 0) say(pass ? "  RESULT: PASS" : "  RESULT: FAIL");
     return (soakMin > 0 && ! pass) ? 1 : 0;
 }

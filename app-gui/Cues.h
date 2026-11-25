@@ -54,6 +54,11 @@ public:
     juce::var voices();
     // The same, without blocking: calls back on the message thread.
     void voicesAsync(std::function<void(juce::var)> done);
+    // For diagnostics: "28 set.Line + 64 computer voices (listed in 120 ms)", or "not listed yet".
+    juce::String voiceListInfo();
+    // 7a: where a spoken word is heard, in samples from the start of its audio: past any leading silence and the
+    // attack, the first moment its loudness (10 ms RMS) reaches 30 % of its loudest (about -10 dB): the vowel onset.
+    static int64_t onsetOf(const std::vector<float>& a, double sampleRate);
     // The installed voice for a saved choice: its id, else a voice with the same name (ids differ between
     // computers), else "" = the default voice (fellBack = true when a voice was asked for).
     juce::String resolve(const Choice& c, bool& fellBack);
@@ -113,6 +118,7 @@ private:
     std::vector<speech::Voice> installed;
     juce::String defaultId;
     bool listed = false;
+    double listMs = 0; int listSys = 0;
     juce::File showDir;          // dataLock
     std::atomic<int> showGen { 0 }; // bumped when the show changes: background renders for the old one are dropped
     juce::String lastFrom;       // dataLock

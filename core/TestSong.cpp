@@ -302,7 +302,12 @@ bool runSelfTest(bool verbose)
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
         check(started, rt + "preroll finished and playback started");
         check(e.stats.underruns.load() == 0, rt + "no disk underruns with 9 stems streaming");
-        check(e.midi.dropped.load() == 0, rt + "no MIDI events dropped");
+        check(e.midi.dropped.load() == 0 && e.midiClock.dropped.load() == 0, rt + "no MIDI events dropped");
+        if (withClock) {
+            char cl[200];
+            std::snprintf(cl, sizeof cl, "%sthe clock goes on its own thread (%lld ticks; lateness max %.3f ms), never queued with the notes", rt.c_str(), (long long) e.midiClock.sent.load(), e.midiClock.lateMaxUs.load() / 1000.0);
+            check(e.midiClock.sent.load() > 0, cl);
+        }
         const int64_t n = e.midi.sent.load();
         char line[200];
         std::snprintf(line, sizeof line, "%s%lld MIDI sends, lateness avg %.3f ms, max %.3f ms (informational on shared CI machines)",
@@ -1065,6 +1070,48 @@ bool runSelfTest(bool verbose)
         r.e.setMidiClock(0u, 0u, 1); r.e.midiLog.clear(); r.start(0); for (int k = 0; k < 50; ++k) r.step();
         int any = 0; for (auto& m : r.e.midiLog) if (m.d[0] >= 0xF2) ++any;
         check(any == 0, "MIDI clock: off sends nothing");
+    }
+    // ---- Phase 7a: click edits while playing ----
+    std::printf("Phase 7a live click edits\n");
+    {
+        // 4 bars of 4/4 at 120 (96000 samples a bar), a ramp stem on out 0, the click on out 1: only bar 1 clicks.
+        SongDef s; s.name = "Live click"; s.tempo = { { 1, 120, 4, 4 } }; s.clickOuts = { 1 }; s.clickGainDb = 0;
+        s.stems.push_back(rampStem(4 * 96000, 0.0f, 0));
+        s.clickHits = std::vector<ClickHitDef> { { 1, 1, true }, { 1, 2, false }, { 1, 3, false }, { 1, 4, false } };
+        OfflineRun r; r.load(s, sr, 2, 128);
+        r.e.setDeviceRunning(true); // the swap goes through the audio thread's path (picked up at the next block)
+        r.start(0);
+        while (r.e.position() < 96000 + 24000) r.step(); // into bar 2, beat 2
+        // while playing: the click region extended to every beat of bars 1-4 (some of it already behind the playhead)
+        SongDef t = s; t.clickHits = std::vector<ClickHitDef> {};
+        for (int b = 1; b <= 4; ++b) for (int k = 1; k <= 4; ++k) t.clickHits->push_back({ b, (double) k, k == 1 });
+        const bool took = r.e.updateClicks(t);
+        r.runToEnd();
+        r.e.collect();
+        const auto& tm = r.e.tempoMap();
+        int heard = 0, exact = 0;
+        for (int b = 2; b <= 4; ++b) for (int k = 1; k <= 4; ++k) {
+            if (b == 2 && k <= 2) continue; // behind (or at) the playhead when edited
+            const int64_t at = tm.sampleAt(b, k) - r.firstSample;
+            const int64_t f = firstAbove(r.out[1], at - 200, at + 200, 1e-4f);
+            if (f >= 0) ++heard; else std::printf("  missing bar %d beat %d (at %lld, out %zu)\n", b, k, (long long) at, r.out[1].size());
+            if (f == at) ++exact;
+        }
+        // bar 2 beat 2 was passed before the edit: never played late
+        const int64_t b22 = tm.sampleAt(2, 2) - r.firstSample, lateHit = firstAbove(r.out[1], b22 - 200, b22 + 4000, 1e-4f);
+        // no glitch on the stem: the ramp continues sample by sample through the swap
+        bool smooth = true;
+        for (size_t i = 1; i < r.out[0].size() && i < (size_t) (4 * 96000 - 1000); ++i)
+            if (std::fabs(r.out[0][i] - r.out[0][i - 1]) > 0.01f) { smooth = false; break; }
+        char line[240];
+        std::snprintf(line, sizeof line, "click edits while playing: a region extended mid-song is heard on its beats (%d/10 heard, %d/10 on the exact sample), nothing late, no restart", heard, exact);
+        check(took && heard == 10 && exact == 10 && lateHit < 0, line);
+        check(smooth && r.e.stats.underruns.load() == 0, "click edits while playing: the audio carries on without a glitch");
+        // a different set of click tracks can't swap live (it needs a reload)
+        SongDef u = s; u.moreClicks.push_back({});
+        r.load(s, sr, 2, 128); r.start(0); r.step();
+        check(! r.e.updateClicks(u), "click edits while playing: a new click track asks for a reload instead");
+        r.e.stop();
     }
     std::printf(ok ? "ALL CHECKS PASSED\n" : "SOME CHECKS FAILED\n");
     return ok;

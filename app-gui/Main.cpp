@@ -92,6 +92,7 @@ public:
         settings = std::make_unique<juce::PropertiesFile>(settingsOptions());
         applog::start(JUCE_APPLICATION_VERSION_STRING);
         applog::line("Started: " + args.joinIntoString(" "));
+        applog::mark("app code running");
         for (auto& m : folders::migrate(*settings)) applog::line("Folders: " + m); // once: what earlier builds kept elsewhere
         // The loading window first (not in test runs unless asked: --with-splash); the rest starts once it has
         // painted, so set.Line shows up at once.
@@ -103,7 +104,20 @@ public:
         startArgs = args;
         startDev = dev;
         startPage = page;
-        juce::Timer::callAfterDelay(splash ? 60 : 0, [this] { startAudio(); });
+        // one frame for the loading window to paint, then the web UI and the audio device start together (7a)
+        juce::Timer::callAfterDelay(splash ? 16 : 0, [this] { startAll(); });
+    }
+
+    // 7a: the main window's web UI starts loading first (its browser process boots on its own), and the audio device
+    // opens meanwhile on this thread; the page's first calls are answered once both are under way.
+    void startAll()
+    {
+        if (splash) applog::mark("loading window shown");
+        audio = std::make_unique<AudioHost>(*settings);
+        double t = juce::Time::getMillisecondCounterHiRes();
+        openMain(startPage);
+        applog::mark("web UI started", juce::Time::getMillisecondCounterHiRes() - t);
+        startAudio();
     }
 
     // "0.1.<CI run>" ("0.1 (dev build)" for a local build).
@@ -116,16 +130,18 @@ public:
     // Step 1: the audio interface. The saved one missing (unplugged): the loading window asks what to do.
     void startAudio()
     {
-        audio = std::make_unique<AudioHost>(*settings);
+        const double t = juce::Time::getMillisecondCounterHiRes();
         audio->start();
+        applog::mark("audio device open", juce::Time::getMillisecondCounterHiRes() - t);
         const auto summary = audio->deviceSummary();
         // --loading-error audio | show: show that error screen (to check how it looks without unplugging anything)
         const auto forced = startArgs.indexOf("--loading-error") >= 0 ? startArgs[startArgs.indexOf("--loading-error") + 1] : juce::String();
-        if (splash && forced == "show") { splash->setStep(Splash::audio, Splash::State::done, summary); juce::Timer::callAfterDelay(400, [this] { splash->setStep(Splash::show, Splash::State::failed); askShow("The file is damaged (it isn't valid JSON)."); }); return; }
-        if (splash && (forced == "audio" || audio->savedDeviceProblem().isNotEmpty() || summary.isEmpty())) { askAudio(); return; }
-        if (splash) splash->setStep(Splash::audio, Splash::State::done, summary);
-        openMain(startPage);
+        if (splash && forced == "show") { audioDecided = true; splash->setStep(Splash::audio, Splash::State::done, summary); juce::Timer::callAfterDelay(400, [this] { splash->setStep(Splash::show, Splash::State::failed); askShow("The file is damaged (it isn't valid JSON)."); }); return; }
+        if (splash && (forced == "audio" || summary.isEmpty())) { askAudio(); return; }
+        if (splash) splash->setStep(Splash::audio, Splash::State::done, audio->fallbackFrom().isNotEmpty() ? audio->fallbackFrom() + " not found: this computer" : summary);
+        audioDone();
     }
+    void audioDone() { audioDecided = true; if (audio && audio->onSetupChanged) audio->onSetupChanged(); finishLoading(); }
     void askAudio()
     {
         applog::line("Start-up: audio interface problem: " + audio->savedDeviceLabel() + " " + audio->savedDeviceProblem());
@@ -139,11 +155,12 @@ public:
                   if (err.isNotEmpty() && audio->deviceSummary().isEmpty()) { askAudio(); return; }
                   if (err.isNotEmpty()) { askAudio(); return; }
                   splash->setStep(Splash::audio, Splash::State::done, audio->deviceSummary());
-                  openMain(startPage);
+                  audioDone();
               } },
               { juce::String::fromUTF8("Choose another output\xe2\x80\xa6"), [this] { // the show, with Settings › Audio open (every device)
                   splash->setStep(Splash::audio, Splash::State::done, audio->deviceSummary().isNotEmpty() ? audio->deviceSummary() : juce::String("choose in Settings"));
-                  openMain("1-arrange.html?settings=audio");
+                  audioDone();
+                  sendMenu("prefsAudio");
               } },
               { "Listen on this computer", [this] { // the show's routing stays; this computer's speakers / headphones play it
                   auto* req = new juce::DynamicObject();
@@ -151,12 +168,12 @@ public:
                   const auto r = audio->setListen(juce::var(req));
                   if (r["error"].toString().isNotEmpty()) { askAudio(); return; }
                   splash->setStep(Splash::audio, Splash::State::done, "Listening on " + r["current"].toString());
-                  openMain(startPage);
+                  audioDone();
               } },
               { "Open without audio", [this] {
                   audio->closeDevice();
                   splash->setStep(Splash::audio, Splash::State::done, "no audio");
-                  openMain(startPage);
+                  audioDone();
               } } });
     }
 
@@ -232,8 +249,8 @@ public:
     }
     void finishLoading()
     {
-        if (! splash || ! pageReady || showError || splash->finished()) return;
-        splash->finish([this] { if (window) { window->setVisible(true); window->toFront(true); } if (bridge) bridge->loading = false; });
+        if (! splash || ! pageReady || ! audioDecided || showError || splash->finished()) return;
+        splash->finish([this] { if (window) { window->setVisible(true); window->toFront(true); } if (bridge) bridge->loading = false; applog::mark("window visible"); });
     }
 
     void shutdown() override
@@ -363,12 +380,48 @@ private:
             const auto t0 = juce::Time::getMillisecondCounterHiRes();
             auto again = testCues->get("Verse one", {}, 48000, err, fellBack);
             report.add(juce::String(again ? "ok   " : "FAIL ") + "cached cue: " + juce::String((int) (juce::Time::getMillisecondCounterHiRes() - t0)) + " ms");
+            // 7a: a count-in on the beat (the computer's default voice)
+            {
+                const auto line = countInCheck(*testCues, {}, "default voice");
+                report.add(line);
+                if (line.startsWith("FAIL")) spoken = 0;
+            }
             report.add(spoken > 0 ? "SPEECH OK" : "SPEECH FAILED");
             dir.getChildFile("speech-test.txt").replaceWithText(report.joinIntoString("\n") + "\n");
             std::printf("%s\n", report.joinIntoString("\n").toRawUTF8());
             juce::MessageManager::callAsync([spoken] { juce::JUCEApplication::getInstance()->setApplicationReturnValue(spoken > 0 ? 0 : 1); juce::JUCEApplication::quit(); });
         });
     }
+    // 7a: "1 2 3 4" at 120 BPM through the engine (each word placed with its onset lead, as a show does): every word's
+    // onset (Cues::onsetOf on what the engine played) is within 2 ms of its beat. Says how late the raw words were.
+    static juce::String countInCheck(Cues& cues, const Cues::Choice& voice, const juce::String& label)
+    {
+        const double sr = 48000;
+        const char* words[] = { "one", "two", "three", "four" };
+        juce::StringArray late, off;
+        bool ok = true;
+        for (int k = 0; k < 4; ++k) {
+            juce::String err; bool fb = false;
+            auto a = cues.get(words[k], voice, sr, err, fb);
+            if (! a || a->empty()) return "FAIL count-in (" + label + "): \"" + juce::String(words[k]) + "\" couldn't be spoken: " + err;
+            setline::SongDef s; s.name = "Count-in"; s.tempo = { { 1, 120, 4, 4 } }; s.lengthBars = 3; s.cueOuts = { 0 }; s.cueGainDb = 0;
+            setline::CueDef d; d.bar = 2; d.beat = k + 1; d.audio = a; d.text = words[k]; d.lead = Cues::onsetOf(*a, sr);
+            s.cues.push_back(d);
+            setline::Engine e; setline::Engine::Config cfg; cfg.sampleRate = sr; cfg.numOutputs = 1; cfg.offline = true;
+            std::vector<std::string> w;
+            if (! e.load(s, cfg, w).empty()) return "FAIL count-in (" + label + "): the song didn't load";
+            e.start(0);
+            std::vector<float> out, buf(256); float* ptr[] = { buf.data() };
+            while (e.isPlaying()) { e.process(ptr, 1, 256); out.insert(out.end(), buf.begin(), buf.end()); }
+            const int64_t beat = 96000 + (int64_t) k * 24000, got = Cues::onsetOf(out, sr);
+            const double errMs = (double) (got - beat) * 1000.0 / sr;
+            late.add(juce::String((int) std::lround(d.lead * 1000.0 / sr)));
+            off.add(juce::String(errMs, 2));
+            if (std::abs(errMs) > 2.0) ok = false;
+        }
+        return juce::String(ok ? "ok   " : "FAIL ") + "count-in on the beat (" + label + ", 120 BPM): onsets " + off.joinIntoString(" / ") + " ms from the beats (the raw words start " + late.joinIntoString(" / ") + " ms late; now moved earlier by that)";
+    }
+
     // --kokoro-test <dir>: the built-in voices end to end, without a window or audio device (CI, both platforms).
     // Downloads + verifies the model (or finds it), checks how the common cue words are pronounced, renders
     // every English voice saying each of them (render, resample to 48 kHz, trim, as a show does), then the
@@ -479,6 +532,7 @@ private:
             const int n1 = kokoro::renderCount();
             for (auto* w : { "Verse", "Chorus two", "Bridge" }) testCues->get(w, heart, rate, err, fb); // one cue edited
             const int n2 = kokoro::renderCount();
+            { const auto ci = countInCheck(*testCues, heart, "Heart"); check(ci.startsWith("ok"), ci.fromFirstOccurrenceOf(" ", false, false).trim()); }
             check(n1 == n0 && n2 == n1 + 1, "editing one cue re-renders only that cue (" + juce::String(n1 - n0) + " then " + juce::String(n2 - n1) + " renders)");
             auto withPron = heart;
             withPron.pron = { { "bridge", "bridge" } };
@@ -493,7 +547,7 @@ private:
 
     std::unique_ptr<Splash> splash;
     juce::StringArray startArgs;
-    bool startDev = false, pageReady = false, showError = false;
+    bool startDev = false, pageReady = false, showError = false, audioDecided = false;
     juce::String startPage;
     std::unique_ptr<juce::PropertiesFile> settings;
     std::unique_ptr<AudioHost> audio;

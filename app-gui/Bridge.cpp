@@ -124,7 +124,8 @@ juce::String Bridge::diagnostics()
     t.add("Engine: running " + juce::String((bool) st["running"] ? "yes" : "no") + ", xruns " + (st["xruns"].isVoid() || st["xruns"].toString().isEmpty() ? juce::String("n/a (this driver doesn't report them)") : st["xruns"].toString())
           + ", underruns " + st["underruns"].toString() + ", worst callback " + num(st["callbackMaxMs"], 2) + " ms of " + num(st["budgetMs"], 2) + " ms, CPU " + num((double) st["cpu"] * 100.0, 1) + "%"
           + ", MIDI sent " + st["midiSent"].toString() + ", dropped " + st["midiDropped"].toString() + ", latest " + num(st["midiLateMaxMs"], 2) + " ms");
-    t.add("Kokoro voices: " + kokoro::stateName(kokoro::status().state));
+    t.add("Startup: " + applog::startupSummary());
+    t.add("Kokoro voices: " + kokoro::stateName(kokoro::status().state) + "; voice picker: " + cues.voiceListInfo());
     t.add("");
     t.add("Log (last 200 lines of " + applog::current().getFullPathName() + "):");
     t.add(applog::tail(200));
@@ -173,6 +174,7 @@ Bridge::Options Bridge::addAsync(Options o, const char* name, AsyncFn fn)
 Bridge::Options Bridge::addTo(Options o)
 {
     o = add(o, "getAppInfo", [this](const juce::var&) {
+        static bool first = true; if (first) { first = false; applog::mark("page script running"); }
         auto* r = new juce::DynamicObject();
         r->setProperty("name", juce::JUCEApplication::getInstance()->getApplicationName());
         r->setProperty("version", juce::JUCEApplication::getInstance()->getApplicationVersion());
@@ -296,7 +298,7 @@ Bridge::Options Bridge::addTo(Options o)
     o = add(o, "unusedAudio", [this](const juce::var& a) { return media.unused(session.file(), a["text"].toString()); });
     o = add(o, "trashAudio", [this](const juce::var& a) {
         const auto r = media.trash(session.file(), a["paths"]);
-        applog::line("Clean up unused audio: " + r["moved"].toString() + " file(s) to the trash");
+        applog::line("Clean up unused audio: " + r["moved"].toString() + ((int) r["moved"] == 1 ? " file" : " files") + " to the trash");
         return r;
     });
     o = add(o, "forgetLastShow", [this](const juce::var&) { session.forgetLast(); return juce::var(true); });
@@ -515,7 +517,7 @@ Bridge::Options Bridge::addTo(Options o)
                     if (*alive_ == nullptr) return;
                     auto* r = new juce::DynamicObject();
                     if (err.isNotEmpty()) r->setProperty("error", err); else r->setProperty("copied", copied);
-                    applog::line("Imported a package: " + juce::String(copied) + " audio file(s)" + (err.isNotEmpty() ? ", " + err : juce::String()));
+                    applog::line("Imported a package: " + juce::String(copied) + (copied == 1 ? " audio file" : " audio files") + (err.isNotEmpty() ? ", " + err : juce::String()));
                     done(juce::var(r));
                 };
                 // the package's cues are in before the songs are (no cue is spoken with this computer's voice first)
@@ -567,6 +569,7 @@ Bridge::Options Bridge::addTo(Options o)
     o = add(o, "listenDevices", [this](const juce::var& a) { return audio.listenDevices((double) a.getProperty("rate", 0.0)); });
     // Loading a song: its cues are rendered first (on the Cues worker, usually already cached), then the
     // song is mapped and loaded on the message thread, which never waits for speech.
+    o = add(o, "updateClicks", [this](const juce::var& a) { return audio.updateClicks(a); });
     o = addAsync(o, "loadSong", [this](const juce::var& a, auto done) {
         if (! a.isObject() || ! a["song"].isObject()) { done(errorVar("loadSong: expected {song, outs, roles, click}")); return; }
         withCues(a, [this, a, done] { done(audio.loadSong(a)); });
@@ -651,6 +654,8 @@ Bridge::Options Bridge::addRest(Options o)
     o = add(o, "cueSource", [this](const juce::var&) { auto* r = new juce::DynamicObject(); r->setProperty("from", cues.lastSource()); return juce::var(r); });
     o = add(o, "closeSession", [this](const juce::var&) { session.close(); syncShow(); auto* r = new juce::DynamicObject(); r->setProperty("ok", true); return juce::var(r); });
     // ---- start-up (the loading window) ----
+    // 7a: start-up timing from the page ("setlist on screen", "waveforms 12 of 12" + how long it took)
+    o = add(o, "startupMark", [](const juce::var& a) { applog::mark(a["name"].toString(), a.hasProperty("took") ? (double) a["took"] : -1.0); auto* r = new juce::DynamicObject(); r->setProperty("ok", true); return juce::var(r); });
     o = add(o, "loadingStep", [this](const juce::var& a) { if (onLoadingStep) onLoadingStep(a); auto* r = new juce::DynamicObject(); r->setProperty("ok", true); return juce::var(r); });
     o = add(o, "loadingDone", [this](const juce::var&) { loading = false; applog::line("Loading done"); if (onLoadingDone) onLoadingDone(); auto* r = new juce::DynamicObject(); r->setProperty("ok", true); return juce::var(r); });
     // {refs, session, prepare} -> {ready, total}: waveforms whose cache is there (prepare: start computing the rest)
@@ -784,6 +789,15 @@ Bridge::Options Bridge::addRest(Options o)
         r->setProperty("error", st.error);
         r->setProperty("folder", kokoro::folder().getFullPathName());
         r->setProperty("engine", juce::String("ONNX Runtime ") + SETLINE_ORT_VERSION);
+        // 7a: the set.Line voices themselves, so the picker lists them without waiting on the computer's voice list
+        juce::Array<juce::var> kv;
+        for (auto& v : kokoro::voices()) {
+            auto* o = new juce::DynamicObject();
+            o->setProperty("id", v.id); o->setProperty("name", v.name); o->setProperty("lang", v.lang); o->setProperty("quality", v.quality);
+            o->setProperty("engine", v.engine); o->setProperty("gender", v.gender); o->setProperty("grade", v.grade); o->setProperty("rank", v.rank);
+            kv.add(juce::var(o));
+        }
+        r->setProperty("voices", kv);
         return juce::var(r);
     });
     o = add(o, "downloadVoices", [](const juce::var&) { kokoro::startDownload(); auto* r = new juce::DynamicObject(); r->setProperty("ok", true); return juce::var(r); });

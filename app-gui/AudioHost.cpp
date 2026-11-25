@@ -7,6 +7,7 @@
 namespace setline::gui {
 
 namespace {
+bool isComputerDriver(const juce::String& t) { return t != "ASIO"; } // Windows Audio / DirectSound / CoreAudio
 
 // When several drivers reach the same interface, prefer the lowest-latency one.
 int driverRank(const juce::String& type)
@@ -80,6 +81,22 @@ void AudioHost::start()
         savedLabel = saved["device"].toString() + " (" + saved["driver"].toString() + ")";
         savedProblem = err;
         note = "Couldn't open the saved device (" + saved["driver"].toString() + " / " + saved["device"].toString() + "): " + err;
+        // 7a: the interface isn't connected: play on this computer (at the show's rate), and say so. It comes back by
+        // itself when it's plugged in while stopped (timerCallback).
+        {
+            auto* req = new juce::DynamicObject();
+            req->setProperty("on", true); req->setProperty("driver", juce::String()); req->setProperty("device", juce::String());
+            req->setProperty("rate", (double) saved["rate"] > 0 ? (double) saved["rate"] : 48000.0);
+            listen.device = {}; listen.driver = {};
+            const auto r = setListen(juce::var(req));
+            if (r["error"].toString().isEmpty() && dm.getCurrentAudioDevice() != nullptr) {
+                autoFrom = saved["device"].toString();
+                saveListen(); // saved as not listening: the next launch tries the interface first again
+                applog::line("Start-up: " + autoFrom + " not found, playing on this computer (" + deviceSummary() + ")");
+                return;
+            }
+            listen.on = false; saveListen();
+        }
     }
 
     // First launch (or the saved device is gone): the best driver that has a device, its first device,
@@ -93,6 +110,28 @@ void AudioHost::start()
         if (open(t->getTypeName(), names[0], 48000, 128).isEmpty()) { error = note; return; }
     }
     if (error.isEmpty()) error = note.isNotEmpty() ? note : juce::String("No audio output device found.");
+}
+
+// 7a: falling back to this computer since launch: once the saved interface is connected again, and only while
+// stopped, switch back to it (the page shows a toast). Never while playing.
+void AudioHost::checkInterfaceBack()
+{
+    if (autoFrom.isEmpty() || eng.isPlaying()) return;
+    if (! listen.on) { autoFrom = {}; return; } // the user went back themselves
+    const auto saved = juce::JSON::parse(settings.getValue("audio"));
+    if (! saved.isObject()) { autoFrom = {}; return; }
+    juce::AudioIODeviceType* type = nullptr;
+    for (auto* t : dm.getAvailableDeviceTypes()) if (t->getTypeName() == saved["driver"].toString()) type = t;
+    if (type == nullptr) return;
+    type->scanForDevices();
+    if (! type->getDeviceNames(false).contains(saved["device"].toString())) return;
+    auto* req = new juce::DynamicObject(); req->setProperty("on", false);
+    const auto r = setListen(juce::var(req));
+    if (listen.on || dm.getCurrentAudioDevice() == nullptr || error.isNotEmpty()) return; // not yet: try again later
+    const auto name = autoFrom; autoFrom = {}; savedProblem = {};
+    applog::line(name + " is back: playing on it again (" + deviceSummary() + ")");
+    if (emit) emit("interfaceBack", obj({ { "device", name }, { "listen", listenState() } }));
+    if (onSetupChanged) onSetupChanged();
 }
 
 juce::String AudioHost::retrySaved()
@@ -170,14 +209,11 @@ juce::String AudioHost::open(const juce::String& driver, const juce::String& dev
 }
 
 // ---------------------------------------------------------------- listen on this computer
-namespace {
-bool isComputerDriver(const juce::String& t) { return t != "ASIO"; } // Windows Audio / DirectSound / CoreAudio
-}
 
 void AudioHost::saveListen()
 {
     juce::Array<juce::var> out; for (int o : listen.output) out.add(o + 1);
-    settings.setValue("listen", juce::JSON::toString(obj({ { "on", listen.on }, { "driver", listen.driver }, { "device", listen.device }, { "mode", listen.mode },
+    settings.setValue("listen", juce::JSON::toString(obj({ { "on", listen.on && autoFrom.isEmpty() }, { "driver", listen.driver }, { "device", listen.device }, { "mode", listen.mode },
                                                            { "output", out }, { "click", listen.click }, { "cues", listen.cues }, { "midi", listen.midi } }), true));
     settings.saveIfNeeded();
 }
@@ -188,7 +224,7 @@ juce::var AudioHost::listenState() const
     auto* d = dm.getCurrentAudioDevice();
     return obj({ { "on", listen.on }, { "driver", listen.driver }, { "device", listen.device }, { "mode", listen.mode }, { "output", out },
                  { "click", listen.click }, { "cues", listen.cues }, { "midi", listen.midi },
-                 { "current", d ? d->getName() : juce::String() }, { "rate", d ? d->getCurrentSampleRate() : 0.0 } });
+                 { "current", d ? d->getName() : juce::String() }, { "rate", d ? d->getCurrentSampleRate() : 0.0 }, { "missing", autoFrom } });
 }
 
 juce::var AudioHost::listenDevices(double rate)
@@ -572,7 +608,7 @@ juce::var AudioHost::loadSong(const juce::var& payload)
     listenOut2.store(listen.on && listen.mode == "output" && listen.output.size() > 1 ? listen.output[1] : (listen.on && listen.mode == "output" && ! listen.output.empty() ? listen.output[0] : -1));
     std::vector<std::string> warnings = mapped.warnings;
     if (auto err = eng.load(mapped.def, cfg, warnings); ! err.empty()) { loaded = false; applog::line("Song \"" + juce::String(mapped.def.name) + "\" didn't load: " + juce::String(err)); return errorObj(err); }
-    applog::line("Loaded \"" + juce::String(mapped.def.name) + "\"" + (listen.on ? " (listening on this computer)" : "") + (warnings.empty() ? juce::String() : ", " + juce::String((int) warnings.size()) + " warning(s): " + juce::String(warnings.front())));
+    applog::line("Loaded \"" + juce::String(mapped.def.name) + "\"" + (listen.on ? " (listening on this computer)" : "") + (warnings.empty() ? juce::String() : ", " + juce::String((int) warnings.size()) + (warnings.size() == 1 ? " warning: " : " warnings: ") + juce::String(warnings.front())));
     eng.setSegue(false); // a song loaded directly: whatever waits in the next slot was queued for another song
     loaded = true;
     loadedEpoch = deviceEpoch;
@@ -593,6 +629,20 @@ juce::var AudioHost::loadSong(const juce::var& payload)
     o->setProperty("midiEvents", (int) eng.midiList().size());
     o->setProperty("epoch", deviceEpoch);
     if (emit) emit("transport", transportState());
+    return juce::var(o);
+}
+
+// 7a: the click of the song playing edited (a region added or extended): the engine swaps in the new hits without
+// stopping. {ok} or {error, code: "reload"} when it can't (another song, other click tracks).
+juce::var AudioHost::updateClicks(const juce::var& payload)
+{
+    if (dm.getCurrentAudioDevice() == nullptr || ! loaded || loadedEpoch != deviceEpoch || payload["song"]["id"].toString() != loadedId)
+        return errorObj("Not the song loaded.", "reload");
+    Engine::Config cfg;
+    auto mapped = mapForEngine(payload, cfg);
+    if (! eng.updateClicks(mapped.def)) return errorObj("The click tracks changed.", "reload");
+    applog::line("Click of \"" + loadedName + "\" updated while playing");
+    auto* o = new juce::DynamicObject(); o->setProperty("ok", true); o->setProperty("clickHits", (int) (mapped.def.clickHits ? mapped.def.clickHits->size() : 0));
     return juce::var(o);
 }
 
@@ -777,14 +827,14 @@ juce::var AudioHost::engineStats()
     const int xr = d ? d->getXRunCount() : -1;
     const double sr = d ? d->getCurrentSampleRate() : 0.0;
     const int buf = d ? d->getCurrentBufferSizeSamples() : 0;
-    const auto sent = eng.midi.sent.load();
+    const auto sent = eng.midi.sent.load() + eng.midiClock.sent.load();
     o->setProperty("running", d != nullptr && d->isPlaying());
     o->setProperty("xruns", xr < 0 ? juce::var() : juce::var(xr - xrunBase)); // null: the driver doesn't report them
     o->setProperty("underruns", (juce::int64) eng.stats.underruns.load());
     o->setProperty("midiSent", (juce::int64) sent);
-    o->setProperty("midiDropped", (juce::int64) eng.midi.dropped.load());
-    o->setProperty("midiLateMaxMs", eng.midi.lateMaxUs.load() / 1000.0);
-    o->setProperty("midiLateAvgMs", sent ? eng.midi.lateSumUs.load() / 1000.0 / (double) sent : 0.0);
+    o->setProperty("midiDropped", (juce::int64) (eng.midi.dropped.load() + eng.midiClock.dropped.load()));
+    o->setProperty("midiLateMaxMs", juce::jmax(eng.midi.lateMaxUs.load(), eng.midiClock.lateMaxUs.load()) / 1000.0);
+    o->setProperty("midiLateAvgMs", sent ? (eng.midi.lateSumUs.load() + eng.midiClock.lateSumUs.load()) / 1000.0 / (double) sent : 0.0);
     o->setProperty("cpu", dm.getCpuUsage() * 100.0);
     o->setProperty("callbackMaxMs", eng.stats.cbMaxUs.load() / 1000.0);
     o->setProperty("budgetMs", sr > 0 ? 1000.0 * buf / sr : 0.0);
@@ -795,7 +845,20 @@ juce::var AudioHost::engineStats()
 void AudioHost::timerCallback()
 {
     collectPreviews();
+    eng.collect(); // old click hits handed back by the audio thread (7a)
+    if (scanTick % 30 == 0) { // 7a: each MIDI send over 2 ms late goes to the log once, with what the sender was doing
+        MidiScheduler* sch[2] = { &eng.midi, &eng.midiClock };
+        for (int k = 0; k < 2; ++k)
+            for (const int n = sch[k]->lateCount.load(std::memory_order_acquire); lateSeen[k] < n; ++lateSeen[k]) {
+                const auto& L = sch[k]->late(lateSeen[k]);
+                applog::line(juce::String("MIDI late: ") + (k ? "clock " : "") + juce::String::toHexString((int) L.status).toUpperCase() + " port " + juce::String(L.port + 1) + " "
+                             + juce::String(L.lateUs / 1000.0, 2) + " ms (woke " + juce::String(L.wakeLateUs / 1000.0, 2) + " ms late, driver call " + juce::String(L.sendUs / 1000.0, 2)
+                             + " ms; before: slept " + juce::String(L.sleepTookUs / 1000.0, 2) + " of " + juce::String(L.sleepAskUs / 1000.0, 2) + " ms, previous send " + juce::String(L.prevSendUs / 1000.0, 2)
+                             + " ms; " + juce::String(L.queued) + " queued)");
+            }
+    }
     if (++scanTick % 60 == 1) scanMidiPorts(); // MIDI outputs: clock on new ones, reopen ones that came back
+    if (scanTick % 60 == 31 && autoFrom.isNotEmpty()) checkInterfaceBack(); // 7a: the missing interface plugged back in
     if (! emit) return;
     bool segued = false;
     if (eng.segues() != seguesSeen) { takeOverNext(); applyLevels(); segued = true; applog::line("Segue into \"" + loadedName + "\""); }

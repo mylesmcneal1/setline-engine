@@ -48,11 +48,11 @@ interface Page {
   menu(e: { clientX: number; clientY: number }, items: (MenuItem | "-")[]): void;
   saveBox(title: string, body: string, choice: (c: "save" | "discard") => void): void;
   about(info: { version?: string; platform?: string }): void;
-  pron(): Record<string, string>; setVoiceModel(st: VoiceModel): void; setUnknownWords(list: string[]): void;
+  pron(): Record<string, string>; nudge(voiceId: string): number; setVoiceModel(st: VoiceModel): void; setUnknownWords(list: string[]): void;
 }
 // Cue voice choice as saved (voice id + name: ids differ between computers) and an installed voice.
 interface CueVoice { voice: string; name: string; speed: number }
-interface ListenState { on?: boolean; driver?: string; device?: string; current?: string; mode?: string; output?: number[]; click?: boolean; cues?: boolean; midi?: boolean; error?: string; devices?: { driver: string; device: string }[] }
+interface ListenState { on?: boolean; missing?: string; driver?: string; device?: string; current?: string; mode?: string; output?: number[]; click?: boolean; cues?: boolean; midi?: boolean; error?: string; devices?: { driver: string; device: string }[] }
 interface Folders { shows: string; defaultShows: string; library: string }
 interface MenuItem { label: string; icon?: string; key?: string; dis?: boolean; danger?: boolean; act: () => void }
 interface VoiceInfo { id: string; name: string; lang: string; isDefault: boolean; engine?: string; gender?: string; grade?: string; rank?: number }
@@ -142,16 +142,18 @@ function payload(s: Song, v: any = page().ver.play(s)) {
   song.tracks.forEach((t: string) => { if (!isMidiTrack(song, t)) outs[t] = outsOf(s, t); });
   // The show's pronunciations go with the cue voice (the song's own, or the set's), as the app keys cues by them.
   const pron = p.pron();
-  if (song.cueVoice) song.cueVoice = { ...song.cueVoice, pron };
+  // 7a: each voice's timing nudge (ms) goes with it; the app puts every word's onset on its beat, then nudges
+  const nz = (v: any) => ({ ...v, pron, nudge: p.nudge(v && v.voice ? v.voice : "") });
+  if (song.cueVoice) song.cueVoice = nz(song.cueVoice);
   for (const q of (song.cues || []) as { text?: string; rec?: string; voice?: Record<string, unknown> }[]) {
-    if (q.voice) q.voice = { ...q.voice, pron };
+    if (q.voice) q.voice = nz(q.voice);
     const rec = p.recFor(s, q.text || ""); if (rec) q.rec = rec; // a recorded word plays instead of the voice
   }
   // each click track other than "Click" with its own settings (the app plays every click track, sample-exact)
   const clickTracks: Record<string, Record<string, unknown>> = {};
   song.tracks.forEach((t: string) => { if (p.ROLE[t] === "click" && t !== "Click") clickTracks[t] = p.clickCfg(s, t); });
   const version = p.ver.payload(s, v);
-  return { song, outs, roles, click: p.clickCfg(s), clickTracks, cueVoice: { ...p.cueVoiceAll(), pron }, ...(version ? { version } : {}), verId: v ? v.id : "" };
+  return { song, outs, roles, click: p.clickCfg(s), clickTracks, cueVoice: nz(p.cueVoiceAll()), ...(version ? { version } : {}), verId: v ? v.id : "" };
 }
 // What forces a reload: everything except the mixer levels, which change live (setTrackLevel).
 function loadKey(body: ReturnType<typeof payload>): string {
@@ -175,6 +177,25 @@ async function ensureLoaded(s: Song): Promise<boolean> {
     console.info(`set.Line: "${s.name}" loaded with notes:\n- ` + w.join("\n- "));
   }
   return true;
+}
+
+// ---------------------------------------------------------------- 7a: click edits while playing
+// A click clip added or extended while its song plays is heard when the playhead gets there: when only the click
+// clips (song.ck / song.cks) changed since the load, the engine swaps in the new hits (updateClicks) without stopping.
+// Any other edit still waits for the next Play, as before.
+const withoutClicks = (key: string) => { try { const o = JSON.parse(key); delete o.song.ck; delete o.song.cks; return JSON.stringify(o); } catch { return ""; } };
+let clickBusy = false;
+async function liveClicks() {
+  const p = page();
+  if (clickBusy || busy || !p.playing || !loadedKey || p.playId !== loadedSongId) return;
+  const s = p.songs.find((x) => x.id === loadedSongId); if (!s) return;
+  const body = payload(s), key = loadKey(body);
+  if (key === loadedKey || withoutClicks(key) !== withoutClicks(loadedKey)) return;
+  clickBusy = true;
+  try {
+    const r = await SL.call<{ ok?: boolean; error?: string }>("updateClicks", body);
+    if (r && r.ok) loadedKey = key;
+  } catch (e) { console.warn("set.Line: live click", e); } finally { clickBusy = false; }
 }
 
 // ---------------------------------------------------------------- the next song (6e)
@@ -276,6 +297,7 @@ async function run(s: Song, t: number) {
 
 let levelQueued: Song | null = null;
 const SLE = {
+  edited: () => { setTimeout(() => liveClicks().catch(() => {}), 60); }, // 7a: after an edit (the page calls it from snap())
   // Play song s from page time t (seconds). Called for Play, locate while playing, next song...
   // Requests made while one is in flight coalesce (dragging the playhead sends only the latest).
   playFrom(s: Song | undefined, t: number) {
@@ -543,6 +565,7 @@ const SLC = {
 };
 
 function remember(text = sessionText()) {
+  liveClicks().catch(() => {});
   try { sessionStorage.setItem("setline.session", JSON.stringify({ doc, text, lib })); } catch {}
   if (lib && text !== libText) libSave().catch(() => {});
   if (lib) { const cs = page().curSetId(); if (cs !== lastSetSent) { lastSetSent = cs; SL.call("libraryState", { lastSetlist: cs }).catch(() => {}); } }
@@ -707,7 +730,7 @@ async function migrateShows(paths: string[]) {
     log.push(`${name} (${path}): setlist${res.setlists.length > 1 ? "s" : ""} ${res.setlists.map((x: string) => "“" + x + "”").join(", ")}; ${res.added} new song(s), ${res.merged} merged with songs already in the library${res.notes.length ? "; " + res.notes.join("; ") : ""}`);
     made++;
   }
-  const where = await SL.call<string>("migrationLog", { text: `Brought ${made} show(s) into the library “${lib ? lib.name : ""}”.\n` + log.join("\n") + "\nThe original show folders weren't changed; you can delete them yourself once you're happy." });
+  const where = await SL.call<string>("migrationLog", { text: `Brought ${made} ${made === 1 ? "show" : "shows"} into the library “${lib ? lib.name : ""}”.\n` + log.join("\n") + "\nThe original show folders weren't changed; you can delete them yourself once you're happy." });
   page().rerender(); loadedKey = null; nextKey = "";
   await libSave(); remember(); prepareCues();
   return { made, log, where };
@@ -1155,39 +1178,40 @@ function installDrop() {
 // in the background. Then "loadingDone": the loading window fades and this window shows.
 async function reportLoading(showProblem: string, quick: boolean) {
   const step = (id: string, state: string, detail = "", fraction = 0) => SL.call("loadingStep", { id, state, detail, fraction }).catch(() => {});
+  const mark = (name: string, took = -1) => SL.call("startupMark", { name, took }).catch(() => {});
   const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const n = page().songs.length;
+  // 7a: the window shows as soon as the library and setlist are on screen; waveforms and cues carry on behind it
+  // (the splash rows say so), and their times go to the log ("Startup: …").
   try {
-    const n = page().songs.length;
     if (showProblem) await step("show", "failed", showProblem);
     else await step("show", "done", `${doc.name || "Library"} · ${n} song${n === 1 ? "" : "s"}`);
-    // waveforms
-    const cur = await SL.call<FileResult>("getSessionFile");
-    const refs = [...new Set(audioFiles().map((x) => x.f.path))];
-    if (!refs.length) await step("waveforms", "done", "none");
-    else {
-      let r = await SL.call<{ ready: number; total: number }>("peaksReady", { refs, session: cur.path || "", prepare: true });
-      for (let t = 0; !quick && r.ready < r.total && t < 150; t++) { // up to 30 s
-        await step("waveforms", "running", `${r.ready} of ${r.total}`, r.ready / r.total);
-        await wait(200);
-        r = await SL.call("peaksReady", { refs, session: cur.path || "" });
-      }
-      await step("waveforms", "done", r.ready < r.total ? `${r.ready} of ${r.total} (the rest in the background)` : `${r.total} of ${r.total}`);
-    }
-    // cues
-    prepareCues();
-    const list = cueList();
-    if (!list.length) await step("cues", "done", "none");
-    else {
-      let r = await SL.call<{ ready: number; total: number }>("cuesReady", { cues: list });
-      for (let t = 0; !quick && r.ready < r.total && t < 150; t++) {
-        await step("cues", "running", `${r.ready} of ${r.total} ready`, r.ready / r.total);
-        await wait(200);
-        r = await SL.call("cuesReady", { cues: list });
-      }
-      await step("cues", "done", r.ready < r.total ? `${r.ready} ready (the rest in the background)` : `${r.total} cue${r.total === 1 ? "" : "s"} ready`);
-    }
+    await step("waveforms", "done", "after the window opens");
+    await step("cues", "done", "after the window opens");
   } catch (e) { console.warn("set.Line: loading", e); }
+  await mark("setlist on screen");
   await SL.call("loadingDone").catch(() => {});
+  const bg = async () => {
+    const t0 = performance.now();
+    try {
+      const cur = await SL.call<FileResult>("getSessionFile");
+      const refs = [...new Set(audioFiles().map((x) => x.f.path))];
+      if (refs.length) {
+        let r = await SL.call<{ ready: number; total: number }>("peaksReady", { refs, session: cur.path || "", prepare: true });
+        for (let t = 0; !quick && r.ready < r.total && t < 600; t++) { await wait(100); r = await SL.call("peaksReady", { refs, session: cur.path || "" }); }
+        await mark(`waveforms ${r.ready} of ${r.total}`, performance.now() - t0);
+      } else await mark("waveforms none", performance.now() - t0);
+      const t1 = performance.now();
+      prepareCues();
+      const list = cueList();
+      if (list.length) {
+        let r = await SL.call<{ ready: number; total: number }>("cuesReady", { cues: list });
+        for (let t = 0; !quick && r.ready < r.total && t < 600; t++) { await wait(100); r = await SL.call("cuesReady", { cues: list }); }
+        await mark(`cues ${r.ready} of ${r.total}`, performance.now() - t1);
+      } else await mark("cues none", performance.now() - t1);
+    } catch (e) { console.warn("set.Line: background loading", e); }
+  };
+  if (quick) await bg(); else bg();
 }
 
 async function main() {
@@ -1199,6 +1223,8 @@ async function main() {
   SL.on("transport", onTransport);
   SL.on("meters", (m: { peaks: number[]; tracks?: Record<string, number> }) => { peaks = m.peaks || []; trackPeaks = m.tracks || {}; });
   SL.on("audioSetupChanged", (s: Setup) => { loadedKey = null; onSetup(s); });
+  // 7a: the interface that was missing at launch is plugged in (while stopped): set.Line plays on it again
+  SL.on("interfaceBack", (m: { device: string; listen: ListenState }) => { listen = m.listen; loadedKey = null; page().setListen(listen, listenWhat()); page().toast(`${m.device} is connected: playing on it again`); });
   SL.on("engineStats", (x: Stats) => showStatus(x));
   SL.on("audioProgress", onProgress);
   SL.on("fileDrag", (d) => { onFileDrag(d).catch((e) => page().toast(String(e))); });
@@ -1222,6 +1248,7 @@ async function main() {
     else if (m.cmd === "about") showAbout();
     else if (m.cmd === "retryShow") retryStartShow();
     else if (m.cmd === "prefs") preferences();
+    else if (m.cmd === "prefsAudio") page().openSettings("audio");
     else if (m.cmd === "openBackup") openBackup();
     else if (m.cmd === "copyDiagnostics") diagnostics("copy"); else if (m.cmd === "saveDiagnostics") diagnostics("save");
     else if (m.cmd === "new") page().setlistCmd("new");
@@ -1266,7 +1293,9 @@ async function main() {
   }
   try { listen = await SL.call<ListenState>("getListen"); page().setListen(listen, listenWhat()); } catch (e) { console.warn("set.Line: listen", e); }
   onSetup(await SL.call<Setup>("getAudioSetup"));
-  try { page().setVoices(await SL.call<VoiceInfo[]>("getVoices")); } catch (e) { console.warn("set.Line: voices", e); }
+  // 7a: the computer's voices list in the background (slow on some Macs); the set.Line voices come with voiceModel
+  const tv = performance.now();
+  SL.call<VoiceInfo[]>("getVoices").then((l) => { page().setVoices(l); SL.call("startupMark", { name: "computer voices listed", took: performance.now() - tv }).catch(() => {}); }).catch((e) => console.warn("set.Line: voices", e));
   // (a new show taking the Kokoro default voice is not an edit: an untouched session stays "saved")
   try { const clean = !isDirty(); page().setVoiceModel(await SL.call<VoiceModel>("voiceModel")); if (clean) doc.savedText = sessionText(); } catch (e) { console.warn("set.Line: voice model", e); }
   prepareCues();

@@ -65,6 +65,9 @@ struct CueDef {
     double beat = 1;
     std::shared_ptr<const std::vector<float>> audio;
     std::string text; // for warnings
+    // 7a: samples into the audio where the word is heard (its perceptual onset, minus any timing nudge): the cue
+    // starts that much before its beat, so the word lands exactly on the beat. Can start before the song's sample 0.
+    int64_t lead = 0;
 };
 
 struct SongDef {

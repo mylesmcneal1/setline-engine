@@ -913,29 +913,93 @@
   .secl .ck.off{background:#3a3a40;color:transparent}
   .secl.out .sn{color:var(--muted);text-decoration:line-through}
   .rsong summary{cursor:pointer;list-style:none} .rsong summary::-webkit-details-marker{display:none} .rsong summary h3{margin:0}
-  /* ---- 6e: Perform ---- */
-  .perf{display:none;padding:22px 26px;grid-template-columns:minmax(0,1fr) 400px;gap:22px;overflow:auto;min-height:0}
+  /* ---- 7a: Perform (fixed layout for playing live; mockup docs/design/perform) ---- */
+  .perf{display:none;grid-template-columns:minmax(0,1fr) clamp(320px,26vw,520px);grid-template-rows:minmax(0,1fr) auto;gap:clamp(12px,1.1vw,22px);padding:clamp(12px,1.1vw,22px);min-height:0;overflow:hidden;font-size:clamp(13px,.95vw,20px)}
   body.pf .main{display:none} body.pf .perf{display:grid}
-  .perf .now{background:#1c1c1e;border-radius:14px;padding:22px;align-self:start}
-  .perf .now h1{font-size:40px;line-height:1.1;margin-top:4px} .perf .pmeta{color:var(--muted)} .perf .psub{color:var(--muted);margin-top:4px;font:13px var(--code,monospace)}
-  .pprog{height:10px;border-radius:5px;background:#2a2a2e;margin:18px 0 8px;position:relative;overflow:hidden} .pprog i{position:absolute;left:0;top:0;bottom:0}
-  .psecs{display:flex;gap:6px;margin-top:18px} .psec{flex:1;min-width:0;height:48px;border-radius:8px;background:var(--sc);opacity:.35;display:flex;align-items:center;padding:0 10px;color:#111;font-weight:700;font-size:13px;overflow:hidden;white-space:nowrap}
-  .psec span{overflow:hidden;text-overflow:ellipsis} .psec.on{opacity:1} .psec:not([disabled]):hover{opacity:.7} .psec.on:hover{opacity:1} .psec.px{cursor:default}
-  .psec.queued{opacity:1;animation:pblink .5s steps(2,start) infinite;box-shadow:0 0 0 2px #fff}
-  @keyframes pblink{to{filter:brightness(1.6)}}
-  .prow{display:flex;align-items:flex-end;gap:22px;margin-top:26px;flex-wrap:wrap} .pleft small,.pjt small{display:block;color:var(--muted);font-size:12px;margin-bottom:4px} .pleft b{font-size:64px;font-weight:700;line-height:1}
-  .ploop{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:10px;background:rgba(255,159,10,.15);color:var(--accent,#ff9f0a)} .ploop b{font-size:18px;letter-spacing:.06em}
-  .ploop[hidden]{display:none} .ploop .btn{background:var(--accent,#ff9f0a);color:#2b1600;font-weight:600} .ploop kbd,.pjt kbd{font:inherit;opacity:.7;margin-left:4px}
-  .pjt{margin-left:auto;display:flex;flex-direction:column;gap:6px;align-items:flex-start}
-  .perf .nextc{background:#1c1c1e;border-radius:14px;padding:16px 18px;margin-bottom:12px} .perf .nextc h3{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px}
-  .pstack{position:relative;height:112px} .pstack .c{position:absolute;border-radius:12px} .pstack:not(.many) .b1,.pstack:not(.many) .b2{display:none}
-  .pstack .b2{top:20px;left:28px;right:0;height:86px;background:#232326} .pstack .b1{top:10px;left:14px;right:14px;height:92px;background:#2a2a2e}
-  .pstack .front{top:0;left:0;right:28px;height:100px;background:#1f2a28;border:2px solid #22c3a6;padding:12px 14px}
-  .pnt{display:flex;align-items:center;gap:10px} .pnt .bar{width:4px;height:30px;border-radius:2px} .pnt b{font-size:20px} .pvn{color:#7fe0cf;font-size:13px}
-  .pst{display:flex;gap:2px;height:16px;margin-top:12px} .pst i{border-radius:3px;display:block}
-  .par{position:absolute;right:12px;top:12px;display:flex;gap:6px} .par button{width:38px;height:38px;border-radius:10px;background:#33333a;font-size:18px;color:#fff} .par button:hover{background:#44444c}
-  .pload{font-size:12px;color:var(--muted);margin-top:8px} .pafter{font-size:12px;color:#c9c9cf;margin-top:4px} .pthen{padding:6px 4px}
-  .rdet{margin:6px 0} .rdet summary{cursor:pointer;color:#c9c9cf;font-size:12.5px;padding:5px 0}
+  .perf .pcol{display:flex;flex-direction:column;gap:clamp(12px,1.1vw,22px);min-height:0;min-width:0}
+  .perf .card2{background:#1c1c1e;border-radius:14px;padding:clamp(14px,1.2vw,26px) clamp(16px,1.4vw,30px);position:relative;min-width:0}
+  .perf .lb2{font-size:clamp(11px,.75vw,15px);color:var(--muted);text-transform:uppercase;letter-spacing:.07em;font-weight:600}
+  .perf .pnow .hd{display:flex;align-items:baseline;gap:14px}
+  .perf .pnow h1{font-size:clamp(32px,3.2vw,72px);letter-spacing:-.02em;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+  .perf .pnow .vn{font-weight:600;font-size:clamp(14px,1.1vw,24px);white-space:nowrap}
+  .perf .pnow .left{margin-left:auto;font:600 clamp(26px,2.4vw,54px) var(--code,monospace);white-space:nowrap}
+  .perf .meta2{display:flex;gap:clamp(14px,1.6vw,34px);margin-top:8px;color:#c9c9cf;font-size:clamp(14px,1.05vw,22px);flex-wrap:wrap}
+  .perf .meta2 b{color:#fff;font-family:var(--code,monospace);font-weight:600}
+  .perf .meta2 .then b{font-family:inherit}
+  .ptl{position:relative;display:flex;gap:3px;height:clamp(58px,5.4vw,110px);margin-top:16px}
+  .ptl button{border-radius:7px;position:relative;overflow:hidden;padding:7px 8px;color:#111;font-weight:700;font-size:clamp(11px,.85vw,17px);white-space:nowrap;text-align:left;display:flex;flex-direction:column;justify-content:flex-start;min-width:0;background:var(--sc)}
+  .ptl button span{overflow:hidden;text-overflow:ellipsis;display:block}
+  .ptl button small{display:block;font-weight:600;font-size:.82em;opacity:.75;margin-top:2px;overflow:hidden;text-overflow:ellipsis}
+  .ptl button.past{opacity:.35} .ptl button.px{cursor:default;background:repeating-linear-gradient(135deg,#3a3a40 0 6px,#2e2e33 6px 12px);color:#c9c9cf}
+  .ptl button.cur{outline:3px solid #fff;outline-offset:-3px}
+  .ptl button.queued{outline:3px dashed #fff;outline-offset:-3px;animation:pblink .5s steps(2,start) infinite}
+  @keyframes pblink{to{filter:brightness(1.5)}}
+  .ptl .ic{position:absolute;right:5px;top:5px;width:18px;height:18px;background:rgba(0,0,0,.35);color:#fff;border-radius:4px;display:flex;align-items:center;justify-content:center}
+  .ptl .ic svg{width:12px;height:12px}
+  .ptl .ph{position:absolute;top:-6px;bottom:-6px;width:2px;background:#fff;box-shadow:0 0 8px #fff;border-radius:1px;pointer-events:none}
+  .prow3{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:clamp(12px,1.1vw,22px);flex:1;min-height:0}
+  .prow3 .card2{overflow:hidden;display:flex;flex-direction:column}
+  .psec2{border:2px solid var(--sc);background:color-mix(in srgb,var(--sc) 10%,#1c1c1e)}
+  .psec2 .nm,.pnext .nm{font-size:clamp(26px,2.3vw,52px);font-weight:800;margin-top:6px;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .psec2 .bl{display:flex;align-items:baseline;gap:10px;margin-top:auto}
+  .psec2 .big{font-size:clamp(90px,10vh,220px);font-weight:800;line-height:.95;font-variant-numeric:tabular-nums}
+  .psec2 .bl span:last-child{color:var(--muted);font-size:clamp(14px,1.1vw,24px)}
+  .pbeats{display:flex;gap:8px;margin-top:14px} .pbeats i{flex:1;height:clamp(14px,1.4vh,28px);border-radius:6px;background:#2a2a2e} .pbeats i.on{background:var(--accent,#ff9f0a)}
+  .pnext .sub{color:#c9c9cf;margin-top:6px}
+  .pnext .q{margin-top:auto;padding-top:14px} .pnext .q .v{color:var(--muted);margin-top:4px;display:flex;align-items:center;gap:10px;flex-wrap:wrap} .pnext .q .v b{color:#fff;font-size:1.15em}
+  .pmidi{display:flex;flex-direction:column;gap:10px;margin-top:12px;overflow:auto;min-height:0}
+  .pmidi div{background:#2a2a2e;border-radius:10px;padding:10px 14px;min-width:0} .pmidi div>span{color:#c9c9cf;font-size:.92em;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pmidi b{display:block;font-size:clamp(17px,1.3vw,28px);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .pmidi b small{color:#64d2ff;font-weight:600;font-size:.85em}
+  .psl{display:flex;flex-direction:column;padding:clamp(12px,1vw,22px) clamp(10px,.8vw,18px);min-height:0;overflow:hidden}
+  .psl .sh{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:0 8px 10px}
+  .psl .clk{font:13px var(--code,monospace);color:#c9c9cf;white-space:nowrap} .psl .clk.over{color:var(--red,#ff453a)}
+  .psl .list{overflow:auto;min-height:0;display:flex;flex-direction:column}
+  .psl .it{display:flex;align-items:center;gap:10px;padding:9px 8px;border-radius:8px;cursor:pointer;min-height:clamp(46px,4vh,64px)}
+  .psl .it:hover{background:#232326} .psl .it.now{background:#2a2a2e} .psl .it.sel{box-shadow:inset 0 0 0 1px #48484e}
+  .psl .n{width:18px;color:var(--muted);font-size:12px;text-align:right;flex:none}
+  .psl .bar{width:3px;align-self:stretch;border-radius:2px;flex:none}
+  .psl .t{flex:1;min-width:0} .psl .t b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:clamp(14px,1vw,20px)}
+  .psl .t small{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:.82em;white-space:nowrap}
+  .psl .t small button{width:22px;height:20px;border-radius:5px;background:#33333a;color:#e4e4e8;font-size:13px;line-height:1} .psl .t small button:hover{background:#44444c}
+  .psl .tm{font:13px var(--code,monospace);color:#c9c9cf;flex:none}
+  .psl .badge{font-size:10px;font-weight:800;background:var(--accent,#ff9f0a);color:#2b1600;border-radius:5px;padding:2px 6px;flex:none}
+  .psl .tr{font-size:11.5px;color:var(--muted);padding:0 8px 4px 49px;white-space:nowrap}
+  .pdock{grid-column:1/-1;display:flex;align-items:center;gap:clamp(10px,.9vw,18px);padding-top:4px}
+  .pdock .tbtn{height:clamp(58px,6.4vh,96px);border-radius:12px;background:#2a2a2e;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:clamp(16px,1.2vw,26px);gap:10px;color:#e4e4e8;padding:0 18px;flex:none}
+  .pdock .tbtn:hover{background:#34343a} .pdock .tbtn svg{width:clamp(22px,1.6vw,34px);height:clamp(22px,1.6vw,34px)}
+  .pdock .tbtn.sq{width:clamp(80px,6.5vw,130px)}
+  .pdock .tbtn.play{background:#30d158;color:#062b10;width:clamp(200px,16vw,340px)} .pdock .tbtn.play:hover{background:#3ee066}
+  .pdock .tbtn.play.stop{background:#ff453a;color:#2b0300} .pdock .tbtn.play.stop:hover{background:#ff5d53}
+  .pdock .tbtn.dim{color:#5a5a62;cursor:default} .pdock .tbtn.dim:hover{background:#2a2a2e}
+  .pdock .tbtn.on{background:var(--accent,#ff9f0a);color:#2b1600}
+  .pdock .sp{flex:1}
+  .pdock .jt{display:flex;flex-direction:column;gap:4px;align-items:flex-end}
+  .segbig{display:flex;background:#2a2a2e;border-radius:12px;padding:4px;height:clamp(46px,5vh,72px)}
+  .segbig button{display:flex;align-items:center;padding:0 clamp(12px,1vw,22px);border-radius:9px;color:#c9c9cf;font-size:clamp(13px,1vw,20px)}
+  .segbig button.on{background:#48484e;color:#fff}
+  .pfonly{display:none} body.pf .pfonly{display:inline-flex}
+  body.pf .syncb[hidden]{display:inline-flex}
+  .lockb.on{background:var(--accent,#ff9f0a);color:#2b1600;border-color:transparent}
+  body.locked .perf{pointer-events:none} body.locked .top>*:not(#lockBtn){pointer-events:none;opacity:.55}
+  /* ---- 7a: rounded song header, track headers and lanes (docs/design/rounded): 9 px corners, 5-6 px gaps. The
+     header column keeps its width (lanes stay aligned with the ruler); the cards are drawn inside it, and the gaps show
+     the scroller's background, opaque over lanes scrolling under the sticky headers. ---- */
+  .scroller .row.trk{padding-bottom:5px}
+  .scroller .row.trk>.lh{background:var(--rbg,#141415)!important;border-bottom:0!important;box-shadow:none!important;padding-left:0}
+  .scroller .row.trk>.lh::before{content:"";position:absolute;inset:0 6px 0 0;border-radius:9px;background:#1c1c1e;z-index:-1}
+  .scroller .row.trk.tsel>.lh::before{background:#26262a;box-shadow:inset 0 0 0 1px var(--accent)}
+  .scroller .row.trk>.lh>.ctab{align-self:stretch;border-radius:9px 0 0 9px}
+  .scroller .row.trk>.lh{padding-right:14px}
+  .scroller .row.trk>.lane{border-bottom:0!important;border-radius:9px;overflow:hidden;background:#18181a}
+  .scroller .fhead{background:var(--rbg,#141415)!important;border-bottom:0!important}
+  .scroller .fhead>.fh{background:transparent!important;box-shadow:none!important;border-right:0}
+  .scroller .fhead>.fh::before{content:"";position:absolute;inset:4px 6px 5px 0;border-radius:10px;z-index:-1;background:#1c1c1e}
+  .scroller .folder.open .fhead>.fh::before{background:linear-gradient(90deg,color-mix(in srgb,var(--fc) 22%,#1e1e20),#1e1e20 85%)}
+  .scroller .fhead>.fh::after{content:"";position:absolute;left:0;top:4px;bottom:5px;width:5px;border-radius:10px 0 0 10px;background:var(--fc)}
+  .scroller .folder.sel .fhead>.fh::before{box-shadow:inset 0 0 0 1px var(--accent)}
+  .scroller .fhead>.lane{border-radius:10px;overflow:hidden}
+  html.ap-darker .scroller{--rbg:#000}
+  .pftoast{position:fixed;left:50%;top:84px;transform:translateX(-50%);background:#0a84ff;color:#fff;font-weight:700;font-size:clamp(18px,1.5vw,30px);padding:10px 22px;border-radius:12px;z-index:950;box-shadow:0 10px 30px rgba(0,0,0,.5);pointer-events:none}
   /* ---- 6d: Settings sheet, status pill, gear ---- */
   .scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:900;display:flex;align-items:center;justify-content:center}
   .sheet{position:relative;width:min(900px,94vw);height:min(640px,90vh);background:#1c1c1e;border-radius:14px;border:.5px solid #3a3a40;box-shadow:0 30px 80px rgba(0,0,0,.6);display:grid;grid-template-columns:200px 1fr;overflow:hidden}
@@ -956,6 +1020,7 @@
   .status{display:flex;align-items:center;gap:6px;background:#2a2a2e;border-radius:20px;padding:5px 11px;color:#d0d0d6;font-size:12px;white-space:nowrap;margin-left:8px;cursor:pointer}
   .status:hover{background:#38383e} .status .dot{width:7px;height:7px;border-radius:50%;background:var(--green,#30d158);flex:none}
   .gear{font-size:15px;margin-left:6px}
+  .listenbar.miss{background:#5a1d1d;color:#ffd6d6}
 </style>
 <script src="ui.js"></script>
 </head>
@@ -987,8 +1052,8 @@
     <div class="lsong"><b id="lcdSong">No song</b><span id="lcdSec">–</span></div>
   </div>
   <div class="listenc" title="Where you hear the show: its own outputs (normal), or this computer's speakers / headphones"><div class="seg" id="listenSeg"><button data-v="show" class="on">Show outputs</button><button data-v="pc">This computer</button></div></div>
-  <div class="listenbar" id="listenBar" hidden>Listening on <span id="listenDev"></span><span id="listenWhat" style="font-weight:500"></span><button id="listenOffB">Back to show outputs</button></div>
-  <span class="bandstat" id="bandStat" hidden></span><button class="btn line syncb" id="syncBtn" hidden title="Send this setlist’s MIDI sync point to every device">Sync MIDI</button>
+  <div class="listenbar" id="listenBar" hidden><span id="listenPre">Listening on </span><span id="listenDev"></span><span id="listenWhat" style="font-weight:500"></span><button id="listenOffB">Back to show outputs</button></div>
+  <span class="bandstat" id="bandStat" hidden></span><button class="btn line syncb" id="syncBtn" hidden title="Send this setlist’s MIDI sync point to every device">Sync MIDI</button><button class="btn line pfonly" id="pfSetBtn" title="Setlists">Setlist ▾</button><button class="btn line pfonly lockb" id="lockBtn" title="Lock Perform: clicks and taps do nothing until you hold this (keys and pedals still work)">Lock</button>
   <button class="status" id="statusChip" title="Audio settings"><span class="dot" id="statusDot"></span><span id="statusTxt">No audio device</span></button><button class="ibtn gear" id="gearBtn" title="Settings  ⌘,">⚙</button>
 </header>
 
@@ -1097,7 +1162,7 @@ let setOrder=['neon','glass','low','sat','copper'];
 let setlists=[{id:'L1',name:'Full show',order:setOrder},{id:'L2',name:'Festival 30',order:['neon','glass','sat']},{id:'L3',name:'Acoustic',order:['low','paper']}], curSet='L1', setSeq=4;
 const curSetObj=()=>setlists.find(x=>x.id===curSet)||setlists[0];
 function syncSet(){ const c=curSetObj(); if(c) c.order=setOrder; }
-function useSet(id){ if(playing&&id!==curSet){ toast('Stop playback first: the setlist can’t change while a song plays'); return false; } syncSet(); const was=curSet; curSet=id; setOrder=curSetObj().order; refresh(); if(perfOn) renderPerform(true); if(was!==id&&curSetObj().sync&&curSetObj().sync.onOpen) syncMidi(); return true; }
+function useSet(id){ if(playing&&id!==curSet){ toast('Stop playback first: the setlist can’t change while a song plays'); return false; } syncSet(); const was=curSet; curSet=id; setOrder=curSetObj().order; refresh(); if(perfOn) renderPerform(true); return true; }
 const SETCOLS=['#f5a524','#7fe0cf','#bf5af2','#ff6b6b','#5ac8fa','#a3e635','#f472b6','#9aa0aa'];
 const setCol=l=>l.col||SETCOLS[Math.max(0,setlists.indexOf(l))%SETCOLS.length];
 function setlistCmd(cmd){ if(playing&&cmd!=='ren'){ toast('Stop playback first: the setlist can’t change while a song plays'); return; } const c=curSetObj(); syncSet();
@@ -1733,6 +1798,9 @@ let CUEV={voice:'',name:'',speed:1}, cuevFresh=true, cueOpen=false, VOICES=null,
 // computer's voices use the respelling. VMODEL: the Kokoro download ({state, done, total, error}); UNKNOWN: words
 // in this show's cues no dictionary knows (sounded out from their spelling until a pronunciation is added).
 let PRON={}, VMODEL={state:'',done:0,total:0,error:''}, UNKNOWN=[];
+// 7a: per voice (by id; '' = the computer's default voice), ms to move its words (+ later, - earlier) after set.Line puts
+// each word's onset on the beat. The library's.
+let VNUDGE={};
 // Recorded cue words (the whole show; a song's own s.cueWords win): {id, word, path (in the show: Cues/Words/…), name,
 // copy}. A cue that says exactly the word (case, spaces and end punctuation ignored) plays the recording.
 let CUEWORDS=[], cwSeq=1;
@@ -1764,7 +1832,20 @@ function voiceMenu(found){ const sys=(navigator.language||'en-US').toLowerCase()
   const first=sysL.filter(v=>mine(v)||(found&&v.id===found.id)).sort(cmp), rest=sysL.filter(v=>!first.includes(v)).sort((a,b)=>(a.lang||'').localeCompare(b.lang||'')||cmp(a,b));
   return {kokoro:k,first,rest}; }
 const cueCfg=s=>s.cueVoice||CUEV;
-function voiceList(){ if(VOICES) return VOICES; try{ return speechSynthesis.getVoices().map(v=>({id:v.name,name:v.name,lang:v.lang,isDefault:v.default})); }catch(e){ return []; } }
+// 7a: the set.Line (Kokoro) voices come with the voice model's state (KVOICES), not with the computer's voice list,
+// so they're listed even when the computer's voices are slow to list or never answer (the Mac bug in 0.1.40).
+let KVOICES=[];
+function voiceList(){ let sys; if(VOICES) sys=VOICES; else try{ sys=speechSynthesis.getVoices().map(v=>({id:v.name,name:v.name,lang:v.lang,isDefault:v.default})); }catch(e){ sys=[]; }
+  const have=new Set(sys.map(v=>v.id)); return [...KVOICES.filter(v=>!have.has(v.id)),...sys]; }
+const OS_VOICES=/Mac/.test(navigator.platform)?'Mac voices':'Windows voices';
+const kokoroLabel=v=>`${v.name} · ${({'en-US':'American','en-GB':'British'})[v.lang]||v.lang} · ${v.gender==='M'?'male':'female'}`;
+// The "set.Line voices" group: every Kokoro voice once downloaded; before that, the download item (and the saved
+// choice, if it's a Kokoro voice, so the menu shows it).
+function kokoroGroup(selId){ const k=voiceList().filter(v=>v.engine==='kokoro').sort((a,b)=>(b.rank||0)-(a.rank||0)||a.name.localeCompare(b.name));
+  if(VMODEL.state==='ready') return k.length?`<optgroup label="set.Line voices">${k.map(v=>`<option value="${esc(v.id)}" ${v.id===selId?'selected':''}>${esc(kokoroLabel(v))}</option>`).join('')}</optgroup>`:'';
+  const pct=VMODEL.total?Math.floor(100*VMODEL.done/VMODEL.total):0, sel=k.find(v=>v.id===selId);
+  return `<optgroup label="set.Line voices">${VMODEL.state==='downloading'?`<option value="__downloading" disabled>Downloading better voices… ${pct}%</option>`:`<option value="__download">⬇ Download better voices (${KOKORO_MB()} MB)…</option>`}${sel?`<option value="${esc(sel.id)}" selected>${esc(kokoroLabel(sel))} · not downloaded</option>`:''}</optgroup>`; }
+const sysOpt=(v,selId)=>`<option value="${esc(v.id)}" ${v.id===selId?'selected':''}>${esc(v.name)}${v.lang?' · '+esc(v.lang):''}</option>`;
 function defaultVoice(){ const l=voiceList().filter(v=>v.engine!=='kokoro'); return l.find(v=>v.isDefault)||l[0]||null; }
 function voiceFound(c){ if(!c.voice&&!c.name) return defaultVoice(); const l=voiceList(); return l.find(v=>v.id===c.voice)||l.find(v=>c.name&&v.name.toLowerCase()===c.name.toLowerCase())||null; }
 function voiceLabel(c){ if(!c.voice&&!c.name){ const d=defaultVoice(); return d?d.name:'Default voice'; } return c.name||c.voice; }
@@ -1777,17 +1858,16 @@ function cuePanel(s){ if(!cueOpen) return ''; const c=cueCfg(s), own=!!s.cueVoic
   // Voice menu (phase 7): the Kokoro download, Kokoro by accent and gender (best first), your recorded words (choosing
   // one plays it), the computer's voices (Default first; its language first, best on top), then More voices….
   const opts=(missing?`<option value="__saved" selected>${esc(c.name||c.voice)} (not on this computer)</option>`:'')+(()=>{ const m=voiceMenu((c.voice||c.name)?found:null), o=v=>`<option value="${esc(v.id)}" ${found&&(c.voice||c.name)&&found.id===v.id?'selected':''}>${esc(v.name)}${v.lang?' · '+esc(v.lang):''}${v.quality>=3?' · Premium':v.quality===2?' · Enhanced':''}</option>`;
-      const have=VMODEL.state==='ready', ko=v=>`<option value="${esc(v.id)}" ${found&&found.id===v.id?'selected':''}>${esc(v.name)}${v.grade?' · '+esc(v.grade):''}${have?'':' · not downloaded'}</option>`;
-      const dl=have?'':VMODEL.state==='downloading'?`<option value="__downloading" disabled>Downloading better voices… ${VMODEL.total?Math.floor(100*VMODEL.done/VMODEL.total):0}%</option>`:`<option value="__download">⬇ Download better voices (${KOKORO_MB()} MB)…</option>`;
-      const kok=m.kokoro.length?dl+[['American female','en-US','F'],['American male','en-US','M'],['British female','en-GB','F'],['British male','en-GB','M']].map(([n,l,g])=>{ const V=m.kokoro.filter(v=>v.lang===l&&v.gender===g); return V.length?`<optgroup label="Kokoro · ${n}${have?'':' (not downloaded)'}">${V.map(ko).join('')}</optgroup>`:''; }).join(''):'';
+      const kok=kokoroGroup(found&&(c.voice||c.name)?found.id:'');
       const words=[...(s.cueWords||[]),...CUEWORDS.filter(w=>!(s.cueWords||[]).some(x=>normCue(x.word)===normCue(w.word)))];
       const rec=words.length?`<optgroup label="Your recorded words (played instead of the voice)">${words.map(w=>`<option value="__word:${esc(w.id)}">“${esc(w.word)}” · ${esc(w.name)}</option>`).join('')}</optgroup>`:'';
       const def=`<option value="" ${!c.voice&&!c.name?'selected':''}>Default voice${d?' ('+esc(d.name)+')':''}</option>`, comp=def+m.first.map(o).join('');
-      return kok+rec+(kok||rec?`<optgroup label="Computer voices">${comp}</optgroup>`:comp)+(m.rest.length?(allVoices?`<optgroup label="More voices">${m.rest.map(o).join('')}</optgroup>`:`<option value="__more">More voices… (${m.rest.length})</option>`):''); })();
+      return kok+`<optgroup label="${OS_VOICES}">${comp}</optgroup>`+rec+(m.rest.length?(allVoices?`<optgroup label="More voices">${m.rest.map(o).join('')}</optgroup>`:`<option value="__more">More voices… (${m.rest.length})</option>`):''); })();
   const sp=c.speed||1;
-  return rcard('Voice',rrow('Voice','<select id="cvVoice">'+opts+'</select>')+(VMODEL.state&&VMODEL.state!=='ready'?'<p class="rnote" id="cvKhint">'+(isKokoro(c)?'“'+esc(c.name)+'” isn’t downloaded yet, so cues use '+(d?esc(d.name):'the computer’s voice')+' for now. ':'')+(VMODEL.state==='downloading'?'Natural voices are downloading (Settings › Voices).':'Natural voices (Kokoro, '+KOKORO_MB()+' MB): download them in <a href="#" id="cvKset">Settings › Voices</a>.')+'</p>':'')
+  return rcard('Voice',kokoroBox()+rrow('Voice','<select id="cvVoice">'+opts+'</select>')
     +(missing?'<p class="hint" id="cvMissing" style="color:var(--amber);font-size:11px;line-height:1.5;margin:2px 0 8px">“'+esc(c.name||c.voice)+'” isn’t installed on this computer, so cues use '+(d?esc(d.name):'the default voice')+'. The choice stays saved and comes back on a computer that has it.</p>':'')
     +rrow('Speed',rslider('cvSpeed',sp,0.7,1.5,0.05,sp.toFixed(2)+'×'))
+    +rrow('Timing nudge',`<span style="display:flex;align-items:center;gap:6px"><input type="number" id="cvNudge" min="-200" max="200" step="5" value="${+(VNUDGE[nudgeKey(c)]||0)}" style="width:64px" title="Each word’s onset is put on its beat; this moves this voice’s words (+ later, − earlier)"><span class="faint" style="font-size:11px">ms</span></span>`)
     +rrow('Same voice for every song',tog('cvSame',!own,own?'Only '+s.name+' uses this voice':'Every song uses this voice'))
     +rrow('Phrases','<button class="sel2" id="cvPhrases">Edit phrases…</button>')
     +'<div class="racts"><button class="btn line" id="cvPrev">▶ Preview</button></div>'
@@ -1823,7 +1903,9 @@ function wireCuePanel(s){ if(!$('cvVoice')) return; wirePron(s); wireWords(s);
   const sp=$('cvSpeed'); sp.oninput=()=>{ const v=+sp.value; set('speed',v); sp.style.setProperty('--p',((v-.7)/.8*100).toFixed(1)+'%'); $('cvSpeedV').textContent=v.toFixed(2)+'×'; };
   sp.onchange=()=>{ snap(); previewCue(s,previewText(s)); };
   $('cvPrev').onclick=()=>previewCue(s,previewText(s));
+  $('cvNudge').onchange=e=>{ const v=Math.max(-200,Math.min(200,Math.round(+e.target.value||0))), k=nudgeKey(cueCfg(s)); snap(); if(v) VNUDGE[k]=v; else delete VNUDGE[k]; e.target.value=v; };
 }
+const nudgeKey=c=>{ const f=(c.voice||c.name)?voiceFound(c):null; return f?f.id:(c.voice||''); };
 // ---------- sections: user-made, placed freely ----------
 const SEC_TYPES=['intro','verse','pre','chorus','bridge','turn','outro'];
 const barAtTime=(s,t)=>{ let b=1; for(const x of s.bars){ if(x.t<=t+1e-6) b=x.bar; else break; } return Math.min(b,s.total); };
@@ -2089,7 +2171,6 @@ function addCountIn(s,o){ const times=countInTimes(s,o.into,o.n,o.spacing), word
   times.forEach((t,i)=>{ const p=cueAt(s,t); s.cues=cuesOf(s).filter(c=>!(c.bar===p.bar&&Math.abs((c.beat||1)-p.beat)<1e-6)); const c={id:'c'+regSeq++,bar:p.bar,beat:p.beat,text:words[i]}; if(o.voice) c.voice={...o.voice}; s.cues.push(c); made.push(c); });
   return made; }
 function countInBox(s,into){ into=Math.max(2,Math.min(s.total,into)); const sig=s.bars[into-2].sig, d=defaultVoice(), cv=cueCfg(s);
-  const vopt=v=>`<option value="${esc(v.id)}">${esc(v.name)}${v.engine==='kokoro'?' · Kokoro':v.lang?' · '+esc(v.lang):''}</option>`;
   const bg=document.createElement('div'); bg.className='cfbg';
   bg.innerHTML=`<div class="cfbox" style="width:min(460px,92vw)"><b>Add count-in</b><p>Spoken counts right before a bar, added as normal cues you can edit afterwards.</p>
     <div style="display:grid;grid-template-columns:110px 1fr;gap:10px 12px;align-items:center;margin-top:14px;font-size:12.5px;text-align:left">
@@ -2097,7 +2178,7 @@ function countInBox(s,into){ into=Math.max(2,Math.min(s.total,into)); const sig=
       <label>Counts</label><input type="number" id="ciN" min="1" max="32" value="${sig[0]}" style="width:80px">
       <label>Spacing</label><select id="ciSp"><option value="beat">Every beat</option><option value="other">Every other beat</option><option value="8th">Every 8th</option></select>
       <label>Words</label><input id="ciW" value="${countInWords(sig[0],'').join(', ')}" placeholder="1, 2, 3, 4">
-      <label>Voice</label><select id="ciV"><option value="">The cues’ voice (${esc(voiceLabel(cv))})</option>${voiceList().map(vopt).join('')}</select></div>
+      <label>Voice</label><select id="ciV"><option value="">The cues’ voice (${esc(voiceLabel(cv))})</option>${VMODEL.state==='ready'?kokoroGroup(''):''}<optgroup label="${OS_VOICES}">${voiceList().filter(v=>v.engine!=='kokoro').map(v=>sysOpt(v,'')).join('')}</optgroup></select></div>
     <p class="faint" id="ciSum" style="font-size:11px;margin-top:10px"></p>
     <div class="cfa"><button class="btn line" data-a="no">Cancel</button><button class="btn pri" data-a="ok">Add count-in</button></div></div>`;
   document.body.appendChild(bg); const q=id=>bg.querySelector('#'+id); let wordsEdited=false;
@@ -2569,7 +2650,7 @@ function drawRuler(cv){ const s=songs.find(x=>x.id===cv.dataset.song), H=cv.heig
 // ---------- undo / redo ----------
 let undoS=[], redoS=[];
 function ser(){ return JSON.stringify({songs,setlists,curSet},function(k,v){ return this&&this.tmap&&(k==='bars'||k==='secPos'||k==='_yy')?undefined:v; }); }
-function snap(){ undoS.push(ser()); if(undoS.length>80) undoS.shift(); redoS=[]; }
+function snap(){ undoS.push(ser()); if(undoS.length>80) undoS.shift(); redoS=[]; if(window.SLE&&SLE.edited) SLE.edited(); }
 function restore(str){ const o=JSON.parse(str); songs.length=0; o.songs.forEach(x=>songs.push(x)); setlists=o.setlists;
   // a setlist never points at a song that isn't there (a damaged song file, an older backup)
   const have=new Set(songs.map(x=>x.id)); setlists.forEach(l=>{ l.order=(l.order||[]).filter(id=>have.has(id)); }); if(!setlists.some(l=>l.id===o.curSet)) o.curSet=setlists[0]&&setlists[0].id; curSet=o.curSet; setOrder=curSetObj().order;
@@ -3053,7 +3134,7 @@ function finishByBox(){ const L=curSetObj(); const bg=document.createElement('di
 // ---- MIDI sync point (per setlist): per device (port + channel) the messages that put it in the right state ----
 // One message per line: "PC 12", "PC 1:0:12" (bank MSB:LSB:program), "CC 7 100", "raw B0 07 64" (up to 3 bytes).
 let SYNC_SENT={}, SYNCED=null; // device index -> time sent (this session); the last Sync MIDI (top-bar button: "Synced ✓")
-function syncOf(L){ L=L||curSetObj(); if(!L.sync) L.sync={devices:[],onOpen:false,onReconnect:false}; return L.sync; }
+function syncOf(L){ L=L||curSetObj(); if(!L.sync) L.sync={devices:[]}; delete L.sync.onOpen; delete L.sync.onReconnect; return L.sync; }
 function syncLines(text,ch){ const c=Math.max(0,Math.min(15,(+ch||1)-1)), out=[], bad=[];
   String(text||'').split(/\n|;/).map(x=>x.trim()).filter(Boolean).forEach(line=>{ let m;
     if((m=line.match(/^pc\s+(?:(\d+):(\d+):)?(\d+)$/i))){ if(m[1]!==undefined){ out.push([0xB0|c,0,+m[1]&127]); out.push([0xB0|c,32,+m[2]&127]); } out.push([0xC0|c,+m[3]&127]); }
@@ -3061,7 +3142,7 @@ function syncLines(text,ch){ const c=Math.max(0,Math.min(15,(+ch||1)-1)), out=[]
     else if((m=line.match(/^raw\s+((?:[0-9a-f]{2}\s*){1,3})$/i))) out.push(m[1].trim().split(/\s+/).map(h=>parseInt(h,16)));
     else bad.push(line); });
   return {msgs:out,bad}; }
-async function syncMidi(onlyPorts){ const sy=syncOf(), devs=sy.devices.map((d,i)=>[d,i]).filter(([d])=>!onlyPorts||onlyPorts.includes(d.port));
+async function syncMidi(){ const onlyPorts=null, sy=syncOf(), devs=sy.devices.map((d,i)=>[d,i]);
   if(!devs.length){ if(!onlyPorts) toast('No MIDI sync point for “'+curSetObj().name+'”: set one in Settings › MIDI'); return {sent:0}; }
   let ok=0; const fails=[];
   for(const [d,i] of devs){ const {msgs}=syncLines(d.text,d.ch); const r=await ncall('sendMidiNow',{port:d.port,msgs}); if(r&&!r.error){ ok++; SYNC_SENT[i]=Date.now(); } else if(NATIVE) fails.push(d.port+(r&&r.error?': '+r.error:'')); else { ok++; SYNC_SENT[i]=Date.now(); } }
@@ -3319,10 +3400,10 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
   setPos(t){ pos=t; }, setPlayId(id){ playId=id; document.querySelectorAll('.folder').forEach(f=>f.classList.toggle('playing',f.dataset.id===playId)); }, setPlaying(b){ playing=b; $('playBtn').classList.toggle('on',b); last=performance.now(); requestAnimationFrame(tick); },
   redraw(){ lcd(); },
   // Everything a .setline session holds.
-  sessionData(){ const o=JSON.parse(ser()); o.presets=presets.filter(p=>!p.built); o.click=CLICK; if(Object.keys(CLICKT).length) o.clickT=CLICKT; o.cueVoice=CUEV; if(Object.keys(PRON).length) o.pron=PRON; if(CUEWORDS.length) o.cueWords=CUEWORDS;
+  sessionData(){ const o=JSON.parse(ser()); o.presets=presets.filter(p=>!p.built); o.click=CLICK; if(Object.keys(CLICKT).length) o.clickT=CLICKT; o.cueVoice=CUEV; if(Object.keys(PRON).length) o.pron=PRON; if(Object.keys(VNUDGE).length) o.voiceNudge=VNUDGE; if(CUEWORDS.length) o.cueWords=CUEWORDS;
     if(LIBMODE){ if(PHRASES) o.phrases=PHRASES.list; if(USER_LISTS.length) o.patchLists=USER_LISTS; } if(FIELDS.length) o.fields=FIELDS; if(BAND.screens.length||BAND.network||BAND.pin) o.dashboards=BAND; return o; },
   loadSession(o){ ROUTE_LOG=[]; migrateRouting(o); migrateMidi(o); migrateVersions(o);
-    if(Array.isArray(o.phrases)) PHRASES={list:o.phrases.filter(x=>x&&typeof x.t==='string')}; if(Array.isArray(o.patchLists)){ USER_LISTS=o.patchLists; saveLists(); } FIELDS=Array.isArray(o.fields)?o.fields:[]; BAND=o.dashboards&&typeof o.dashboards==='object'&&!Array.isArray(o.dashboards)?{network:'',pin:'',screens:[],...o.dashboards}:{network:'',pin:'',screens:[]}; BSEL=null; BWID=null; if(Array.isArray(o.presets)){ presets=[...o.presets]; } if(o.click) CLICK={...CLICK,...o.click}; CLICKT={...(o.clickT||{})}; CUEV={voice:'',name:'',speed:1,...(o.cueVoice||{})}; cuevFresh=false; PRON={...(o.pron||{})}; UNKNOWN=[]; CUEWORDS=Array.isArray(o.cueWords)?o.cueWords:[]; cwSeq=1+Math.max(0,...allWords().map(w=>+String(w.id).slice(1)||0));
+    if(Array.isArray(o.phrases)) PHRASES={list:o.phrases.filter(x=>x&&typeof x.t==='string')}; if(Array.isArray(o.patchLists)){ USER_LISTS=o.patchLists; saveLists(); } FIELDS=Array.isArray(o.fields)?o.fields:[]; BAND=o.dashboards&&typeof o.dashboards==='object'&&!Array.isArray(o.dashboards)?{network:'',pin:'',screens:[],...o.dashboards}:{network:'',pin:'',screens:[]}; BSEL=null; BWID=null; if(Array.isArray(o.presets)){ presets=[...o.presets]; } if(o.click) CLICK={...CLICK,...o.click}; CLICKT={...(o.clickT||{})}; CUEV={voice:'',name:'',speed:1,...(o.cueVoice||{})}; cuevFresh=false; PRON={...(o.pron||{})}; VNUDGE={...(o.voiceNudge||{})}; UNKNOWN=[]; CUEWORDS=Array.isArray(o.cueWords)?o.cueWords:[]; cwSeq=1+Math.max(0,...allWords().map(w=>+String(w.id).slice(1)||0));
     restore(JSON.stringify({songs:o.songs||[],setlists:o.setlists&&o.setlists.length?o.setlists:[{id:'L1',name:'Setlist 1',order:[]}],curSet:o.curSet||'L1'}));
     // ids made from now on must not collide with the loaded ones
     let num=0; const pre={}; const walk=v=>{ if(Array.isArray(v)) v.forEach(walk); else if(v&&typeof v==='object'){ if(typeof v.id==='number') num=Math.max(num,v.id); else if(typeof v.id==='string'){ const m=v.id.match(/^([a-zA-Z])(\d+)$/); if(m) pre[m[1]]=Math.max(pre[m[1]]||0,+m[2]); } Object.values(v).forEach(walk); } };
@@ -3353,10 +3434,10 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
   // 6g: the band's screens
   band:{ show:()=>bandShow(), live:()=>bandLive(), get data(){ return BAND; }, set data(v){ BAND=v; }, screen:id=>BAND.screens.find(x=>x.id===id)||null, addScreen:(n,k)=>{ const s=addScreen(n,k); refresh(); return s; },
     online:(m,devs)=>{ BONLINE=m||{}; BDEVS=devs||[]; if(bandOn) renderBand(); }, info:i=>{ BINFO=i; if(bandOn) renderBand(); }, status:(from,label,on)=>bandStatus(from,label,on), clearStatus:()=>{ BSTATUS=[]; renderStatusBar(); },
-    soundcheck:(id,v)=>soundcheck(id,v), endSoundcheck:()=>endSoundcheck(), vamp:()=>vamp(), jump:id=>queueJumpTo(id), cancelJump:()=>cancelQueuedJump(), syncMidi:p=>syncMidi(p), fillSync:()=>fillSyncFromFirst(), syncLines:(t,c)=>syncLines(t,c),
+    soundcheck:(id,v)=>soundcheck(id,v), endSoundcheck:()=>endSoundcheck(), vamp:()=>vamp(), jump:id=>queueJumpTo(id), cancelJump:()=>cancelQueuedJump(), syncMidi:()=>syncMidi(), fillSync:()=>fillSyncFromFirst(), syncLines:(t,c)=>syncLines(t,c),
     view:on=>setBand(on), addWidget:(sc,type,x,y)=>addWidget(sc,type,x,y), select:(id,ori)=>{ BSEL=id; if(ori) BORI=ori; renderBand(); }, fields:()=>FIELDS, setFields:f=>{ FIELDS=f; refresh(); }, fieldVal:(s,f,v)=>fieldVal(s,f,v), setFieldVal:(s,f,val,v)=>setFieldVal(s,f,val,v), newField:n=>newField(n), table:()=>fieldsTable(), finishBy:v=>{ const L=curSetObj(); if(v) L.finishBy=v; else delete L.finishBy; } },
-  midiReconnected(names){ const sy=curSetObj().sync; if(sy&&sy.onReconnect) syncMidi(names); },
-  setlistOpened(){ const sy=curSetObj().sync; if(sy&&sy.onOpen) syncMidi(); },
+  midiReconnected(names){ /* 7a: Sync MIDI is one button only; nothing goes out by itself */ },
+  setlistOpened(){},
   // 6f: the Library
   setlistCmd:cmd=>setlistCmd(cmd), curSetId:()=>curSet,
   setSaveState(st,why){ LIBMODE=true; const m=$('saveMk'), d=$('dirtyMk'); if(d) d.hidden=true; if(!m) return; m.hidden=false; m.className='savemk'+(st==='saving'?' saving':st==='error'?' err':''); m.textContent=st==='saving'?'Saving…':st==='error'?'Not saved: '+(why||'error'):'Saved'; m.title=st==='error'?(why||''):'Every change is saved to the library as you work'; },
@@ -3365,12 +3446,13 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
   mergeShow:(o,name,map)=>mergeShow(o,name,map), migrationBox:list=>migrationBox(list),
   // "Listen on this computer": the switch and the orange banner
   setListen(st,what){ LISTEN=st||{}; $('listenSeg').querySelectorAll('button').forEach(b=>b.classList.toggle('on',(b.dataset.v==='pc')===!!LISTEN.on)); $('listenBar').hidden=!LISTEN.on;
+    const miss=LISTEN.on&&LISTEN.missing; $('listenBar').classList.toggle('miss',!!miss); $('listenPre').textContent=miss?LISTEN.missing+' not found, playing on this computer: ':'Listening on '; $('listenOffB').hidden=!!miss;
     $('listenDev').textContent=LISTEN.current||LISTEN.device||'this computer'; $('listenWhat').textContent=LISTEN.on?' · '+(what||'everything')+(LISTEN.click===false?' · no click':'')+(LISTEN.cues===false?' · no cues':'')+(LISTEN.midi===false?' · MIDI held back':''):''; },
   copyStatus(p){ const m=$('copyMk'); if(!m) return; if(p.finished){ m.hidden=true; if(p.error) toast('The audio copy stopped: '+p.error); else if(p.files) toast(`Audio copied into the show (${p.files} file${p.files>1?'s':''})`); return; }
     m.hidden=false; $('copyTxt').textContent=`Copying audio… ${p.filesDone||0} of ${p.files||0}`; $('copyBar').style.width=(p.total>0?100*p.done/p.total:0)+'%'; },
   menu:(e,items)=>ctxMenu(e,items), saveBox:(t,b,c)=>saveBox(t,b,c), about:info=>aboutBox(info), nameBox:(o,d)=>nameBox(o,d), prefsBox:(f,a)=>prefsBox(f,a),
   // a new show: the set's cue voice starts fresh (Kokoro Heart once downloaded, else the computer's)
-  freshShow(){ CUEV={voice:'',name:'',speed:1}; cuevFresh=true; CLICKT={}; PRON={}; UNKNOWN=[]; CUEWORDS=[]; if(VMODEL.state==='ready'){ CUEV={...KOKORO_DEFAULT}; cuevFresh=false; } },
+  freshShow(){ CUEV={voice:'',name:'',speed:1}; cuevFresh=true; CLICKT={}; PRON={}; VNUDGE={}; UNKNOWN=[]; CUEWORDS=[]; if(VMODEL.state==='ready'){ CUEV={...KOKORO_DEFAULT}; cuevFresh=false; } },
   confirm(title,body,ok,fn){ confirmBox(title,body,ok,fn); },
   // step 2: stems
   // phase 7: recorded cue words
@@ -3381,7 +3463,7 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
   ck:{ of:(s,t)=>ckOf(s,t), cfg:(s,t)=>clickCfg(s,t), repeat:(s,t,r,m,n)=>repeatClip(s,t,r,m,n), box:(s,t,r)=>repeatBox(s,t,r), dup:()=>doDup(), pick:(s,t,r)=>setPick({kind:'ck',song:s.id,track:t,id:r.id}), copy:()=>doCopy(), pasteAt:(s,t,at)=>pasteAt(s,t,at), openPanel:(s,t)=>openClickPanel(s,t) },
   // phase 6b: the grid (tests)
   grid:{ snapT:(s,t,f)=>snapT(s,t,f), barGrid:(s,b)=>barGrid(s,b), name:s=>gridName(s), barBeatAt:(s,t)=>barBeatAt(s,t), evTime:(s,e)=>evTime(s,e), nearestBeat:(s,t)=>nearestBeat(s,t), set:v=>{ GRID=v; renderFolders(); }, snap:b=>{ SNAP=b; $("snapB").classList.toggle("on",b); }, zoom:z=>setZoom(z), get pxs(){ return PXS; } },
-  cueCfg:s=>cueCfg(s), cueVoiceAll:()=>CUEV, pron:()=>PRON, setVoiceModel:st=>{ const was=VMODEL.state; VMODEL={...VMODEL,...st}; if(settingsOpen()&&SET_TAB==='voices'){ const k=$('stKstate'); if(k&&was===VMODEL.state&&VMODEL.state==='downloading') k.textContent=`Downloading… ${VMODEL.total?Math.floor(100*VMODEL.done/VMODEL.total):0}%`; else renderSettings(); }
+  cueCfg:s=>cueCfg(s), cueVoiceAll:()=>CUEV, pron:()=>PRON, nudge:id=>+(VNUDGE[id||'']||0), setVoiceModel:st=>{ const was=VMODEL.state; if(st&&Array.isArray(st.voices)){ KVOICES=st.voices; st={...st}; delete st.voices; } VMODEL={...VMODEL,...st}; if(settingsOpen()&&SET_TAB==='voices'){ const k=$('stKstate'); if(k&&was===VMODEL.state&&VMODEL.state==='downloading') k.textContent=`Downloading… ${VMODEL.total?Math.floor(100*VMODEL.done/VMODEL.total):0}%`; else renderSettings(); }
     if(VMODEL.state==='ready'&&cuevFresh&&!(CUEV.voice||CUEV.name)){ CUEV={...KOKORO_DEFAULT,speed:CUEV.speed||1}; cuevFresh=false; renderFolders(); }
     if(!cueOpen) return; if(was==='downloading'&&VMODEL.state==='downloading'&&$('cvDlBar')){ const pct=VMODEL.total?Math.floor(100*VMODEL.done/VMODEL.total):0; $('cvDlBar').style.width=pct+'%'; $('cvDlText').textContent=`Downloading better voices… ${pct}% (${Math.round(VMODEL.done/1e6)} of ${KOKORO_MB()} MB)`; return; }
     if(was!==VMODEL.state) renderInsp(); }, setUnknownWords:l=>{ const k=JSON.stringify(l); if(k===JSON.stringify(UNKNOWN)) return; UNKNOWN=l; if(cueOpen) renderInsp(); }, setVoices:l=>{ VOICES=l; if(cueOpen) renderInsp(); renderFolders(); }, pickCue:(s,id)=>{ const t=s.tracks.find(x=>ROLE[x]==='cues'); if(t) setPick({kind:'cue',song:s.id,track:t,id}); }, openCuePanel:s=>openCuePanel(s), newVer:(s,n)=>newVer(s,n), switchVer:(s,id)=>{ switchVer(s,id); refresh(); }, newAlt:(s,t,copy,n)=>newAlt(s,t,copy,n), buildBars:s=>buildBars(s), rerender:()=>refresh(), redrawTrack:(s,t)=>redrawTrack(s,t), colourOf:t=>TCOL[t]||'#9aa0aa', roleOf:t=>ROLE[t]||'',
@@ -3484,7 +3566,7 @@ const looping=()=>{ const s=songs.find(x=>x.id===playId); return !!(playing&&s&&
 function exitLoop(){ const s=songs.find(x=>x.id===playId), p=loopSecAt(s); if(!p||!playing){ return false; } loopExitId=p.id; toast(`Leaving “${p.name}” at the end of this pass`); if(window.SLE&&SLE.nextChanged){ /* the loop is released by the next transport tick (syncLoop) */ } renderPerform(); return true; }
 // ---- queued jumps (Perform: tap a section while playing) ----
 let JUMP_WHEN='bar', jumpQueuedSec=null;
-async function queueJumpTo(secId){ const s=songs.find(x=>x.id===playId); if(!s) return;
+async function queueJumpTo(secId){ const s=songs.find(x=>x.id===(playing?playId:(playId||selId))); if(!s) return;
   if(jumpQueuedSec===secId){ cancelQueuedJump(); return; }
   if(!playing){ const p=s.secPos.find(x=>x.id===secId); if(p) locate(s,s.bars[p.start-1].t); return; }
   if(NATIVE&&window.SLE&&SLE.queueJump){ await SLE.queueJump(s,secId,JUMP_WHEN); }
@@ -3503,44 +3585,94 @@ const ACTIONS=[
 ];
 window.SLActions={ list:()=>ACTIONS.map(({id,name,key})=>({id,name,key})), run:(id,arg)=>{ const a=ACTIONS.find(x=>x.id===id); if(a){ a.run(arg); return true; } return false; } };
 $('syncBtn').onclick=()=>syncMidi();
-// ---- Perform: the song playing (or ready), its sections, bars left, LOOPING; up next as a stack of versions ----
-let perfOn=false, NEXTST=null, autoLeft=0;
-function setPerform(on){ perfOn=on; if(on&&bandOn){ bandOn=false; document.body.classList.remove('bd'); } document.body.classList.toggle('pf',on); document.querySelectorAll('.tabs a').forEach(a=>a.classList.toggle('on',on?a.dataset.tab==='perform':a.dataset.tab==='show')); if(on) renderPerform(true); }
+// ---- Perform (7a): a fixed layout for playing live (docs/design/perform). Now playing (song, version, time left, BPM /
+// meter / key / Then, the section timeline: tap a section to queue a jump), the current section (bars left, beat lights),
+// the next section + queued jump, MIDI now; the setlist on the right; the dock at the bottom. Custom canvases live on
+// the Band page only.
+let perfOn=false, NEXTST=null, autoLeft=0, LOCKED=false;
+const PICON={
+  prev:'<svg viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="2.5" height="14" rx="1"/><path d="M19 5.5v13a1 1 0 0 1-1.5.9L9 13.2a1.4 1.4 0 0 1 0-2.4l8.5-6.2A1 1 0 0 1 19 5.5z"/></svg>',
+  next:'<svg viewBox="0 0 24 24" fill="currentColor"><rect x="16.5" y="5" width="2.5" height="14" rx="1"/><path d="M5 5.5v13a1 1 0 0 0 1.5.9L15 13.2a1.4 1.4 0 0 0 0-2.4L6.5 4.6A1 1 0 0 0 5 5.5z"/></svg>',
+  play:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.8v14.4a1 1 0 0 0 1.5.9l11.3-7.2a1 1 0 0 0 0-1.7L8.5 3.9A1 1 0 0 0 7 4.8z"/></svg>',
+  stop:'<svg viewBox="0 0 24 24" fill="currentColor"><rect x="5.5" y="5.5" width="13" height="13" rx="2"/></svg>',
+  loop:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 8a5 5 0 1 1-1.6-3.7"/><path d="M13 2.5v3h-3"/></svg>',
+  hold:'<svg viewBox="0 0 16 16" fill="currentColor"><rect x="4" y="3" width="2.6" height="10" rx="1"/><rect x="9.4" y="3" width="2.6" height="10" rx="1"/></svg>',
+  lock:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg>'};
+function setPerform(on){ perfOn=on; if(on&&bandOn){ bandOn=false; document.body.classList.remove('bd'); } if(!on&&LOCKED) setLock(false); document.body.classList.toggle('pf',on); document.querySelectorAll('.tabs a').forEach(a=>a.classList.toggle('on',on?a.dataset.tab==='perform':a.dataset.tab==='show')); if(on) renderPerform(true); }
 function perfSong(){ return songs.find(x=>x.id===(playId||selId))||null; }
-function perfParts(s,v){ if(!v||v.custom||isFullVer(s,v)) return s.secPos.map(p=>({secId:p.id,name:p.name,type:p.type,bars:p.bars,sb:p.start})); let vb=1; return verMap(s,v).map(p=>({secId:p.secId,name:p.name,type:p.extra?'x':p.type,bars:p.bars,sb:p.sb,extra:p.extra,vb:p.vb})); }
+function perfParts(s,v){ if(!v||v.custom||isFullVer(s,v)) return s.secPos.map(p=>({secId:p.id,name:p.name,type:p.type,bars:p.bars,sb:p.start,end:(s.secs.find(x=>x.id===p.id)||{}).end||p.end})); return verMap(s,v).map(p=>({secId:p.secId,name:p.name,type:p.extra?'x':p.type,bars:p.bars,sb:p.sb,extra:p.extra,vb:p.vb,end:p.extra?'':(s.secs.find(x=>x.id===p.secId)||{}).end})); }
+// Lock: the page ignores clicks and taps until unlocked (hold the Lock button); keys and footswitches still work.
+function setLock(on){ LOCKED=!!on; document.body.classList.toggle('locked',LOCKED); const b=$('lockBtn'); if(b){ b.classList.toggle('on',LOCKED); b.innerHTML=PICON.lock+(LOCKED?' Hold to unlock':' Lock'); } if(window.SLBandHost&&SLBandHost.changed) SLBandHost.changed(); return LOCKED; }
+(()=>{ const b=$('lockBtn'); if(!b) return; let t=0; const up=()=>{ clearTimeout(t); t=0; };
+  b.addEventListener('pointerdown',e=>{ if(!LOCKED){ setLock(true); toast('Perform is locked: hold Lock to unlock'); return; } t=setTimeout(()=>{ t=0; setLock(false); toast('Unlocked'); },700); });
+  b.addEventListener('pointerup',up); b.addEventListener('pointerleave',up); b.innerHTML=PICON.lock+' Lock'; })();
+if($('pfSetBtn')) $('pfSetBtn').onclick=e=>setlistMenu(e);
+// The program each MIDI track is on at source time t: [{track, label, name}]
+function midiNow(s,t){ return s.tracks.filter(tr=>isMidiTrack(s,tr)&&!isOff(s,tr)).map(tr=>{ let last=null;
+  for(const e of (s.midi[tr]||[])){ if(e.kind!=='pc') continue; const et=evTime(s,e); if(et<=t+1e-6&&(!last||et>=last.t)) last={e,t:et}; }
+  if(!last) return null; const nm=patchName(s.midiCfg[tr]&&s.midiCfg[tr].names,last.e), pr=last.e.presetId&&P(last.e.presetId);
+  return {track:tr,label:pr?pr.name:`Prog ${last.e.pc}`,name:pr?'':nm}; }).filter(Boolean); }
+// a section's seconds in the source (version-only parts: their bars at the tempo where they sit)
+function partSecs(s,p){ if(p.extra){ const b=s.bars[Math.max(0,Math.min(s.total,p.sb||1)-1)]; return p.bars*(b?b.dur:2); } const a=s.bars[p.sb-1], e=s.bars[p.sb-1+p.bars]; return a?(e?e.t:a.t+a.dur*p.bars)-a.t:0; }
+function perfState(s){ const v=playVer(s), parts=perfParts(s,v), here=s.id===playId, bar=barAtTime(s,here?pos:0), beat=here&&playing?Math.floor(engBeat||1):0;
+  const ci=parts.findIndex(p=>!p.extra&&bar>=p.sb&&bar<p.sb+p.bars), cur=ci>=0?parts[ci]:null;
+  const tot=parts.reduce((a,p)=>a+p.bars,0), done=cur?parts.slice(0,ci).reduce((a,p)=>a+p.bars,0)+(bar-cur.sb):0;
+  const b=s.bars[bar-1], sig=b?b.sig[0]:4, frac=here&&b?Math.max(0,Math.min(1,(pos-b.t)/(b.dur||1))):0;
+  const curEnd=cur?(s.bars[cur.sb-1+cur.bars]?s.bars[cur.sb-1+cur.bars].t:s.audio):0;
+  const left=cur?Math.max(0,curEnd-(here?pos:0))+parts.slice(ci+1).reduce((a,p)=>a+partSecs(s,p),0):parts.reduce((a,p)=>a+partSecs(s,p),0);
+  return {v,parts,ci,cur,next:ci>=0?parts[ci+1]||null:parts[0]||null,tot,done,bar,beat,sig,frac,barsLeft:cur?cur.sb+cur.bars-bar:0,left}; }
+const secCol=p=>p.extra?'#5a5a62':SEC_C[p.type]||'#7d8696';
+function patchAt(s,sb){ const b=s.bars[sb-1]; if(!b) return ''; const m=midiNow(s,b.t+1e-4)[0]; return m?(m.name||m.label):''; }
+function perfClock(){ const L=curSetObj(), now=new Date(), hh=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+  if(!L.finishBy||!/^\d{1,2}:\d{2}$/.test(L.finishBy)) return {text:hh,over:false};
+  const i=setOrder.indexOf(playId||selId); let left=0; for(let k=Math.max(0,i);k<setOrder.length;k++){ const x=songs.find(q=>q.id===setOrder[k]); if(!x) continue; const len=verLen(x,entryVer(x)); left+=k===i&&x.id===playId?Math.max(0,len-pos):len; if(k<setOrder.length-1){ const a=afterOf(x); if(a.mode==='auto') left+=a.sec; } }
+  const [H,M]=L.finishBy.split(':').map(Number), f=new Date(now); f.setHours(H,M,0,0); if(f.getTime()<now.getTime()-12*3600e3) f.setTime(f.getTime()+24*3600e3);
+  const over=(now.getTime()+left*1000-f.getTime())/1000, a=Math.abs(over);
+  return {text:`${hh} · curfew ${over>0?'+':'−'}${Math.floor(a/60)}:${String(Math.floor(a%60)).padStart(2,'0')}`,over:over>0}; }
+function perfSetlist(s){ const L=curSetObj(), cl=perfClock();
+  return `<div class="sh"><span class="lb2">Setlist · ${esc(L.name)}</span><span class="clk ${cl.over?'over':''}" id="pfClock">${esc(cl.text)}</span></div><div class="list">${setOrder.map((id,k)=>{ const x=songs.find(q=>q.id===id); if(!x) return ''; const vs=versOf(x), ev=entryVer(x), isNow=playing&&x.id===playId, a=afterOf(x);
+    return `<div class="it ${isNow?'now':''} ${!playing&&x.id===s.id?'sel':''}" data-id="${esc(x.id)}"><span class="n">${k+1}</span><span class="bar" style="background:${x.col}"></span><span class="t"><b>${esc(x.name)}</b><small>${esc(ev?ev.name:'')}${vs.length>1&&!isNow?`<button data-v="-1" title="Previous version">‹</button><button data-v="1" title="Next version">›</button>`:''}</small></span>${isNow?'<span class="badge">NOW</span>':''}<span class="tm">${fmt(verLen(x,ev))}</span></div>`
+      +(k<setOrder.length-1?`<div class="tr">${a.mode==='stop'?'■ Stop':esc(afterLabel(a))}</div>`:''); }).join('')}</div>`; }
 function renderPerform(full){ const el=$('perf'); if(!el||!perfOn) return; const s=perfSong();
-  if(!s){ el.innerHTML=`<div class="now"><div class="pmeta"><button class="pset" id="pfSet">${esc(curSetObj().name)} ▾</button></div><h1>No song</h1><p class="psub">Add songs to this setlist on the Show page.</p></div>`; el.dataset.song=''; const b=$('pfSet'); if(b) b.onclick=setlistMenu; return; }
-  const v=s.id===playId&&playing&&window.SLE?playVer(s):playVer(s), parts=perfParts(s,v), i=setOrder.indexOf(s.id), n=nextInSet(s), lp=loopSecAt(s), loopingNow=looping();
-  const tot=parts.reduce((a,p)=>a+p.bars,0), bar=barAtTime(s,s.id===playId?pos:0), curPart=parts.find(p=>!p.extra&&bar>=p.sb&&bar<p.sb+p.bars), done=curPart?parts.slice(0,parts.indexOf(curPart)).reduce((a,p)=>a+p.bars,0)+(bar-curPart.sb):0;
-  const left=Math.max(0,tot-done), prog=tot?Math.min(1,done/tot):0;
-  if(full||el.dataset.song!==s.id+'|'+(v&&v.id)+'|'+(n?n.song.id+'|'+n.ver.id:'')+'|'+jumpQueuedSec+'|'+setOrder.join(',')){
-    el.dataset.song=s.id+'|'+(v&&v.id)+'|'+(n?n.song.id+'|'+n.ver.id:'')+'|'+jumpQueuedSec+'|'+setOrder.join(',');
-    const nv=n?versOf(n.song):[], ni=n?nv.indexOf(n.ver):0, nx=n&&!n.ver.custom&&verParts(n.song,n.ver).some(p=>p.extra), af=afterOf(s);
-    const then=setOrder.slice(i+2,i+6).map((id,k)=>{ const x=songs.find(q=>q.id===id); return x?`<div class="pthen">${i+3+k} · ${esc(x.name)}</div>`:''; }).join('');
-    el.innerHTML=`<div class="now"><div class="pmeta"><button class="pset" id="pfSet" title="Setlists"><i style="display:inline-block;width:4px;height:12px;border-radius:2px;margin-right:7px;background:${setCol(curSetObj())}"></i>${esc(curSetObj().name)} ▾</button>${i>=0?`${i+1} of ${setOrder.length} · `:''}<span id="pfState">${playing&&s.id===playId?'Now playing':'Ready'}</span></div>
-        <h1>${esc(s.name)}</h1><div class="psub">${+bpmAt(s,1).toFixed(2)} BPM · ${s.tmap[0].sig.join('/')} · ${esc(s.key)}${versOf(s).length>1?` · <span style="color:#7fe0cf">${esc(v.name)}</span>`:''}</div>
-        <div class="pprog"><i id="pfProg" style="width:${(prog*100).toFixed(2)}%;background:${s.col}"></i></div>
-        <div class="psecs" id="pfSecs">${parts.map(p=>`<button class="psec ${p===curPart?'on':''} ${jumpQueuedSec!==null&&p.secId===jumpQueuedSec?'queued':''} ${p.extra?'px':''}" data-sec="${p.secId??''}" style="flex:${p.bars};--sc:${p.extra?VX_COL:SEC_C[p.type]||'#7d8696'}" title="${esc(p.name)}${p.extra?'':' · tap to jump here'}" ${p.extra?'disabled':''}><span>${esc(p.name)}</span></button>`).join('')}</div>
-        <div class="prow"><div class="pleft"><small>BARS LEFT</small><b id="pfLeft">${left}</b></div>
-          <div class="ploop" id="pfLoop" ${loopingNow?'':'hidden'}><b>LOOPING</b> <span id="pfLoopName">${lp?esc(lp.name):''}</span><button class="btn" id="pfExit">Exit loop <kbd>L</kbd></button></div>
-          <div class="pjt"><small>JUMP TIMING</small>${segm('pfWhen',[['bar','Next bar'],['section','End of section'],['beat','Now']],JUMP_WHEN)}${jumpQueuedSec!==null?'<button class="btn line" id="pfCancel">Cancel jump <kbd>Esc</kbd></button>':''}</div></div></div>
-      <div class="pside"><div class="nextc"><h3>Up next${n&&nv.length>1?' · tap ‹ › to change version':''}</h3>
-        ${n?`<div class="pstack ${nv.length>1?'many':''}"><div class="c b2"></div><div class="c b1"></div><div class="c front"><div class="pnt"><span class="bar" style="background:${n.song.col}"></span><div><b>${esc(n.song.name)}</b><div class="pvn">${esc(n.ver.name)}${nx?' ◆':''} · ${fmt(verLen(n.song,n.ver))}${nv.length>1?` · ${ni+1} of ${nv.length}`:''}</div></div></div>
-          <div class="pst">${verStrip(n.song,n.ver,Math.max(1,verBars(n.song,n.ver)))}</div>${nv.length>1?'<div class="par"><button id="pfPrevV" title="Previous version">‹</button><button id="pfNextV" title="Next version  V">›</button></div>':''}</div></div>
-          <div class="pload" id="pfLoad">${autoLeft>0?`Next in ${autoLeft}…`:nextLoadText(n)}</div><div class="pafter">${af.mode==='stop'?'Stops after this song':esc(afterLabel(af))}</div>`:'<div class="pload">Last song in the set</div>'}</div>
-        ${then?`<div class="nextc"><h3>Then</h3>${then}</div>`:''}</div>`;
-    el.querySelectorAll('.psec[data-sec]').forEach(b=>{ if(b.dataset.sec!=='') b.onclick=()=>queueJumpTo(+b.dataset.sec); });
-    if($('pfExit')) $('pfExit').onclick=()=>exitLoop(); if($('pfSet')) $('pfSet').onclick=setlistMenu;
+  if(!s){ el.innerHTML=`<div class="pcol"><div class="card2 pnow"><div class="lb2">Nothing to play</div><h1>No song</h1><p class="meta2">Add songs to this setlist on the Show page.</p></div></div><div class="card2 psl">${perfSetlist({id:''})}</div>`; el.dataset.key=''; return; }
+  const st=perfState(s), i=setOrder.indexOf(s.id), n=nextInSet(s), lp=loopSecAt(s), loopingNow=looping(), here=playing&&s.id===playId;
+  const key=[s.id,st.v&&st.v.id,st.ci,jumpQueuedSec,setOrder.join(','),setOrder.map(id=>{ const x=songs.find(q=>q.id===id); return x?entryVerId(x)+(afterOf(x).mode):''; }).join(','),here,loopingNow,!!VAMP,JUMP_WHEN,LOCKED,curSet].join('|');
+  if(full||el.dataset.key!==key){ el.dataset.key=key; const sbt=$('pfSetBtn'); if(sbt) sbt.textContent=curSetObj().name+' ▾';
+    const v=st.v, cur=st.cur, nx=st.next, a=afterOf(s), q=jumpQueuedSec!==null?st.parts.find(p=>p.secId===jumpQueuedSec):null, mn=midiNow(s,here?pos:0);
+    const then=n?(a.mode==='segue'?'<b style="color:#30d158">↘ Segue</b>':a.mode==='auto'?`<b>⏵ Auto-next ${a.sec} s</b>`:'<b>■ Stop</b>'):'<b>End of set</b>';
+    el.innerHTML=`<div class="pcol">
+      <div class="card2 pnow"><div class="hd"><span class="lb2" id="pfState">${here?'Now playing':'Ready'}${i>=0?` · ${i+1} of ${setOrder.length}`:''}</span><span class="lb2" style="margin-left:auto">Song left</span></div>
+        <div class="hd" style="margin-top:4px"><h1>${esc(s.name)}</h1>${versOf(s).length>1||(v&&v.name)?`<span class="vn" style="color:${s.col}">${esc(v?v.name:'')}</span>`:''}<span class="left" id="pfLeft">${fmt(st.left)}</span></div>
+        <div class="meta2"><span>BPM <b id="pfBpm">${+bpmAt(s,st.bar||1).toFixed(2)}</b></span><span>Meter <b id="pfSig">${(s.bars[(st.bar||1)-1]||s.bars[0]).sig.join('/')}</b></span>${s.key?`<span>Key <b>${esc(s.key)}</b></span>`:''}<span class="then">Then ${then}</span></div>
+        <div class="ptl" id="pfTl">${st.parts.map((p,k)=>`<button class="${k===st.ci?'cur':''} ${st.ci>=0&&k<st.ci?'past':''} ${p.extra?'px':''} ${jumpQueuedSec!==null&&p.secId===jumpQueuedSec?'queued':''}" data-sec="${p.extra?'':p.secId}" style="flex:${p.bars};--sc:${secCol(p)}" title="${esc(p.name)}${p.extra?'':' · tap to jump here'}" ${p.extra?'disabled':''}><span>${esc(p.name)}</span><small>${p.bars} bar${p.bars===1?'':'s'}${p.extra?'':(()=>{ const pt=patchAt(s,p.sb); return pt?' · '+esc(pt):''; })()}</small>${p.end==='loop'||(VAMP&&VAMP.songId===s.id&&VAMP.secId===p.secId)?`<span class="ic" title="Loops until released">${PICON.loop}</span>`:p.end==='hold'?`<span class="ic" title="Holds on its last bar">${PICON.hold}</span>`:''}</button>`).join('')}<span class="ph" id="pfPh"></span></div></div>
+      <div class="prow3">
+        <div class="card2 psec2" style="--sc:${cur?secCol(cur):'#3a3a40'}"><div class="lb2">${loopingNow?'Looping':'Section'}</div><div class="nm" style="color:${cur?secCol(cur):'#fff'}">${cur?esc(cur.name):'–'}</div>
+          <div class="bl"><span class="big" id="pfBars">${st.barsLeft}</span><span>bar${st.barsLeft===1?'':'s'} left</span></div><div class="pbeats" id="pfBeats">${Array.from({length:Math.min(16,st.sig)},(_,k)=>`<i class="${k<st.beat?'on':''}"></i>`).join('')}</div></div>
+        <div class="card2 pnext"><div class="lb2">Next section</div>${nx?`<div class="nm" style="color:${secCol(nx)}">${esc(nx.name)}</div><div class="sub">${nx.bars} bar${nx.bars===1?'':'s'}${lp&&loopingNow?' · after the loop':''}</div>`:`<div class="nm" style="color:var(--muted)">${n?'Next song':'End'}</div><div class="sub">${n?esc(n.song.name):''}</div>`}
+          <div class="q"><div class="lb2">Queued jump</div><div class="v">${q?`<b>${esc(q.name)}</b><span>${JUMP_WHEN==='bar'?'at the next bar':JUMP_WHEN==='section'?'at the end of the section':'now'}</span><button class="btn line" id="pfCancel">Cancel</button>`:'None · tap a section'}</div></div></div>
+        <div class="card2"><div class="lb2">MIDI now</div><div class="pmidi" id="pfMidi">${mn.length?mn.map(m=>`<div><span>${esc(m.track)}</span><b>${esc(m.label)}${m.name?` <small>${esc(m.name)}</small>`:''}</b></div>`).join(''):'<div><span>No MIDI tracks</span><b style="color:var(--muted)">–</b></div>'}</div></div>
+      </div></div>
+    <div class="card2 psl" id="pfSl">${perfSetlist(s)}</div>
+    <div class="pdock"><button class="tbtn sq" id="pfPrev" title="Previous song  P">${PICON.prev}</button><button class="tbtn play ${here?'stop':''}" id="pfPlay" title="Play / Stop  Space">${here?PICON.stop+'Stop':PICON.play+'Play'}</button><button class="tbtn sq" id="pfNext" title="Next song  N">${PICON.next}</button>
+      <button class="tbtn ${loopingNow?'':'dim'}" id="pfExit" title="Leave the loop at the end of this pass  L">Exit loop</button><button class="tbtn ${VAMP?'on':''}" id="pfVamp" title="Loop the section playing until Vamp again">Vamp</button><span class="sp"></span>
+      <div class="jt"><span class="lb2">Jump timing</span><div class="segbig" id="pfWhen">${[['bar','Next bar'],['section','Section end'],['beat','Now']].map(([k,l])=>`<button data-v="${k}" class="${JUMP_WHEN===k?'on':''}">${l}</button>`).join('')}</div></div></div>`;
+    el.querySelectorAll('#pfTl button[data-sec]').forEach(b=>{ if(b.dataset.sec!=='') b.onclick=()=>queueJumpTo(+b.dataset.sec); });
     if($('pfCancel')) $('pfCancel').onclick=()=>cancelQueuedJump();
+    $('pfPrev').onclick=()=>stepSong(-1); $('pfNext').onclick=()=>stepSong(1); $('pfPlay').onclick=()=>toggle();
+    $('pfExit').onclick=()=>{ if(!exitLoop()) toast('Not in a loop'); }; $('pfVamp').onclick=()=>vamp();
     $('pfWhen').querySelectorAll('button').forEach(b=>b.onclick=()=>{ JUMP_WHEN=b.dataset.v; renderPerform(true); });
-    if($('pfPrevV')) $('pfPrevV').onclick=()=>{ flipVer(n.song,-1); renderPerform(true); };
-    if($('pfNextV')) $('pfNextV').onclick=()=>{ flipVer(n.song,1); renderPerform(true); };
-    return; }
+    el.querySelectorAll('#pfSl .it').forEach(r=>{ r.onclick=e=>{ if(e.target.closest('button')) return; if(playing){ toast('Stop first to pick another song (or use Next)'); return; } select(r.dataset.id,false); renderPerform(true); };
+      r.querySelectorAll('button[data-v]').forEach(b=>b.onclick=()=>{ const x=songs.find(q=>q.id===r.dataset.id); if(x){ flipVer(x,+b.dataset.v); renderPerform(true); } }); });
+  }
   // per frame: only what moves
-  const pr=$('pfProg'); if(pr) pr.style.width=(prog*100).toFixed(2)+'%'; const lf=$('pfLeft'); if(lf) lf.textContent=left; const stt=$('pfState'); if(stt) stt.textContent=playing&&s.id===playId?'Now playing':'Ready';
-  el.querySelectorAll('.psec').forEach(b=>b.classList.toggle('on',!!curPart&&b.dataset.sec===String(curPart.secId)));
-  const lo=$('pfLoop'); if(lo){ lo.hidden=!loopingNow; if(lp) $('pfLoopName').textContent=lp.name; }
-  const ld=$('pfLoad'); if(ld&&n) ld.textContent=autoLeft>0?`Next in ${autoLeft}…`:nextLoadText(n); }
+  const ph=$('pfPh'); if(ph&&st.tot){ const k=st.ci>=0?st.done+st.frac:0; ph.style.left=`calc(${(100*k/st.tot).toFixed(3)}% - 1px)`; ph.hidden=st.ci<0; }
+  const lf=$('pfLeft'); if(lf) lf.textContent=fmt(st.left); const br=$('pfBars'); if(br) br.textContent=st.barsLeft;
+  const bt=$('pfBeats'); if(bt){ if(bt.children.length!==Math.min(16,st.sig)) bt.innerHTML=Array.from({length:Math.min(16,st.sig)},()=>'<i></i>').join(''); [...bt.children].forEach((x,k)=>x.classList.toggle('on',k<st.beat)); }
+  const bp=$('pfBpm'); if(bp) bp.textContent=+bpmAt(s,st.bar||1).toFixed(2);
+  const ck=$('pfClock'); if(ck){ const c=perfClock(); if(ck.textContent!==c.text) ck.textContent=c.text; ck.classList.toggle('over',c.over); }
+  const md=$('pfMidi'); if(md&&here){ const mk=JSON.stringify(midiNow(s,pos)); if(md.dataset.k!==mk){ md.dataset.k=mk; const mn=JSON.parse(mk); md.innerHTML=mn.length?mn.map(m=>`<div><span>${esc(m.track)}</span><b>${esc(m.label)}${m.name?` <small>${esc(m.name)}</small>`:''}</b></div>`).join(''):'<div><span>No MIDI tracks</span><b style="color:var(--muted)">–</b></div>'; } } }
+// "⏭ Next song (pedal)": what a pedal / controller just did, briefly, on Perform (7c)
+function perfFlash(text){ if(!perfOn) return; let t=$('pfToast'); if(!t){ t=document.createElement('div'); t.id='pfToast'; t.className='pftoast'; document.body.appendChild(t); } t.textContent=text; t.hidden=false; clearTimeout(t._h); t._h=setTimeout(()=>{ t.hidden=true; },1400); }
 function nextLoadText(n){ if(!NATIVE) return 'Loaded and ready'; const m=NEXTST; if(!m||m.songId!==n.song.id||m.verId!==n.ver.id) return 'Loads in the background when '+(perfSong()?'“'+perfSong().name+'”':'this song')+' plays'; return m.error?'Couldn’t load: '+m.error:m.ready?'Loaded and ready':'Loading…'; }
 
 // ======================= SETTINGS (6d) =======================
@@ -3599,9 +3731,8 @@ async function settingsHTML(tab){
       ${sgrp(((await ncall('midiPorts'))||[]).map(p=>sf(esc(p.name)+(p.connected?'':' <span style="color:var(--amber)">(not connected)</span>'),`<span class="clkrow"><span class="faint" style="font-size:11px">Clock</span>${tog('clk_'+btoa(unescape(encodeURIComponent(p.name))).replace(/=/g,''),p.clock)}<span class="faint" style="font-size:11px;margin-left:8px">Start/Stop + SPP</span>${tog('trn_'+btoa(unescape(encodeURIComponent(p.name))).replace(/=/g,''),p.transport)}</span>`)).concat(NATIVE?[]:[sf('MIDI outputs appear here in the app','')]))}
       ${(()=>{ const L=curSetObj(), sy=syncOf(L); return `<h3 style="margin-top:6px">Sync point for “${esc(L.name)}”</h3><p class="d">What each device should be on before the set starts (Bank + Program, CCs, any message). One per line: <span class="faint">PC 12 · PC 1:0:12 · CC 7 100 · raw B0 07 64</span>. Sync MIDI (top bar, a key, a band screen) sends it all; after that the songs drive the devices.</p>
         ${sgrp(sy.devices.map((d,i)=>{ const {msgs,bad}=syncLines(d.text,d.ch); return sf(`<span class="clkrow"><select data-sp="${i}">${[...new Set([...PORTS,d.port])].filter(Boolean).map(p=>`<option ${p===d.port?'selected':''}>${esc(p)}</option>`).join('')}</select><select data-sc="${i}">${[...Array(16)].map((_,k)=>`<option value="${k+1}" ${k+1===+d.ch?'selected':''}>ch ${k+1}</option>`).join('')}</select></span>`,
-          `<span class="clkrow"><textarea data-st="${i}" rows="2" spellcheck="false" style="width:170px;font:12px var(--code,monospace)">${esc(d.text||'')}</textarea><span class="faint" style="font-size:11px;width:56px">${msgs.length} msg${bad.length?` · <span style="color:var(--amber)">${bad.length} not understood</span>`:''}</span><button class="sel2" style="min-width:0" data-ss="${i}">${SYNC_SENT[i]?'Sent ✓':'Send'}</button><button class="sel2" style="min-width:0" data-sx="${i}" title="Remove">✕</button></span>`); }).concat(sy.devices.length?[]:[sf('No devices yet','')]))}
-        <div class="racts"><button class="btn line" id="stSadd">＋ Add device</button><button class="btn line" id="stSfill">Fill from first song</button><button class="btn pri" id="stSall" ${sy.devices.length?'':'disabled'}>Sync MIDI</button></div>
-        ${sgrp([sf('Send when this setlist opens',tog('stSopen',!!sy.onOpen)),sf('Send when a MIDI device reconnects',tog('stSrecon',!!sy.onReconnect))])}`; })()}
+          `<span class="clkrow"><textarea data-st="${i}" rows="2" spellcheck="false" style="width:170px;font:12px var(--code,monospace)">${esc(d.text||'')}</textarea><span class="faint" style="font-size:11px;width:56px">${msgs.length} msg${bad.length?` · <span style="color:var(--amber)">${bad.length} not understood</span>`:''}</span><button class="sel2" style="min-width:0" data-sx="${i}" title="Remove">✕</button></span>`); }).concat(sy.devices.length?[]:[sf('No devices yet','')]))}
+        <div class="racts"><button class="btn line" id="stSadd">＋ Add device</button><button class="btn line" id="stSfill">Fill from first song</button><button class="btn pri" id="stSall" ${sy.devices.length?'':'disabled'}>Sync MIDI</button></div>`; })()}
       ${sgrp([sf('Send MIDI early by',`<span class="rsl"><input type="number" id="stMidiOff" min="-200" max="200" step="1" value="${+off.ms||0}" style="width:70px"> ms</span>`)])}
       <h3 style="margin-top:6px">Patch name lists</h3><p class="d">Optional. A list names program numbers so MIDI clips read “Prog 12 · Lead”. Pick one per MIDI track (none: numbers).</p>
       ${sgrp(patchLists().map(l=>sf(esc(l.name),`<span style="display:flex;gap:6px;align-items:center"><span style="color:var(--muted);font-size:12px">${Object.keys(l.names||{}).length} names${l.built?' · built in':''}</span><button class="sel2" style="min-width:0" data-plist="${esc(l.id)}">${l.built?'View…':'Edit…'}</button></span>`)))}
@@ -3610,7 +3741,7 @@ async function settingsHTML(tab){
     const state=m.state==='ready'?'Downloaded':m.state==='downloading'?`Downloading… ${pct}%`:m.state==='failed'?'The download didn’t finish: '+esc(m.error):'Not downloaded';
     return `<h3>Voices</h3><p class="d">The voices that speak your cues. Cues are recorded ahead of time and play exactly on their beat.</p>
       ${sgrp([sf('Natural voices (Kokoro, '+KOKORO_MB()+' MB, offline)',`<span style="display:flex;gap:8px;align-items:center"><span style="color:var(--muted);font-size:12px" id="stKstate">${state}</span>${m.state==='ready'?'':m.state==='downloading'?'<button class="sel2" style="min-width:0" id="stKcancel">Cancel</button>':'<button class="sel2" style="min-width:0" id="stKget">Download</button>'}</span>`),
-        sf('Cue voice for this show',`<select id="stVoice"><option value="">Default voice</option>${list.map(v=>`<option value="${esc(v.id)}" ${(c.voice===v.id||(!c.voice&&c.name&&c.name===v.name))?'selected':''}>${esc(v.name)}${v.engine==='kokoro'?' · Kokoro':v.lang?' · '+esc(v.lang):''}</option>`).join('')}</select>`)])}
+        sf('Cue voice for this show',(()=>{ const f=c.voice||c.name?voiceFound(c):null, sel=f?f.id:''; return `<select id="stVoice"><option value="" ${sel?'':'selected'}>Default voice</option>${kokoroGroup(sel)}<optgroup label="${OS_VOICES}">${list.filter(v=>v.engine!=='kokoro').map(v=>sysOpt(v,sel)).join('')}</optgroup></select>`; })())])}
       <p class="d">A song can use its own voice: select its Cues track and turn off “Same voice for every song”.</p>`; }
   if(tab==='band'){ const st=(await ncall('bandInfo'))||{running:false,port:8080,addresses:[],mdns:'off',clients:0}; BINFO=st; const ip=(st.addresses||[])[0]||'', url=ip?`http://${ip}:${st.port}/`:'';
     const win=navigator.platform.startsWith('Win');
@@ -3652,16 +3783,15 @@ function wireSettings(tab){ const q=id=>$(id), re=()=>renderSettings();
     document.querySelectorAll('#sbody [data-sp]').forEach(s=>s.onchange=()=>{ snap(); sy.devices[+s.dataset.sp].port=s.value; refresh(); re(); });
     document.querySelectorAll('#sbody [data-sc]').forEach(s=>s.onchange=()=>{ snap(); sy.devices[+s.dataset.sc].ch=+s.value; refresh(); re(); });
     document.querySelectorAll('#sbody [data-st]').forEach(s=>s.onchange=()=>{ snap(); sy.devices[+s.dataset.st].text=s.value; delete SYNC_SENT[+s.dataset.st]; SYNCED=null; refresh(); re(); });
-    document.querySelectorAll('#sbody [data-ss]').forEach(b=>b.onclick=async()=>{ const i=+b.dataset.ss, d=sy.devices[i], {msgs}=syncLines(d.text,d.ch); const r=await ncall('sendMidiNow',{port:d.port,msgs}); if(r&&r.error) toast(r.error); else { SYNC_SENT[i]=Date.now(); toast(`Sent ${msgs.length} message${msgs.length===1?'':'s'} to ${d.port}`); } re(); });
     document.querySelectorAll('#sbody [data-sx]').forEach(b=>b.onclick=()=>{ snap(); sy.devices.splice(+b.dataset.sx,1); SYNC_SENT={}; refresh(); re(); });
     q('stSadd').onclick=()=>{ snap(); sy.devices.push({port:PORTS[0]||'',ch:1,text:''}); refresh(); re(); };
     q('stSfill').onclick=()=>{ fillSyncFromFirst(); re(); }; q('stSall').onclick=()=>syncMidi();
-    q('stSopen').onclick=()=>{ snap(); sy.onOpen=!sy.onOpen; refresh(); re(); }; q('stSrecon').onclick=()=>{ snap(); sy.onReconnect=!sy.onReconnect; refresh(); re(); };
+
     q('stMidiOff').onchange=e=>{ ncall('midiOffset',{ms:+e.target.value||0}); toast('MIDI is sent '+(+e.target.value||0)+' ms early from the next Play'); };
     document.querySelectorAll('#sbody [data-plist]').forEach(b=>b.onclick=()=>patchListBox(b.dataset.plist));
     q('stNewList').onclick=()=>patchListBox(null); }
   if(tab==='voices'){ if(q('stKget')) q('stKget').onclick=()=>{ if(window.SLC) SLC.downloadVoices(); setTimeout(re,300); }; if(q('stKcancel')) q('stKcancel').onclick=()=>{ if(window.SLC) SLC.cancelVoiceDownload(); setTimeout(re,300); };
-    q('stVoice').onchange=e=>{ snap(); const v=voiceList().find(x=>x.id===e.target.value); CUEV={...CUEV,voice:v?v.id:'',name:v?v.name:''}; cuevFresh=false; refresh(); }; }
+    q('stVoice').onchange=e=>{ if(e.target.value==='__download'){ if(window.SLC) SLC.downloadVoices(); renderSettings(); return; } snap(); const v=voiceList().find(x=>x.id===e.target.value); CUEV={...CUEV,voice:v?v.id:'',name:v?v.name:''}; cuevFresh=false; refresh(); }; }
   if(tab==='band'){ q('stBrestart').onclick=async()=>{ const p=+q('stBport').value||8080; const r=await ncall('bandStart',{port:p}); if(r&&r.error) toast(r.error); re(); };
     q('stBpin').onchange=e=>{ snap(); BAND.pin=e.target.value.trim(); bandChanged(); }; q('stBnet').onchange=e=>{ snap(); BAND.network=e.target.value.trim(); bandChanged(); };
     document.querySelectorAll('#sbody [data-fn]').forEach(i=>i.onchange=()=>{ snap(); FIELDS[+i.dataset.fn].name=i.value.trim()||FIELDS[+i.dataset.fn].name; refresh(); bandChanged(); re(); });

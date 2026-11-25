@@ -24,6 +24,10 @@ then reports dropouts and MIDI timing.
 | `core/Platform.cpp` | The only OS-specific code in the engine: 1 ms timers and "Pro Audio" thread priority on Windows, real-time thread class on macOS. |
 | `.github/workflows/build.yml` | Builds a Windows exe and a universal macOS binary (Intel + Apple Silicon, macOS 10.15+) on every push, and runs the tests on both. |
 
+**Rule: the show machine is a 2015 Intel MacBook Pro on macOS 12.** Every build must keep Intel and macOS 12
+support (CI fails if the Mac build's minimum OS goes above 12 or Intel is dropped), and performance targets are
+judged on that machine. See `docs/building-the-app.md`.
+
 How the timing works: every position comes from one tempo map, rounded one way, so a stem,
 the click and a MIDI event set for "bar 9 beat 1" all resolve to the same sample. Stems stream
 from disk into a 2.7 s buffer per stem on a background thread. MIDI can't be sent from the

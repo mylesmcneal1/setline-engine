@@ -3,6 +3,15 @@
 The `setline` target is the desktop app: a native window (JUCE) hosting the web UI in `ui/`
 (WebView2 on Windows, WKWebView on macOS). It builds alongside `setline-spike` and the core tests.
 
+## The show machine (a rule)
+
+The reference machine is the band's **2015 MacBook Pro (Intel i7-4770HQ, 16 GB) on macOS 12.7**.
+
+- Every build keeps **Intel (x86_64)** and a **minimum macOS of 12 or lower** (`CMAKE_OSX_DEPLOYMENT_TARGET`
+  is 10.15 today). CI's "Show machine guard" step fails the build if either slips.
+- Performance targets (startup under 3 s, timing, CPU) are judged on that machine, not on a fast PC or an M-series Mac.
+- Don't add dependencies or APIs that need a newer macOS or Apple Silicon without a fallback.
+
 ## Needs
 
 - Everything in the README's build section (CMake, a C++17 compiler, Git).

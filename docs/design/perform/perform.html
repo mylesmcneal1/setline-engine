@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>set.Line — Perform (mockup)</title>
+<link rel="stylesheet" href="base.css">
+<style>
+body{grid-template-rows:52px 1fr 96px}
+.pf{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:16px;padding:16px;min-height:0}
+.card2{background:var(--s2);border-radius:14px;padding:18px 20px;position:relative}
+.lb2{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;font-weight:600}
+.now h1{font-size:46px;letter-spacing:-.02em;line-height:1.05}
+.meta2{display:flex;gap:22px;margin-top:10px;color:#c9c9cf;font-size:15px}
+.meta2 b{color:#fff;font-family:"JetBrains Mono",monospace;font-weight:600}
+.tl{position:relative;display:flex;gap:3px;height:70px;margin-top:18px}
+.tl div{border-radius:7px;position:relative;overflow:hidden;padding:7px 8px;color:#111;font-weight:700;font-size:12px;white-space:nowrap}
+.tl div small{display:block;font-weight:600;font-size:10px;opacity:.75;margin-top:2px}
+.tl div.past{opacity:.35}
+.tl div.cur{outline:3px solid #fff;outline-offset:-3px}
+.tl .ph{position:absolute;top:-6px;bottom:-6px;width:2px;background:#fff;box-shadow:0 0 8px #fff;border-radius:1px}
+.tl .ic{position:absolute;right:5px;top:5px;font-size:11px;background:rgba(0,0,0,.35);color:#fff;border-radius:4px;padding:0 4px}
+.row3{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:16px;margin-top:16px;flex:1}
+.big{font-size:150px;font-weight:800;line-height:1}
+.beats{display:flex;gap:8px;margin-top:14px}
+.beats i{flex:1;height:20px;border-radius:6px;background:#2a2a2e}
+.beats i.on{background:var(--accent)}
+.sl2 .it{display:flex;align-items:center;gap:10px;padding:9px 8px;border-radius:8px}
+.sl2 .it.now{background:#2a2a2e}
+.sl2 .n{width:16px;color:var(--muted);font-size:12px;text-align:right}
+.sl2 .bar{width:3px;height:26px;border-radius:2px}
+.sl2 .t{flex:1;min-width:0}
+.sl2 .t small{display:block;color:var(--muted);font-size:11px}
+.sl2 .tm{font-family:"JetBrains Mono",monospace;font-size:13px;color:#c9c9cf}
+.sl2 .tr{font-size:11px;color:var(--muted);padding:0 8px 4px 52px}
+.badge{font-size:10px;font-weight:800;background:var(--accent);color:#2b1600;border-radius:5px;padding:2px 6px}
+.dock{display:flex;align-items:center;gap:12px;padding:0 16px;border-top:1px solid var(--line);background:var(--s1)}
+.tbtn{height:64px;border-radius:12px;background:var(--s3);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:17px;gap:10px;color:#e4e4e8}
+.tbtn svg{width:22px;height:22px}
+.tbtn.play{background:#30d158;color:#062b10;width:220px;font-size:20px}
+.tbtn.dim{color:#5a5a62}
+.segbig{display:flex;background:var(--s3);border-radius:12px;padding:4px;height:64px}
+.segbig span{display:flex;align-items:center;padding:0 16px;border-radius:9px;color:#c9c9cf;font-size:14px}
+.segbig span.on{background:#48484e;color:#fff}
+.midi{display:flex;gap:10px;margin-top:16px}
+.midi div{flex:1;background:var(--s3);border-radius:10px;padding:10px 12px}
+.midi b{display:block;font-size:18px;margin-top:3px}
+.midi small{color:#64d2ff;font-weight:600}
+</style></head>
+<body>
+<div class="top">
+  <div class="logo">set.Line</div>
+  <div class="seg"><span>Show</span><span class="on">Perform</span><span>Band</span></div>
+  <div class="sp"></div>
+  <div class="pos mono"><div><span class="big" style="font-size:18px">5 . 3 . 1</span><small>0:09.4</small></div><div><span class="big" style="font-size:18px">128</span><small>BPM · 4/4</small></div></div>
+  <div class="sp"></div>
+  <span class="chip" style="background:#16301c;color:#bff0cb">⇄ Synced ✓</span>
+  <span class="chip">Fall Tour ▾</span>
+  <div class="pill"><span class="dot"></span>iD14 · 48k · 128</div>
+  <span class="chip" title="Lock">Lock</span><div class="gear">⚙</div>
+</div>
+
+<div class="pf">
+  <div style="display:flex;flex-direction:column;min-height:0">
+    <div class="card2 now">
+      <div style="display:flex;align-items:baseline;gap:14px"><span class="lb2">Now playing · 1 of 5</span><span class="lb2" style="margin-left:auto">Song left</span></div>
+      <div style="display:flex;align-items:baseline;gap:14px;margin-top:4px"><h1>Neon Rivers</h1><span style="color:#ff9f9f;font-weight:600">Album</span><span class="mono" style="margin-left:auto;font-size:34px;font-weight:600">3:35</span></div>
+      <div class="meta2"><span>BPM <b>128</b></span><span>Meter <b>4/4</b></span><span>Key <b>A min</b></span><span>Then <b style="color:#30d158;font-family:Inter">↘ Segue</b></span></div>
+      <div class="tl" id="tl"></div>
+    </div>
+    <div class="row3">
+      <div class="card2" style="background:#1f1d2e;border:2px solid var(--s-intro)">
+        <div class="lb2">Section</div>
+        <div style="font-size:34px;font-weight:800;margin-top:6px;color:#aab3ff">Intro</div>
+        <div style="display:flex;align-items:baseline;gap:10px;margin-top:10px"><span class="big">4</span><span style="color:var(--muted);font-size:16px">bars left</span></div>
+        <div class="beats"><i class="on"></i><i class="on"></i><i class="on"></i><i></i></div>
+      </div>
+      <div class="card2">
+        <div class="lb2">Next section</div>
+        <div style="font-size:30px;font-weight:800;margin-top:6px;color:#5de0c8">Verse 1</div>
+        <div style="color:#c9c9cf;margin-top:6px">16 bars</div>
+        <div class="lb2" style="margin-top:18px">Queued jump</div>
+        <div style="color:var(--muted);margin-top:4px">None · tap a section</div>
+      </div>
+      <div class="card2">
+        <div class="lb2">MIDI now</div>
+        <div class="midi" style="flex-direction:column;margin-top:10px"><div>Guitar rig<b>Prog 4 <small>Clean</small></b></div><div>Lights<b>Scene 4</b></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card2 sl2" style="padding:14px 12px;overflow:hidden">
+    <div style="display:flex;justify-content:space-between;padding:0 8px 10px"><span class="lb2">Setlist · Fall Tour</span><span class="mono" style="color:#c9c9cf;font-size:13px">16:07 · curfew −2:40</span></div>
+    <div class="it now"><span class="n">1</span><span class="bar" style="background:#ff6b6b"></span><span class="t"><b>Neon Rivers</b><small>Album</small></span><span class="badge">NOW</span><span class="tm">3:45</span></div>
+    <div class="tr">↘ Segue</div>
+    <div class="it"><span class="n">2</span><span class="bar" style="background:#22c3a6"></span><span class="t"><b>Glasshouse</b><small>With intro ◆ · ‹ ›</small></span><span class="tm">3:48</span></div>
+    <div class="tr">■ Stop</div>
+    <div class="it"><span class="n">3</span><span class="bar" style="background:#5aa9ff"></span><span class="t"><b>Low Tide</b><small>Album</small></span><span class="tm">3:18</span></div>
+    <div class="tr">⏵ Auto-next 4 s</div>
+    <div class="it"><span class="n">4</span><span class="bar" style="background:#bf5af2"></span><span class="t"><b>Satellites</b><small>Album</small></span><span class="tm">2:46</span></div>
+    <div class="tr">↘ Segue</div>
+    <div class="it"><span class="n">5</span><span class="bar" style="background:#ff9f43"></span><span class="t"><b>Copper Sun</b><small>Festival cut</small></span><span class="tm">2:50</span></div>
+  </div>
+</div>
+
+<div class="dock">
+  <div class="tbtn" style="width:90px"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="2.5" height="14" rx="1"/><path d="M19 5.5v13a1 1 0 0 1-1.5.9L9 13.2a1.4 1.4 0 0 1 0-2.4l8.5-6.2A1 1 0 0 1 19 5.5z"/></svg></div>
+  <div class="tbtn play"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.8v14.4a1 1 0 0 0 1.5.9l11.3-7.2a1 1 0 0 0 0-1.7L8.5 3.9A1 1 0 0 0 7 4.8z"/></svg>Play</div>
+  <div class="tbtn" style="width:90px"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="16.5" y="5" width="2.5" height="14" rx="1"/><path d="M5 5.5v13a1 1 0 0 0 1.5.9L15 13.2a1.4 1.4 0 0 0 0-2.4L6.5 4.6A1 1 0 0 0 5 5.5z"/></svg></div>
+  <div class="tbtn dim" style="width:150px">Exit loop</div>
+  <div class="tbtn" style="width:120px">Vamp</div>
+  <div class="sp"></div>
+  <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end"><span class="lb2">Jump timing</span><div class="segbig" style="height:46px"><span class="on">Next bar</span><span>Section end</span><span>Now</span></div></div>
+</div>
+<script>
+const S=[['Intro',8,'--s-intro','Clean'],['Verse 1',16,'--s-verse','Clean'],['Pre',8,'--s-pre','Crunch'],['Chorus 1',16,'--s-chorus','Lead'],['Verse 2',16,'--s-verse','Clean'],['Pre',8,'--s-pre','Crunch'],['Chorus 2',16,'--s-chorus','Lead'],['Bridge',8,'--s-bridge','',' ↻ loop'],['Chorus 3',16,'--s-chorus','Lead'],['Outro',8,'--s-outro','','Ⅱ hold']];
+document.getElementById('tl').innerHTML=S.map((s,i)=>`<div class="${i==0?'cur':''}" style="flex:${s[1]};background:var(${s[2]})">${s[0]}<small>${s[1]>=12?s[1]+' bars'+(s[3]?' · '+s[3]:''):''}</small>${s[4]?`<span class="ic">${s[4].trim().split(' ')[0]}</span>`:''}</div>`).join('')+`<span class="ph" style="left:3.8%"></span>`;
+</script>
+</body></html>

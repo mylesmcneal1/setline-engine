@@ -108,6 +108,14 @@ public:
     static constexpr int midiTrackId(int k) { return -200 - k; }
     static constexpr int MaxMidiTracks = 64;
     void setTrackLevel(int track, float db, bool mute, bool next = false);
+
+    // 7a: new hits for the song playing's click tracks (same tracks and outputs; only their hits change), e.g. a click
+    // region added or extended while playing. Built here (control thread) and swapped in by the audio thread at the
+    // start of its next block, without allocating there, so a new hit ahead of the playhead plays when it's reached.
+    // False when the song's click tracks differ from the loaded ones (then it needs a reload).
+    bool updateClicks(const SongDef& song);
+    // Frees what the audio thread handed back (old click hits); call now and then from the control thread.
+    void collect();
     int numStems() const { return (int) cur().stems.size(); }
 
     // Output meters: the peak of each device output since the last call (audio thread writes, UI reads).
@@ -130,7 +138,9 @@ public:
     double sampleRate() const { return cfg.sampleRate; }
     int requiredOutputs() const { return cur().maxOut + 1; }
     Stats stats;
-    MidiScheduler midi;
+    MidiScheduler midi;      // notes, program changes, CCs
+    MidiScheduler midiClock; // 7a: MIDI clock + Start/Stop/Continue/Song Position on their own thread, so a stalled
+                             // tick never queues a program change behind it (and the reverse)
     std::vector<LoggedMidi> midiLog; // offline mode only (pre-reserved)
     struct ClickHit { int64_t sample; bool accent; float gain = 1; };
     struct MidiAt { int64_t sample; int port; uint8_t d[3]; int len; int track = -1; };
@@ -145,6 +155,11 @@ private:
     // Click tracks: [0] the main click, then SongDef::moreClicks. Built in load, never resized while playing;
     // next / voice are audio-thread state.
     struct ClickLane { std::vector<ClickHit> hits; std::vector<int> outs; float gain = 0.5f; size_t next = 0; Voice voice; };
+    struct ClickSwap { const void* target = nullptr; uint64_t gen = 0; std::vector<std::vector<ClickHit>> lanes; };
+    std::atomic<ClickSwap*> clickIn { nullptr }, clickOut { nullptr }; // control -> audio, audio -> control (one each)
+    std::atomic<uint64_t> loadGen { 0 };
+    void takeClicks(ClickSwap* u); // audio thread (or control, with no callback running)
+    static std::vector<ClickHit> hitsFor(const TempoMap& tmap, int64_t songLen, const std::vector<ClickHitDef>& defs);
     // Everything about one song: what load / prepareNext build, what the audio thread plays.
     struct Program {
         std::string name;

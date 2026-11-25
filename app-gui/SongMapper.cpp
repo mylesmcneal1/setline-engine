@@ -3,6 +3,7 @@
 #include "../core/LiveGain.h"
 #include "../core/TempoMap.h"
 #include "Media.h"
+#include "Cues.h"
 #include "../core/Versions.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <cmath>
@@ -185,7 +186,7 @@ MappedSong mapSong(const juce::var& payload, double sr, int numOutputs,
                 out.engineTrack[t] = (int) def.stems.size() - 1;
             }
         }
-    if (noFile > 0) warn(juce::String(noFile) + " audio track" + (noFile > 1 ? "s have" : " has") + " no audio file yet, so " + (noFile > 1 ? "they" : "it") + " plays silence.");
+    if (noFile > 0) warn(juce::String(noFile) + " audio track" + (noFile > 1 ? "s have" : " has") + " no audio file yet, so " + (noFile > 1 ? "they play" : "it plays") + " silence.");
     // ---- spoken cues: rendered ahead of time, played from their bar on the Cues track ----
     if (! def.cueOuts.empty() && cueAudio) {
         const juce::var voice = s["cueVoice"].isObject() ? s["cueVoice"] : payload["cueVoice"];
@@ -204,6 +205,9 @@ MappedSong mapSong(const juce::var& payload, double sr, int numOutputs,
                     v = juce::var(o);
                 }
                 d.audio = cueAudio(text, v, out.warnings);
+                // 7a: the word (spoken or recorded) lands on its beat: start it its onset early, plus the voice's
+                // timing nudge (+ms = later)
+                if (d.audio) d.lead = Cues::onsetOf(*d.audio, sr) - (int64_t) std::llround(toDouble(v["nudge"], 0) * sr / 1000.0);
                 if (d.audio) def.cues.push_back(std::move(d));
             }
     }

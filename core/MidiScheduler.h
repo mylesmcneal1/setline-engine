@@ -55,7 +55,16 @@ public:
 
     // Stats (microseconds)
     std::atomic<int64_t> sent { 0 }, dropped { 0 }, lateMaxUs { 0 }, lateSumUs { 0 }, over1ms { 0 };
-    void resetStats() { sent = 0; dropped = 0; lateMaxUs = 0; lateSumUs = 0; over1ms = 0; }
+    void resetStats() { sent = 0; dropped = 0; lateMaxUs = 0; lateSumUs = 0; over1ms = 0; lateCount.store(0, std::memory_order_release); }
+
+    // 7a: every send over 2 ms late, with what the thread was doing (written by the scheduler thread, read by anyone
+    // up to lateCount). late = sent - target; wakeLate = when the thread started the send - target (it woke late);
+    // sendUs = how long the driver call took (it blocked); before = what happened just before: the last sleep (asked
+    // vs took) and the previous send (its duration, and how long ago it ended); queued = events waiting behind it.
+    struct Late { int64_t lateUs, wakeLateUs, sendUs, sleepAskUs, sleepTookUs, prevSendUs, sincePrevUs; int queued, port; uint8_t status; bool sys; };
+    static constexpr int MaxLate = 256;
+    std::atomic<int> lateCount { 0 };
+    const Late& late(int i) const { return lates[(size_t) i]; }
 
 private:
     static constexpr uint64_t Q = 4096;
@@ -64,6 +73,8 @@ private:
     {
         platform::makeThisThreadTimeCritical();
         std::vector<Item> pending; pending.reserve(Q);
+        int64_t sleepAsk = 0, sleepTook = 0, prevSend = 0; Clock::time_point prevEnd {};
+        auto nap = [&](int64_t us) { const auto a = Clock::now(); platform::preciseSleep(std::chrono::microseconds(us)); sleepAsk = us; sleepTook = std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - a).count(); };
         while (running) {
             if (flushReq.exchange(false)) {
                 pending.erase(std::remove_if(pending.begin(), pending.end(), [](const Item& x) { return ! x.sys; }), pending.end());
@@ -79,17 +90,30 @@ private:
                 pending.insert(pos, it);
                 r.store(rp + 1, std::memory_order_release);
             }
-            if (pending.empty()) { platform::preciseSleep(std::chrono::microseconds(250)); continue; }
+            if (pending.empty()) { nap(250); continue; }
             const Item f = pending.front();
             const auto now = Clock::now();
             // Sleep in short precise steps while the event is far away, then spin for the last 1.5 ms.
-            if (f.target - now > std::chrono::microseconds(1500)) { platform::preciseSleep(std::chrono::microseconds(500)); continue; }
+            if (f.target - now > std::chrono::microseconds(1500)) { nap(500); continue; }
             while (Clock::now() < f.target) std::this_thread::yield(); // final approach: spin for sub-ms accuracy
+            const auto sendAt = Clock::now();
             if (sink && f.port >= 0) sink->sendNow(f.port, f.d, f.len);
-            const int64_t late = std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - f.target).count();
+            const auto end = Clock::now();
+            const int64_t late = std::chrono::duration_cast<std::chrono::microseconds>(end - f.target).count();
+            const int64_t took = std::chrono::duration_cast<std::chrono::microseconds>(end - sendAt).count();
             sent.fetch_add(1); lateSumUs.fetch_add(late);
             if (late > lateMaxUs.load()) lateMaxUs.store(late);
             if (late > 1000) over1ms.fetch_add(1);
+            if (late > 2000) {
+                const int n = lateCount.load(std::memory_order_relaxed);
+                if (n < MaxLate) {
+                    lates[(size_t) n] = { late, std::chrono::duration_cast<std::chrono::microseconds>(sendAt - f.target).count(), took, sleepAsk, sleepTook, prevSend,
+                                          prevEnd == Clock::time_point {} ? -1 : std::chrono::duration_cast<std::chrono::microseconds>(sendAt - prevEnd).count(),
+                                          (int) pending.size() - 1, f.port, f.d[0], f.sys };
+                    lateCount.store(n + 1, std::memory_order_release);
+                }
+            }
+            prevSend = took; prevEnd = end; sleepAsk = sleepTook = 0;
             pending.erase(pending.begin());
         }
     }
@@ -100,6 +124,7 @@ private:
     // On the heap (allocated once, never on the audio thread): ~100 KB inline would make every Engine huge
     // and overflow the 1 MB Windows stack when several are locals (the self-test).
     std::unique_ptr<Item[]> q { new Item[Q] {} };
+    std::unique_ptr<Late[]> lates { new Late[MaxLate] {} };
     std::atomic<uint64_t> w { 0 }, r { 0 };
 };
 

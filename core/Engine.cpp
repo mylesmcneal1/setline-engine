@@ -18,12 +18,15 @@ Engine::~Engine()
     diskRun = false;
     if (disk.joinable()) disk.join();
     midi.stop();
+    midiClock.stop();
+    delete clickIn.exchange(nullptr);
+    delete clickOut.exchange(nullptr);
 }
 
 void Engine::setMidiSink(MidiSink* s)
 {
     sink = s;
-    if (! cfg.offline) midi.start(sink);
+    if (! cfg.offline) { midi.start(sink); midiClock.start(sink); }
 }
 
 void Engine::ensureDisk()
@@ -79,23 +82,7 @@ std::string Engine::build(Program& P, const SongDef& song, std::vector<std::stri
 
     // --- click tracks: [0] the main click, then the song's other click tracks, each on its own outputs ---
     // Exactly the hits the user entered, nothing generated (except the main click of the test song / spike).
-    auto hitsOf = [&](const std::vector<ClickHitDef>& defs) {
-        std::vector<ClickHit> v;
-        for (auto& h : defs) {
-            if (h.bar < 1 || h.beat < 1) continue;
-            const int64_t s = P.tmap.sampleAt(h.bar, h.beat);
-            if (s < P.songLen) v.push_back({ s, h.accent, LiveGain::dbToGain(h.gainDb) });
-        }
-        std::stable_sort(v.begin(), v.end(), [](auto& a, auto& b) { return a.sample < b.sample; });
-        // Two hits on the same sample play once (the louder / accented one).
-        std::vector<ClickHit> unique;
-        for (auto& h : v) {
-            if (! unique.empty() && unique.back().sample == h.sample) {
-                unique.back().accent |= h.accent; unique.back().gain = std::max(unique.back().gain, h.gain);
-            } else unique.push_back(h);
-        }
-        return unique;
-    };
+    auto hitsOf = [&](const std::vector<ClickHitDef>& defs) { return hitsFor(P.tmap, P.songLen, defs); };
     P.clickLanes.resize(1 + song.moreClicks.size());
     P.clickLanes[0].outs = song.clickOuts;
     P.clickLanes[0].gain = LiveGain::dbToGain(song.clickGainDb);
@@ -133,7 +120,7 @@ std::string Engine::build(Program& P, const SongDef& song, std::vector<std::stri
         if (! c.audio || c.audio->empty() || c.bar < 1) continue;
         const int64_t s = P.tmap.sampleAt(c.bar, std::max(1.0, c.beat));
         if (s >= P.songLen) { warnings.push_back("Cue \"" + c.text + "\" at bar " + std::to_string(c.bar) + " is after the end of the song."); continue; }
-        P.cues.push_back({ s, c.audio });
+        P.cues.push_back({ s - c.lead, c.audio }); // 7a: the word's onset on the beat
         P.longestCue = std::max(P.longestCue, (int64_t) c.audio->size());
     }
     std::stable_sort(P.cues.begin(), P.cues.end(), [](auto& a, auto& b) { return a.sample < b.sample; });
@@ -161,9 +148,65 @@ std::string Engine::build(Program& P, const SongDef& song, std::vector<std::stri
     return {};
 }
 
+std::vector<Engine::ClickHit> Engine::hitsFor(const TempoMap& tmap, int64_t songLen, const std::vector<ClickHitDef>& defs)
+{
+    std::vector<ClickHit> v;
+    for (auto& h : defs) {
+        if (h.bar < 1 || h.beat < 1) continue;
+        const int64_t s = tmap.sampleAt(h.bar, h.beat);
+        if (s < songLen) v.push_back({ s, h.accent, LiveGain::dbToGain(h.gainDb) });
+    }
+    std::stable_sort(v.begin(), v.end(), [](auto& a, auto& b) { return a.sample < b.sample; });
+    // Two hits on the same sample play once (the louder / accented one).
+    std::vector<ClickHit> unique;
+    for (auto& h : v) {
+        if (! unique.empty() && unique.back().sample == h.sample) {
+            unique.back().accent |= h.accent; unique.back().gain = std::max(unique.back().gain, h.gain);
+        } else unique.push_back(h);
+    }
+    return unique;
+}
+
+bool Engine::updateClicks(const SongDef& song)
+{
+    std::lock_guard<std::mutex> lk(control);
+    collect();
+    const Program& P = cur();
+    if (P.clickLanes.size() != 1 + song.moreClicks.size() || ! song.clickHits) return false;
+    auto u = std::make_unique<ClickSwap>();
+    u->target = &P; u->gen = loadGen.load(std::memory_order_acquire);
+    u->lanes.resize(P.clickLanes.size());
+    if (! P.clickLanes[0].outs.empty()) u->lanes[0] = hitsFor(P.tmap, P.songLen, *song.clickHits);
+    for (size_t k = 0; k < song.moreClicks.size(); ++k)
+        if (! P.clickLanes[k + 1].outs.empty()) u->lanes[k + 1] = hitsFor(P.tmap, P.songLen, song.moreClicks[k].hits);
+    delete clickIn.exchange(u.release(), std::memory_order_acq_rel); // one the audio thread never took: replaced
+    if (! deviceRunning.load() || cfg.offline) { // no callback to pick it up (offline: rendered on this thread)
+        if (auto* x = clickIn.exchange(nullptr, std::memory_order_acq_rel)) { takeClicks(x); delete clickOut.exchange(nullptr); }
+    }
+    return true;
+}
+
+void Engine::takeClicks(ClickSwap* u)
+{
+    Program& P = cur();
+    if (u->target == &P && u->gen == loadGen.load(std::memory_order_acquire) && u->lanes.size() == P.clickLanes.size()) {
+        const int64_t p = pos.load(std::memory_order_relaxed);
+        for (size_t k = 0; k < P.clickLanes.size(); ++k) {
+            auto& c = P.clickLanes[k];
+            if (c.outs.empty()) continue;
+            std::swap(c.hits, u->lanes[k]); // O(1): the old hits go back in u
+            c.next = (size_t) (std::lower_bound(c.hits.begin(), c.hits.end(), p, [](const ClickHit& h, int64_t x) { return h.sample < x; }) - c.hits.begin());
+        }
+    }
+    clickOut.store(u, std::memory_order_release); // freed by the control thread (collect)
+}
+
+void Engine::collect() { delete clickOut.exchange(nullptr, std::memory_order_acq_rel); }
+
 std::string Engine::load(const SongDef& song, const Config& c, std::vector<std::string>& warnings)
 {
     std::lock_guard<std::mutex> lk(control);
+    loadGen.fetch_add(1, std::memory_order_acq_rel);
     fadeOutAndStop(); // switching songs while playing: fade out first, never cut
     const bool reconfig = c.sampleRate != cfg.sampleRate || c.ringFrames != cfg.ringFrames || c.chunkFrames != cfg.chunkFrames || c.offline != cfg.offline;
     cfg = c;
@@ -421,6 +464,9 @@ void Engine::process(float* const* outs, int numOuts, int n)
     const auto t0 = Clock::now();
     for (int c = 0; c < numOuts; ++c) if (outs[c]) std::fill(outs[c], outs[c] + n, 0.0f);
     serial.fetch_add(1, std::memory_order_acq_rel);
+    // 7a: new click hits (only when the last ones have been collected, so the hand-back slot is always free)
+    if (clickOut.load(std::memory_order_acquire) == nullptr)
+        if (auto* u = clickIn.exchange(nullptr, std::memory_order_acq_rel)) takeClicks(u);
     if (! playing.load(std::memory_order_acquire)) { clockIdle(n, t0); return; }
     if (! clockWasPlaying) { // Song Position (in 16ths) + Start from the top / Continue from inside the song
         clockWasPlaying = true;
@@ -613,7 +659,7 @@ void Engine::sendAt(int port, uint8_t a, uint8_t b, uint8_t c, int len, int64_t 
     it.port = port; it.len = len; it.d[0] = a; it.d[1] = b; it.d[2] = c; it.sys = sys;
     const double secs = (latencyBase.load(std::memory_order_relaxed) + blockOffset) / cfg.sampleRate + cfg.midiOffsetMs / 1000.0;
     it.target = t0 + std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(secs));
-    midi.push(it);
+    (sys ? midiClock : midi).push(it);
 }
 
 void Engine::clockTransport(uint8_t status, int64_t logSample, int blockOffset, Clock::time_point t0)

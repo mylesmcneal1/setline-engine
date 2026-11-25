@@ -113,7 +113,10 @@ void Splash::finish(std::function<void()> whenGone)
     if (finishing) return;
     for (auto& r : rows) if (r.state != State::done) { r.state = State::done; }
     finishing = true;
-    onGone = std::move(whenGone);
+    // 7a: never wait on a timer: the main window shows now, and this window fades out over it
+    shown = 1.0f;
+    readyAt = fadeFrom = juce::Time::getMillisecondCounterHiRes();
+    if (whenGone) whenGone();
 }
 
 void Splash::showError(const juce::String& title, const juce::String& b, std::vector<Choice> c)
@@ -133,14 +136,8 @@ void Splash::timerCallback()
     if (t > shown) shown = juce::jmin(t, shown + juce::jmax(0.004f, (t - shown) * 0.12f));
     spin = std::fmod(spin + 1.0f / (0.8f * 60.0f), 1.0f);
     if (finishing && ! error) {
-        // Ready once the strip is full and at least ~700 ms have passed; hold a moment, then fade.
-        if (readyAt == 0 && shown >= 0.999f && now - started >= 700) readyAt = now;
-        if (readyAt > 0 && fadeFrom == 0 && now - readyAt >= 380) {
-            fadeFrom = now;
-            if (onGone) { auto f = std::move(onGone); onGone = nullptr; f(); }
-        }
         if (fadeFrom > 0) {
-            const float a = (float) juce::jmax(0.0, 1.0 - (now - fadeFrom) / 250.0);
+            const float a = (float) juce::jmax(0.0, 1.0 - (now - fadeFrom) / 180.0);
             setAlpha(a);
             if (a <= 0) { stopTimer(); setVisible(false); return; }
         }

@@ -16,4 +16,11 @@ juce::File current();
 // The last n lines of this run's log.
 juce::String tail(int n);
 
+// 7a start-up timing: mark("audio device open") logs "Startup: audio device open at 840 ms" (time since the process
+// started), or with a duration: mark("peaks", 1200) logs "... at 2.4 s (took 1200 ms)". summary() is the
+// "Startup:" line for Copy diagnostics.
+void mark(const juce::String& what, double tookMs = -1);
+juce::String startupSummary();
+double sinceProcessStartMs();
+
 } // namespace setline::gui::applog

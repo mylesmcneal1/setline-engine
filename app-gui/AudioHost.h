@@ -24,6 +24,9 @@ public:
     // why; empty when it opened. retrySaved: try it again ("" = open now). closeDevice: "Open without audio".
     juce::String savedDeviceLabel() const { return savedLabel; }
     juce::String savedDeviceProblem() const { return savedProblem; }
+    // 7a: the saved interface wasn't there at launch, so set.Line plays on this computer ("<interface>"), and goes
+    // back to it by itself when it's plugged in while stopped (emit "interfaceBack"). Empty: not falling back.
+    juce::String fallbackFrom() const { return autoFrom; }
     juce::String retrySaved();
     void closeDevice();
     // "iD14 · ASIO · 48 kHz · 128" for the open device, or "" if none.
@@ -80,6 +83,7 @@ public:
     // payload as loadSong: maps it and loads it into the engine's next slot, primed from its start in the background
     // (the song playing isn't touched). -> {ok, warnings} or {error}.
     juce::var queueNext(const juce::var& payload);
+    juce::var updateClicks(const juce::var& payload); // 7a: click edits while playing
     // {loaded, ready, songId, name, segue}
     juce::var nextState();
     // A queued jump (Perform: tap a section while playing): {toBar, toBeat, when: "bar" | "section" | "beat", atBar}
@@ -141,7 +145,7 @@ private:
     std::atomic<bool> midiOn { true };
     void refreshClock();   // the engine's clock / transport ports from this computer's settings
     void scanMidiPorts();  // opens clock ports, reopens ports that came back (every 2 s)
-    juce::StringArray connectedPorts; int scanTick = 0;
+    juce::StringArray connectedPorts; int scanTick = 0; int lateSeen[2] = { 0, 0 };
     void save();
     void applyLevels();
     void changeListenerCallback(juce::ChangeBroadcaster*) override;
@@ -159,6 +163,8 @@ private:
     Engine eng;
     juce::String error;
     juce::String savedLabel, savedProblem;
+    juce::String autoFrom; // the interface missing at launch (7a); cleared when it's back or the user picks
+    void checkInterfaceBack();
     juce::String lastDeviceKey;
     bool opening = false;
 

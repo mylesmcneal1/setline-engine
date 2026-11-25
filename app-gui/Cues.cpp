@@ -1,5 +1,6 @@
 #include "Cues.h"
 #include "Peaks.h"
+#include "Log.h"
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <juce_events/juce_events.h>
@@ -131,12 +132,24 @@ void Cues::ensureVoices()
 {
     { std::lock_guard<std::mutex> g(dataLock); if (listed) return; }
     juce::String def;
+    const double t0 = juce::Time::getMillisecondCounterHiRes();
     auto list = kokoro::voices();
-    for (auto& v : speech::listVoices(def)) list.push_back(v);
+    const auto sys = speech::listVoices(def);
+    for (auto& v : sys) list.push_back(v);
+    const double ms = juce::Time::getMillisecondCounterHiRes() - t0;
+    applog::line("Voices listed: " + juce::String((int) (list.size() - sys.size())) + " set.Line + " + juce::String((int) sys.size()) + " computer voices in " + juce::String((int) ms) + " ms");
     std::lock_guard<std::mutex> g(dataLock);
     installed = std::move(list);
     defaultId = def;
+    listMs = ms; listSys = (int) sys.size();
     listed = true;
+}
+
+juce::String Cues::voiceListInfo()
+{
+    std::lock_guard<std::mutex> g(dataLock);
+    if (! listed) return "not listed yet";
+    return juce::String((int) installed.size() - listSys) + " set.Line + " + juce::String(listSys) + " computer voices (listed in " + juce::String((int) listMs) + " ms)";
 }
 
 juce::var Cues::voices()
@@ -596,3 +609,26 @@ void Cues::render(const juce::String& text, const Choice& c, double rate, std::f
 }
 
 } // namespace setline::gui
+
+// ---------------------------------------------------------------- 7a: count-in words on the beat
+int64_t setline::gui::Cues::onsetOf(const std::vector<float>& a, double sr)
+{
+    const int64_t n = (int64_t) a.size();
+    if (n == 0 || sr <= 0) return 0;
+    const int64_t win = std::max<int64_t>(8, (int64_t) (0.010 * sr)), hop = 1; // every sample: the same word gives the same onset wherever it sits
+    // running sum of squares: RMS of the 10 ms centred on i
+    std::vector<double> cs((size_t) n + 1, 0.0);
+    for (int64_t i = 0; i < n; ++i) cs[(size_t) i + 1] = cs[(size_t) i] + (double) a[(size_t) i] * a[(size_t) i];
+    auto rms = [&](int64_t c) { const int64_t lo = std::max<int64_t>(0, c - win / 2), hi = std::min<int64_t>(n, c + win / 2); return hi > lo ? std::sqrt((cs[(size_t) hi] - cs[(size_t) lo]) / (double) (hi - lo)) : 0.0; };
+    double peak = 0;
+    for (int64_t i = 0; i < n; i += hop) peak = std::max(peak, rms(i));
+    if (peak <= 1e-6) return 0;
+    const double thr = 0.3 * peak;
+    for (int64_t i = 0; i < n; i += hop)
+        if (rms(i) >= thr) {
+            int64_t j = i; // refine to the sample within the last hop
+            for (int64_t k = std::max<int64_t>(0, i - hop); k <= i; ++k) if (rms(k) >= thr) { j = k; break; }
+            return j;
+        }
+    return 0;
+}
