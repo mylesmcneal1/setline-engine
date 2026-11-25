@@ -675,6 +675,79 @@ async function exportSetlist(listId?: string, to?: string) {
   if (r.error) page().toast(r.error); else if (r.path) page().toast(`Exported “${e.name}” to ${r.path}`);
   return r;
 }
+// ---- 7b: Import an Ableton Live project (.als). Read (in the app, read-only) -> preview -> copy the audio into the
+// Library (by content: the same file twice is stored once) with progress and Cancel -> the songs (and a setlist) ->
+// a summary, saved next to the Library's migration log. choose: tests answer the preview themselves.
+interface AbleData { project: string; live: string; mode: string; path: string; songs: any[]; ignored: string[]; missing: string[]; warnings: string[]; error?: string; cancelled?: boolean }
+type AbleChoice = { picks: { i: number; dup: string }[]; setlist: boolean; data?: AbleData };
+async function importAbleton(path?: string, choose?: (data: AbleData, dups: any[]) => Promise<AbleChoice | null>, mode = "auto") {
+  if (page().playing) { page().toast("Stop playback first"); return { error: "playing" }; }
+  if (!lib) { page().toast("Open a library first"); return { error: "no library" }; }
+  const A = (window as any).SLAble;
+  const ports = page().PORTS || [];
+  const located: Record<string, string> = {};
+  const readAs = async (m: string, p: string) => {
+    const r = await SL.call<AbleData>("ableRead", { path: p, mode: m, ports });
+    if (r.error || r.cancelled) return r;
+    // samples found with Locate… stay found when the mode changes
+    for (const s of r.songs) for (const t of s.tracks || []) if (t.kind === "audio" && t.file && !t.file.found && located[t.file.name]) { t.file.found = true; t.file.path = located[t.file.name]; }
+    return r;
+  };
+  let data = await readAs(mode, path || "");
+  if (data.cancelled) return data;
+  if (data.error) { page().toast(data.error); return data; }
+  const src = data.path;
+  const dupsFor = async (d: AbleData) => {
+    const paths = [...new Set(d.songs.flatMap((s: any) => (s.tracks || []).filter((t: any) => t.file && t.file.found).map((t: any) => t.file.path as string)))];
+    const hashes = paths.length ? await SL.call<Record<string, string>>("hashFiles", { paths }) : {};
+    return d.songs.map((s: any) => A.dups(s, hashes));
+  };
+  const ctx = {
+    mode, dups: await dupsFor(data),
+    remode: async (m: string) => { const d = await readAs(m, src); if (d.error) { page().toast(d.error); return null; } data = d; ctx.dups = await dupsFor(d); return d; },
+    locate: async (names: string[]) => {
+      const r = await SL.call<{ found?: Record<string, string>; cancelled?: boolean }>("ableLocate", { names });
+      if (!r.found) return null;
+      Object.assign(located, r.found);
+      const n = Object.keys(r.found).length;
+      page().toast(n ? `Found ${n} of ${names.length} sample${names.length === 1 ? "" : "s"}` : "None of the missing samples are in that folder");
+      const d = await readAs(ctx.mode, src); if (d.error) return null; data = d; ctx.dups = await dupsFor(d); return d;
+    },
+  };
+  const choice: AbleChoice | null = choose ? await choose(data, ctx.dups) : await A.box(data, ctx);
+  if (!choice || !choice.picks.length) return { cancelled: true };
+  if (choice.data) data = choice.data;
+  // the audio the chosen songs use, each file once
+  const files = [...new Set(choice.picks.flatMap((p) => (data.songs[p.i].tracks || []).filter((t: any) => t.file && t.file.found).map((t: any) => t.file.path as string)))];
+  let cancel = false;
+  const refs: Record<string, string> = {};
+  const cur = await SL.call<FileResult>("getSessionFile");
+  for (let k = 0; k < files.length && !cancel; k++) {
+    A.progress(k, files.length, files[k].split(/[\\/]/).pop(), () => { cancel = true; });
+    const r = await SL.call<{ files?: { path: string; ref: string }[]; error?: string }>("importAudio", { session: cur.path || "", copy: true, hashed: true, files: [files[k]] });
+    if (r.error) { A.progress(-1); page().toast(r.error); return { error: r.error }; }
+    for (const f of r.files || []) refs[f.path] = f.ref;
+  }
+  A.progress(-1);
+  if (cancel) { page().toast("Import cancelled: no songs were added"); return { cancelled: true }; }
+  const infos: Record<string, AudioInfo> = {};
+  for (const i of await probe(files)) infos[i.path] = i;
+  if (!sessionRate) sessionRate = Object.values(infos).find((i) => i.rate)?.rate || rateForImport();
+  const otherRate = Object.values(infos).filter((i) => i.rate && i.rate !== sessionRate);
+  const res = A.add(data, choice.picks, refs, infos, choice.setlist);
+  loadedKey = null; nextKey = "";
+  // the summary (and the log next to the migration log)
+  const lines: string[] = [`Imported from Ableton: ${data.project} (${data.path})`,
+    `${res.added.length} new song${res.added.length === 1 ? "" : "s"}${res.versions.length ? `, ${res.versions.length} new version${res.versions.length === 1 ? "" : "s"}` : ""}${res.setlist ? `, setlist “${res.setlist}”` : ""}; ${files.length} audio file${files.length === 1 ? "" : "s"} copied into the library.`];
+  for (const p of choice.picks) { const s = data.songs[p.i]; lines.push(`- ${s.name}: ${s.audioTracks} audio, ${s.midiTracks} MIDI, ${s.secs.length} sections${(s.warnings || []).length ? "\n    " + s.warnings.join("\n    ") : ""}`); }
+  if (otherRate.length) lines.push(`${otherRate.length} file${otherRate.length === 1 ? " isn't" : "s aren't"} at the library's rate (${sessionRate / 1000} kHz); set.Line never resamples, so ${otherRate.length === 1 ? "it plays" : "they play"} at the wrong speed until replaced: ${otherRate.map((i) => i.name).join(", ")}`);
+  const missing = [...new Set(choice.picks.flatMap((p) => (data.songs[p.i].tracks || []).filter((t: any) => t.kind === "audio" && !(t.file && t.file.found)).map((t: any) => (t.file && t.file.name) as string)))].filter(Boolean);
+  if (missing.length) lines.push(`Still missing (those tracks play silence until you add the file): ${missing.join(", ")}`);
+  if ((data.ignored || []).length) lines.push(`Not imported (devices, plug-ins, returns): ${data.ignored.join(", ")}`);
+  const logPath = await SL.call<string>("ableLog", { text: lines.join("\n") }).catch(() => "");
+  if (!choose) A.summary(lines, logPath, res.added[0] || (res.versions[0] && res.versions[0][0]) || "");
+  return { ...res, files: files.length, lines, logPath };
+}
 // Import: songs are matched by their id, then by their audio; one that differs asks Keep mine / Use imported / Keep both.
 async function importPackage(path?: string, choose?: (rows: any[]) => Promise<Record<string, string> | null>) {
   if (page().playing) { page().toast("Stop playback first"); return { error: "playing" }; }
@@ -964,6 +1037,7 @@ async function fileMenu(at: { clientX: number; clientY: number }) {
     "-",
     { label: "Export setlist…", icon: "⇪", act: () => { exportSetlist(); } },
     { label: "Import…", icon: "⇩", act: () => { importPackage(); } },
+    { label: "Import Ableton project…", icon: "⇩", act: () => { importAbleton().catch((e) => page().toast(String(e))); } },
     "-",
     sub("Library", [
       ...libs.map((l) => ({ label: l.name + (l.current ? "  ✓" : ""), icon: "▤", dis: l.current, act: () => { switchLibrary(l.name); } })),
@@ -1125,6 +1199,8 @@ async function onFileDrag(d: { state: string; x: number; y: number; paths: strin
   dz.classList.remove("over");
   if (d.state !== "drop") return;
   const sessions = d.paths.filter((x) => /\.setline$/i.test(x));
+  const als = d.paths.filter((x) => /\.als$/i.test(x));
+  if (als.length) { await importAbleton(als[0]); return; } // 7b: an Ableton project dropped anywhere (the Library panel too)
   if (!audio.length) {
     if (sessions.length) { await importPackage(sessions[0]); return; } // a .setline package: Import
     p.toast("Drop WAV, AIFF or FLAC files, or a .setline package to import");
@@ -1243,7 +1319,7 @@ async function main() {
     if (st.state === "ready") { preparedKey = ""; prepareCues(); loadedKey = null; }
   });
   SL.on("menu", (m: { cmd: string }) => {
-    if (m.cmd === "export") exportSetlist(); else if (m.cmd === "import") importPackage();
+    if (m.cmd === "export") exportSetlist(); else if (m.cmd === "import") importPackage(); else if (m.cmd === "importAbleton") importAbleton().catch((e) => page().toast(String(e)));
     else if (m.cmd === "dupSetlist") page().setlistCmd("dup"); else if (m.cmd === "cleanUp") cleanUpAudio();
     else if (m.cmd === "about") showAbout();
     else if (m.cmd === "retryShow") retryStartShow();
@@ -1334,11 +1410,11 @@ async function main() {
         // 6f: the Library
         openLibrary: (n = "", empty?: boolean) => openLibrary(n, empty), libSave: () => libSave(), lib: () => lib, libFiles, exportSetlist: (id?: string, to?: string) => exportSetlist(id, to), exportText,
         bandStart: (port: number) => SL.call("bandStart", { port, test: true }), bandHost: () => bandHost,
-        importPackage: (p: string, choose?: any) => importPackage(p, choose), migrateShows: (paths: string[]) => migrateShows(paths), restoreBackup: (p: string, how: "replace" | "new") => restoreBackup(p, how), switchLibrary: (n: string) => switchLibrary(n), offerMigration: () => offerMigration() };
+        importPackage: (p: string, choose?: any) => importPackage(p, choose), importAbleton: (p: string, choose?: any, mode?: string) => importAbleton(p, choose, mode), migrateShows: (paths: string[]) => migrateShows(paths), restoreBackup: (p: string, how: "replace" | "new") => restoreBackup(p, how), switchLibrary: (n: string) => switchLibrary(n), offerMigration: () => offerMigration() };
       out = await new AsyncFn("SL", "hooks", info.testScript)(SL, hooks);
     } catch (e) { out = { error: String((e as Error)?.stack || e) }; }
     if (out !== undefined) await SL.call("testDone", { text: JSON.stringify(out, null, 1) }); // undefined: it went to another page
   }
 }
 
-main().catch((e) => console.error("set.Line edit page:", e));
+main().catch((e) => { console.error("set.Line edit page:", e); SL.call("logLine", { text: "Page start-up failed: " + String((e && (e as Error).stack) || e) }).catch(() => {}); });

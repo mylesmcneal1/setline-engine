@@ -11,6 +11,7 @@
 #include "Splash.h"
 #include "Log.h"
 #include "Folders.h"
+#include "AbletonImport.h"
 
 namespace setline::gui {
 
@@ -83,6 +84,13 @@ public:
         const juce::String page = pi >= 0 ? args[pi + 1] : juce::String();
         if (const int kt = args.indexOf("--kokoro-test"); kt >= 0 && kt + 1 < args.size()) {
             kokoroTest(juce::File::getCurrentWorkingDirectory().getChildFile(args[kt + 1].unquoted()));
+            return;
+        }
+        if (const int at = args.indexOf("--ableton-test"); at >= 0 && at + 1 < args.size()) { // 7b: the .als reader on synthetic projects
+            const auto lines = ableton::selfTest(juce::File::getCurrentWorkingDirectory().getChildFile(args[at + 1].unquoted()));
+            std::printf("%s\n", lines.joinIntoString("\n").toRawUTF8());
+            setApplicationReturnValue(lines[lines.size() - 1] == "ABLETON OK" ? 0 : 1);
+            quit();
             return;
         }
         if (const int st = args.indexOf("--speech-test"); st >= 0 && st + 1 < args.size()) {
@@ -316,6 +324,7 @@ private:
             m.addSeparator();
             m.addItem(juce::PopupMenu::Item("Export Setlist...").setID(2).setAction([this] { send("export"); }));
             m.addItem(juce::PopupMenu::Item("Import...").setID(3).setAction([this] { send("import"); }));
+            m.addItem(juce::PopupMenu::Item("Import Ableton Project...").setID(7).setAction([this] { send("importAbleton"); }));
             m.addSeparator();
             m.addItem(juce::PopupMenu::Item("Backups...").setID(6).setAction([this] { send("openBackup"); }));
             m.addItem(juce::PopupMenu::Item("Clean Up Unused Audio...").setID(5).setAction([this] { send("cleanUp"); }));

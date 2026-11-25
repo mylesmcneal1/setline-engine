@@ -37,7 +37,9 @@ juce::String mimeFor(const juce::String& file)
 
 WebUi::WebUi(bool devMode, const std::function<Options(Options)>& configure) : dev(devMode)
 {
-    const auto dataDir = folders::webViewData(); // the page's own data (localStorage) with the caches (Folders.h)
+    // the page's own data (localStorage) with the caches (Folders.h); SETLINE_WEBVIEW_DATA: another folder (tests)
+    const auto env = juce::SystemStats::getEnvironmentVariable("SETLINE_WEBVIEW_DATA", {});
+    const auto dataDir = env.isNotEmpty() ? juce::File(env) : folders::webViewData();
     dataDir.createDirectory();
 
     Options o = Options {}

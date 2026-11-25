@@ -2,6 +2,8 @@
 #include "AudioHost.h"
 #include "Log.h"
 #include "Package.h"
+#include "AbletonImport.h"
+#include "Media.h"
 #include "WebUi.h"
 #include <set>
 
@@ -154,6 +156,8 @@ Bridge::Options Bridge::add(Options o, const char* name, Fn fn)
             if (juce::JSON::parse(args[0].toString(), in).failed()) { done(juce::JSON::toString(errorVar(juce::String(name) + ": bad JSON"), true)); return; }
         }
         juce::var out;
+        static const bool trace = juce::SystemStats::getEnvironmentVariable("SETLINE_TRACE_CALLS", {}).isNotEmpty();
+        if (trace) applog::line(juce::String("call ") + name);
         try { out = fn(in); }
         catch (const std::exception& e) { out = errorVar(juce::String(name) + ": " + e.what()); }
         done(juce::JSON::toString(out, true));
@@ -167,7 +171,9 @@ Bridge::Options Bridge::addAsync(Options o, const char* name, AsyncFn fn)
         juce::var in;
         if (! args.isEmpty() && args[0].isString() && args[0].toString().isNotEmpty()
             && juce::JSON::parse(args[0].toString(), in).failed()) { done(juce::JSON::toString(errorVar(juce::String(name) + ": bad JSON"), true)); return; }
-        fn(in, [done](juce::var out) { done(juce::JSON::toString(out, true)); });
+        static const bool trace = juce::SystemStats::getEnvironmentVariable("SETLINE_TRACE_CALLS", {}).isNotEmpty();
+        if (trace) applog::line(juce::String("call ") + name + " (async)");
+        fn(in, [done, name](juce::var out) { if (trace) applog::line(juce::String("done ") + name); done(juce::JSON::toString(out, true)); });
     });
 }
 
@@ -524,6 +530,61 @@ Bridge::Options Bridge::addTo(Options o)
                 if (tmpCues.isDirectory()) (*alive_)->cues.mergeStore(tmpCues, finish); else finish();
             });
         }).detach();
+    });
+    // ---- 7b: Ableton Live projects (read only; the project and its files are never changed) ----
+    // {path ('' = choose), mode, ports} -> the songs found (AbletonImport.h) | {cancelled} | {error}
+    o = addAsync(o, "ableRead", [this](const juce::var& a, auto done) {
+        ableton::Options opts;
+        opts.mode = a["mode"].toString().isNotEmpty() ? a["mode"].toString() : juce::String("auto");
+        if (auto* p = a["ports"].getArray()) for (auto& x : *p) opts.midiPorts.add(x.toString());
+        auto alive_ = alive;
+        auto read = [opts, done, alive_](const juce::File& f) {
+            if (f == juce::File()) { auto* r = new juce::DynamicObject(); r->setProperty("cancelled", true); done(juce::var(r)); return; }
+            std::thread([f, opts, done, alive_] {
+                juce::String err;
+                auto v = ableton::read(f, opts, err);
+                juce::MessageManager::callAsync([v, err, done, alive_] {
+                    if (*alive_ == nullptr) return;
+                    if (err.isNotEmpty()) { auto* r = new juce::DynamicObject(); r->setProperty("error", err); done(juce::var(r)); return; }
+                    done(v);
+                });
+            }).detach();
+        };
+        if (a["path"].toString().isNotEmpty()) { read(juce::File(a["path"].toString())); return; }
+        packChooser = std::make_unique<juce::FileChooser>("Import an Ableton Live project", juce::File::getSpecialLocation(juce::File::userMusicDirectory), "*.als");
+        packChooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [read](const juce::FileChooser& fc) { read(fc.getResult()); });
+    });
+    // "Locate…": {names, folder ('' = choose)} -> {found: {name: path}} | {cancelled}
+    o = addAsync(o, "ableLocate", [this](const juce::var& a, auto done) {
+        juce::StringArray names; if (auto* n = a["names"].getArray()) for (auto& x : *n) names.add(x.toString());
+        auto alive_ = alive;
+        auto go = [names, done, alive_](const juce::File& dir) {
+            if (dir == juce::File()) { auto* r = new juce::DynamicObject(); r->setProperty("cancelled", true); done(juce::var(r)); return; }
+            std::thread([dir, names, done, alive_] {
+                auto found = ableton::locate(dir, names);
+                juce::MessageManager::callAsync([found, done, alive_] { if (*alive_ == nullptr) return; auto* r = new juce::DynamicObject(); r->setProperty("found", found); done(juce::var(r)); });
+            }).detach();
+        };
+        if (a["folder"].toString().isNotEmpty()) { go(juce::File(a["folder"].toString())); return; }
+        packChooser = std::make_unique<juce::FileChooser>("Find the missing samples in…", juce::File::getSpecialLocation(juce::File::userMusicDirectory));
+        packChooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories, [go](const juce::FileChooser& fc) { go(fc.getResult()); });
+    });
+    // {paths} -> {path: content hash} (the Library stores audio by it: Audio/<hash>.<ext>), on a thread
+    o = addAsync(o, "hashFiles", [this](const juce::var& a, auto done) {
+        juce::StringArray paths; if (auto* n = a["paths"].getArray()) for (auto& x : *n) paths.add(x.toString());
+        auto alive_ = alive;
+        std::thread([paths, done, alive_] {
+            auto* r = new juce::DynamicObject(); juce::var rv(r);
+            for (auto& p : paths) if (juce::File(p).existsAsFile()) r->setProperty(p, Media::contentHash(juce::File(p)));
+            juce::MessageManager::callAsync([rv, done, alive_] { if (*alive_ != nullptr) done(rv); });
+        }).detach();
+    });
+    // the import's summary, next to the Library's migration log -> its path
+    o = add(o, "ableLog", [this](const juce::var& a) {
+        const auto f = lib.folder().getChildFile("ableton-import-log.txt");
+        f.appendText(juce::Time::getCurrentTime().formatted("%Y-%m-%d %H:%M:%S") + "\n" + a["text"].toString() + "\n\n");
+        applog::line("Ableton import: " + a["text"].toString().upToFirstOccurrenceOf("\n", false, false));
+        return juce::var(f.getFullPathName());
     });
     // ---- migration from Shows (6f): read-only; the shows' folders are never changed ----
     o = add(o, "findShows", [this](const juce::var&) {

@@ -999,6 +999,16 @@
   .scroller .folder.sel .fhead>.fh::before{box-shadow:inset 0 0 0 1px var(--accent)}
   .scroller .fhead>.lane{border-radius:10px;overflow:hidden}
   html.ap-darker .scroller{--rbg:#000}
+  /* ---- 7b: Ableton import preview ---- */
+  .cfbox.ablebox{width:min(780px,94vw);text-align:left;max-height:88vh;display:flex;flex-direction:column}
+  .ablebox .ablemode{display:flex;align-items:center;gap:10px;margin:10px 0;font-size:12.5px;color:var(--muted)}
+  .ablebox .ablelist{overflow:auto;min-height:60px;border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:4px}
+  .ablerow{padding:6px 8px;border-radius:8px} .ablerow:hover{background:rgba(255,255,255,.03)} .ablerow.off .abn,.ablerow.off .abm{opacity:.45}
+  .ablerow .abh{display:flex;align-items:center;gap:8px;font-size:13px} .ablerow .abn{font-weight:600;white-space:nowrap} .ablerow .abm{color:var(--muted);font-size:11.5px;margin-left:auto;text-align:right}
+  .ablerow .abx{width:20px;color:var(--muted)} .abw{color:var(--amber,#ffb340)} .abdup{font-size:12px;color:#c9c9cf;margin:4px 0 0 52px}
+  .abd{margin:6px 0 4px 52px;font-size:12px} .abd table{border-collapse:collapse;width:100%} .abd td{padding:2px 8px 2px 0;color:#c9c9cf} .abd td:first-child{color:var(--muted);width:44px} .abd .abo{color:var(--muted)} .abd p{margin:4px 0 0}
+  .abmiss{display:flex;align-items:center;gap:10px;margin-top:10px;font-size:12px} .abign{margin-top:8px;font-size:12px;color:var(--muted)} .abign p{margin-top:4px}
+  .abset{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12.5px} .ablebox .cfa{display:flex;align-items:center;gap:8px;margin-top:14px;justify-content:flex-end} .ablebox .abs{margin-right:auto;color:var(--muted);font-size:12px}
   .pftoast{position:fixed;left:50%;top:84px;transform:translateX(-50%);background:#0a84ff;color:#fff;font-weight:700;font-size:clamp(18px,1.5vw,30px);padding:10px 22px;border-radius:12px;z-index:950;box-shadow:0 10px 30px rgba(0,0,0,.5);pointer-events:none}
   /* ---- 6d: Settings sheet, status pill, gear ---- */
   .scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:900;display:flex;align-items:center;justify-content:center}
@@ -1199,7 +1209,7 @@ const isStereoT=(s,t)=>{ const f=(s.files||{})[t]; return f&&f.ch?f.ch===2:STERE
 // A new track's output: what a track with the same name uses elsewhere in the show, else the next free output (a free
 // odd/even pair for stereo), else Out 1–2 (Out 1 for mono).
 function defaultOuts(s,t){ let same=null; songs.forEach(x=>{ if(x!==s&&!isMidT(x,t)&&outsOf(x,t).length) same=outsOf(x,t); }); if(same) return [...same];
-  const used=new Set(); songs.forEach(x=>(x.tracks||[]).forEach(u=>{ if(x.outs&&Array.isArray(x.outs[u])) x.outs[u].forEach(o=>used.add(o)); })); const n=outCount();
+  const used=new Set(); (songs.includes(s)?songs:[...songs,s]).forEach(x=>(x.tracks||[]).forEach(u=>{ /* a song being made (7b preview) counts too */ if(x.outs&&Array.isArray(x.outs[u])) x.outs[u].forEach(o=>used.add(o)); })); const n=outCount();
   if(isStereoT(s,t)){ for(let a=1;a<n;a+=2) if(!used.has(a)&&!used.has(a+1)) return [a,a+1]; return [1,2]; }
   for(let a=1;a<=n;a++) if(!used.has(a)) return [a]; return [1]; }
 function ensureOuts(s){ s.outs=s.outs||{}; (s.tracks||[]).forEach(t=>{ if(isMidT(s,t)) delete s.outs[t]; else if(!Array.isArray(s.outs[t])) s.outs[t]=defaultOuts(s,t); }); }
@@ -3091,6 +3101,77 @@ $('mAdd').onclick=()=>{ const name=$('mName').value.trim(); if(!name){ $('mName'
   const so={id,name,key:$('mKey').value.trim()||'—',col:nextSongCol(),trans:'stop',tmap,secs:[],tracks,audio,added:Date.now()};
   snap(); normSecs(so); buildBars(so); seedMidi(so); songs.push(so); if($('mToSet').checked){ setOrder.push(id); syncSet(); }
   closeNewSong(); open.add(id); selId=id; resetModal(); refresh(); document.querySelector(`.folder[data-id="${id}"]`)?.scrollIntoView({block:'start'}); };
+
+// ======================= ABLETON (7b): import Live projects (preview, then songs in the Library) =======================
+// The app reads the .als (AbletonImport.h): songs with their tempo maps, sections, audio tracks (clips by file) and
+// MIDI tracks. Here: the songs as set.Line songs (outputs by the 6d rule), the preview dialog, adding them.
+const ABLE_MODES=[['auto','Automatic'],['ableset','AbleSet locators'],['single','One song'],['each','Every locator is a song'],['plus','Song locators start with +']];
+function ableSong(src){ const id=freshSongId(), so={id,name:src.name,key:'—',col:nextSongCol(),trans:'stop',tmap:src.tmap.map(x=>({bar:x.bar,bpm:x.bpm,sig:[...x.sig]})),
+    secs:(src.secs||[]).map(x=>({id:sid++,name:x.name,type:x.type,start:x.start,bars:x.bars,end:x.end||'continue',say:'',notes:{},tile:true})),tracks:[],audio:Math.max(1,src.seconds),added:Date.now(),files:{},clips:{},gain:{},mute:{},tcol:{},midiCfg:{},midi:{},from:'ableton'};
+  const rows=[];
+  (src.tracks||[]).forEach(t=>{ let name=t.name; if(ROLE[name]==='click'||ROLE[name]==='cues'||name==='Click'||name==='Cues') name=name+' (audio)'; while(so.tracks.includes(name)) name+=' ·';
+    so.tracks.push(name); so.tcol[name]=t.col; if(t.mute) so.mute[name]=true;
+    if(t.kind==='audio'){ if(t.file&&t.file.found) so.files[name]={path:t.file.path,src:t.file.path,copy:true}; so.clips[name]=(t.clips||[]).map(c=>({start:c.start,end:c.end,off:c.off,gain:+(+c.gain||0).toFixed(2),fi:c.fi||0,fo:c.fo||0,...(c.mute?{mute:true}:{})}));
+      if(Math.abs(t.gainDb||0)>0.01) so.gain[name]=Math.max(-60,+(+t.gainDb).toFixed(2)); }
+    else { so.midiCfg[name]={port:t.midi.port||'',ch:t.midi.ch||1,early:'0'}; so.midi[name]=(t.midi.events||[]).map(e=>({id:evId++,...e})); }
+    rows.push({t,name}); });
+  normSecs(so); buildBars(so); ensureOuts(so);
+  return {so,rows:rows.map(({t,name})=>({name,kind:t.kind,out:t.kind==='audio'?outLabel(so.outs[name]):(t.midi.port?`${t.midi.port} · Ch ${t.midi.ch}`:'No MIDI port'),stretched:!!t.stretched,missing:t.kind==='audio'&&!(t.file&&t.file.found),file:t.file}))}; }
+function ableDups(src,hashes){ const hs=(src.tracks||[]).filter(t=>t.file&&t.file.found&&hashes[t.file.path]).map(t=>hashes[t.file.path]);
+  return songs.find(s=>s.name.trim().toLowerCase()===String(src.name).trim().toLowerCase()&&Object.values(s.files||{}).some(f=>f&&f.path&&hs.some(h=>String(f.path).includes(h))))||null; }
+// The preview: songs found (tick to import), each expandable (tracks, outputs, warnings), duplicates, missing samples
+// (Locate…), what isn't imported, the audio to copy. Resolves {picks: [{i, dup}], setlist} or null (Cancel).
+function ableBox(data,ctx){ return new Promise(res=>{ const bg=document.createElement('div'); bg.className='cfbg'; bg.id='ableBox'; document.body.appendChild(bg);
+  let made=[], picks={}, dup={}, open=new Set(), mkSet=data.songs.length>1;
+  const sizeOf=()=>{ const seen=new Set(); let b=0; data.songs.forEach((s,i)=>{ if(!picks[i]||dup[i]==='skip') return; (s.tracks||[]).forEach(t=>{ if(t.file&&t.file.found&&!seen.has(t.file.path)){ seen.add(t.file.path); b+=t.file.bytes||0; } }); }); return b; };
+  const mb=b=>b>=1e9?(b/1e9).toFixed(1)+' GB':Math.max(0.1,b/1e6).toFixed(b<1e7?1:0)+' MB';
+  const draw=()=>{ made=data.songs.map(ableSong); data.songs.forEach((s,i)=>{ if(picks[i]===undefined) picks[i]=true; const d=ctx.dups[i]; if(dup[i]===undefined) dup[i]=d?'skip':'new'; });
+    const miss=[...new Set(data.songs.flatMap(s=>(s.tracks||[]).filter(t=>t.kind==='audio'&&!(t.file&&t.file.found)).map(t=>t.file&&t.file.name).filter(Boolean)))];
+    bg.innerHTML=`<div class="cfbox ablebox" role="dialog" aria-label="Import Ableton project"><b>Import “${esc(data.project)}”</b><p>${esc(data.live||'Ableton Live')} · ${data.songs.length} song${data.songs.length===1?'':'s'} found. Nothing is copied until you press Import, and the project isn’t changed.</p>
+      <div class="ablemode"><span>Songs from</span><select id="abMode">${ABLE_MODES.map(([k,l])=>`<option value="${k}" ${k===(ctx.mode||'auto')?'selected':''}>${l}${k==='auto'?` (${(ABLE_MODES.find(x=>x[0]===data.mode)||[0,data.mode])[1]})`:''}</option>`).join('')}</select></div>
+      <div class="ablelist">${data.songs.map((s,i)=>{ const m=made[i], warn=(s.warnings||[]), d=ctx.dups[i], first=s.tmap[0];
+        return `<div class="ablerow ${picks[i]?'':'off'}"><div class="abh"><input type="checkbox" data-pick="${i}" ${picks[i]?'checked':''}><button class="abx" data-open="${i}">${open.has(i)?'▾':'▸'}</button><span class="abn">${esc(s.name)}</span>
+          <span class="abm">${fmt(s.seconds)} · ${+(+first.bpm).toFixed(2)} BPM${s.tmap.length>1?' (changes)':''} · ${first.sig.join('/')} · ${s.secs.length} section${s.secs.length===1?'':'s'} · ${s.audioTracks} audio · ${s.midiTracks} MIDI${warn.length?` · <span class="abw">${warn.length} note${warn.length===1?'':'s'}</span>`:''}</span></div>
+          ${d?`<div class="abdup">Already in the library as “${esc(d.name)}” (same audio): <select data-dup="${i}"><option value="skip" ${dup[i]==='skip'?'selected':''}>Skip</option><option value="version" ${dup[i]==='version'?'selected':''}>Import as a new version</option><option value="new" ${dup[i]==='new'?'selected':''}>Import as a new song</option></select></div>`:''}
+          ${open.has(i)?`<div class="abd"><table>${m.rows.map(r=>`<tr><td>${r.kind==='midi'?'MIDI':'Audio'}</td><td>${esc(r.name)}</td><td class="abo">${esc(r.out)}</td><td>${r.missing?'<span class="abw">missing: '+esc(r.file&&r.file.name||'')+'</span>':r.stretched?'<span class="abw">time-stretched in Ableton</span>':''}</td></tr>`).join('')}</table>${warn.map(w=>`<p class="abw">${esc(w)}</p>`).join('')}</div>`:''}</div>`; }).join('')}</div>
+      ${miss.length?`<div class="abmiss"><span class="abw">${miss.length} sample${miss.length===1?'':'s'} not found: ${esc(miss.slice(0,4).join(', '))}${miss.length>4?'…':''}</span><button class="btn line" id="abLocate">Locate…</button></div>`:''}
+      ${(data.ignored||[]).length?`<details class="abign"><summary>Not imported: ${(data.ignored||[]).length} device${data.ignored.length===1?'':'s'}, plug-in${data.ignored.length===1?'':'s'} and return track${data.ignored.length===1?'':'s'} (set.Line plays audio and MIDI only)</summary><p>${esc(data.ignored.join(' · '))}</p></details>`:''}
+      <label class="abset"><input type="checkbox" id="abSet" ${mkSet?'checked':''}> Also create a setlist from this project (“${esc(data.project)}”, in arrangement order)</label>
+      <div class="cfa"><span class="abs" id="abSize">Audio to copy: ${mb(sizeOf())}</span><button class="btn line" id="abNo">Cancel</button><button class="btn pri" id="abGo" ${Object.values(picks).some(Boolean)?'':'disabled'}>Import</button></div></div>`;
+    bg.querySelectorAll('[data-pick]').forEach(c=>c.onchange=()=>{ picks[+c.dataset.pick]=c.checked; draw(); });
+    bg.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>{ const i=+b.dataset.open; open.has(i)?open.delete(i):open.add(i); draw(); });
+    bg.querySelectorAll('[data-dup]').forEach(s=>s.onchange=()=>{ dup[+s.dataset.dup]=s.value; draw(); });
+    $('abSet').onchange=e=>{ mkSet=e.target.checked; };
+    $('abMode').onchange=async e=>{ const d2=await ctx.remode(e.target.value); if(d2){ data=d2; ctx.mode=e.target.value; picks={}; dup={}; open=new Set(); draw(); } };
+    if($('abLocate')) $('abLocate').onclick=async()=>{ const d2=await ctx.locate(miss); if(d2){ data=d2; draw(); } };
+    $('abNo').onclick=()=>{ bg.remove(); res(null); };
+    $('abGo').onclick=()=>{ bg.remove(); res({data,picks:data.songs.map((s,i)=>({i,dup:dup[i]})).filter(p=>picks[p.i]&&p.dup!=='skip'),setlist:mkSet}); }; };
+  draw(); }); }
+// Progress while the audio is copied (Cancel stops it; nothing is added then)
+function ableProgress(done,total,name,onCancel){ let bg=$('ablePr'); if(done<0){ if(bg) bg.remove(); return; }
+  if(!bg){ bg=document.createElement('div'); bg.className='cfbg'; bg.id='ablePr'; bg.innerHTML=`<div class="cfbox"><b>Importing from Ableton</b><p id="abPrT"></p><div style="height:6px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden;margin:10px 0"><div id="abPrB" style="height:100%;width:0;background:var(--cyan,#64d2ff)"></div></div><div class="cfa"><button class="btn line" id="abPrX">Cancel</button></div></div>`; document.body.appendChild(bg); $('abPrX').onclick=()=>{ onCancel&&onCancel(); $('abPrX').disabled=true; $('abPrX').textContent='Cancelling…'; }; }
+  $('abPrT').textContent=`Copying audio ${Math.min(done+1,total)} of ${total}: ${name||''}`; $('abPrB').style.width=(total?100*done/total:0)+'%'; }
+// Adds the chosen songs (file refs already in the Library): new songs, or a new version of the song that has the same
+// audio. Returns {added: [ids], versions: [[songId, verName]], setlist}.
+function ableAdd(data,picks,refs,infos,setlist){ snap(); const added=[], versions=[], order=[];
+  picks.forEach(({i,dup})=>{ const src=data.songs[i], {so}=ableSong(src);
+    Object.entries(so.files).forEach(([t,f])=>{ const inf=infos[f.src]||{}; so.files[t]={path:refs[f.src]||f.src,ch:inf.channels,rate:inf.rate,frames:inf.frames,len:inf.seconds,fmt:inf.format,copy:true}; });
+    const ex=dup==='version'?songs.find(s=>s.name.trim().toLowerCase()===so.name.trim().toLowerCase()&&JSON.stringify(s.tmap.map(x=>[x.bar,+(+x.bpm).toFixed(4),x.sig]))===JSON.stringify(so.tmap.map(x=>[x.bar,+(+x.bpm).toFixed(4),x.sig]))):null;
+    if(ex){ // same audio and tempo map: this arrangement as a version of it (its clips on the tracks that play the same file)
+      const byFile={}; Object.entries(ex.files||{}).forEach(([t,f])=>{ if(f&&f.path) byFile[f.path]=t; });
+      const st={secs:so.secs,clips:{},gain:{...(ex.gain||{})},mute:{...(ex.mute||{})},solo:{},muse:{...(ex.muse||{})},trans:ex.trans,ck:ex.ck||[],cues:ex.cues||[]};
+      ex.tracks.forEach(t=>{ if(ex.files&&ex.files[t]) st.clips[t]=[]; });
+      Object.entries(so.files).forEach(([t,f])=>{ const et=byFile[f.path]; if(et) st.clips[et]=so.clips[t]||[]; });
+      const v={id:'v'+verSeq++,name:'From Ableton',custom:true,state:JSON.parse(JSON.stringify(st))}; versOf(ex).push(v); versions.push([ex.id,v.name]); order.push(ex.id); return; }
+    songs.push(so); added.push(so.id); order.push(so.id); open.add(so.id); });
+  let L=null; if(setlist&&order.length){ syncSet(); L={id:'L'+setSeq++,name:data.project,order:[...order],col:SETCOLS[setlists.length%SETCOLS.length]}; setlists.push(L); if(!playing){ curSet=L.id; setOrder=L.order; } }
+  refresh(); return {added,versions,setlist:L?L.name:''}; }
+// The summary: what came in, what didn't; Show in Library opens the first song
+function ableSummary(lines,logPath,firstId){ const bg=document.createElement('div'); bg.className='cfbg';
+  bg.innerHTML=`<div class="cfbox ablebox"><b>Imported from Ableton</b><div class="ablelist" style="padding:10px 12px;font-size:12.5px;line-height:1.55;white-space:pre-wrap;color:#c9c9cf">${esc(lines.slice(1).join(String.fromCharCode(10)))}</div>${logPath?`<p style="margin-top:8px">Saved to ${esc(logPath)}</p>`:''}<div class="cfa"><button class="btn line" id="abSumOk">Close</button><button class="btn pri" id="abSumShow">Show in Library</button></div></div>`;
+  document.body.appendChild(bg); $('abSumOk').onclick=()=>bg.remove();
+  $('abSumShow').onclick=()=>{ bg.remove(); if(perfOn) setPerform(false); if(firstId){ open.add(firstId); select(firstId,true); refresh(); document.querySelector(`.folder[data-id="${firstId}"]`)?.scrollIntoView({block:'start'}); } }; }
+window.SLAble={ song:ableSong, dups:ableDups, box:ableBox, progress:ableProgress, add:ableAdd, summary:ableSummary };
 
 // ======================= BAND (6g): song fields, curfew, MIDI sync point, Soundcheck, Vamp, the band's screens =======================
 // Song fields: definitions in the library (FIELDS, Settings › Band), values per song (s.fields) and per version
