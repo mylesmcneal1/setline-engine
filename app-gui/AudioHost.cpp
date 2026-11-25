@@ -446,7 +446,7 @@ juce::var errorObj(const juce::String& msg, const juce::String& code = {})
 juce::var AudioHost::loadSong(const juce::var& payload)
 {
     auto* d = dm.getCurrentAudioDevice();
-    if (d == nullptr) return errorObj("No audio device is open. Choose one on the Outputs & MIDI page.", "nodevice");
+    if (d == nullptr) return errorObj("No audio device is open. Choose one in Settings › Audio.", "nodevice");
     const double sr = d->getCurrentSampleRate();
     const int outs = d->getActiveOutputChannels().countNumberOfSetBits();
 
@@ -494,7 +494,7 @@ juce::var AudioHost::transport(const juce::var& req)
     if (cmd == "stop") {
         eng.stop();
     } else if (cmd == "play") {
-        if (dm.getCurrentAudioDevice() == nullptr) return errorObj("No audio device is open. Choose one on the Outputs & MIDI page.", "nodevice");
+        if (dm.getCurrentAudioDevice() == nullptr) return errorObj("No audio device is open. Choose one in Settings › Audio.", "nodevice");
         if (! loaded || loadedEpoch != deviceEpoch) return errorObj("Load the song first.", "reload");
         const int bar = juce::jmax(1, (int) req.getProperty("fromBar", 1));
         const double beat = juce::jmax(1.0, (double) req.getProperty("fromBeat", 1.0));
@@ -552,7 +552,8 @@ void AudioHost::applyLevels()
     for (auto& [name, lv] : levels) anySolo |= lv.solo;
     for (auto& [name, id] : trackIds) {
         const auto& lv = levels[name];
-        const bool off = lv.mute || (anySolo && ! lv.solo) || lv.db <= -60.0f;
+        // a MIDI track has M only: soloing audio never stops the MIDI (a guitar rig, lights)
+        const bool off = id <= -200 ? lv.mute : lv.mute || (anySolo && ! lv.solo) || lv.db <= -60.0f;
         eng.setTrackLevel(id, lv.db, off);
     }
 }
@@ -617,6 +618,10 @@ void AudioHost::timerCallback()
         for (int c = 0; c < n; ++c) { const float p = eng.takeOutputPeak(c); any |= p > 0.0f; peaks.add(p); }
         auto* o = new juce::DynamicObject();
         o->setProperty("peaks", peaks);
+        // each track after its fader (the header meters), by track name
+        auto* tr = new juce::DynamicObject();
+        for (auto& [name, id] : trackIds) if (id > -200 && name.isNotEmpty()) { const float p = eng.takeTrackPeak(id); any |= p > 0.0f; tr->setProperty(name, p); }
+        o->setProperty("tracks", juce::var(tr));
         emit("meters", juce::var(o));
         metersLive = any || playing;
     }

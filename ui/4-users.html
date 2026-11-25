@@ -117,11 +117,9 @@
   <button class="ibtn on" id="tglL" title="Users  ["><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M6 2.5v11"/></svg></button>
   <button class="ibtn on" id="tglR" title="Widgets  ]"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M10 2.5v11"/></svg></button>
   <nav class="tabs">
-    <a href="1-arrange.html">Edit</a>
-    <a href="3-satellite.html?mac" title="This computer’s own canvas, full window">Perform</a>
-    <a href="2-routing.html">Outputs &amp; MIDI</a>
-    <a href="3-satellite.html">Satellite</a>
-    <a class="on" href="4-users.html">Users &amp; Canvases</a>
+    <a href="1-arrange.html">Show</a>
+    <a href="3-satellite.html?mac" title="This computer’s own screen, full window">Perform</a>
+    <a class="on" href="5-band.html" title="Back to the band’s screens">Band</a>
   </nav>
   <div class="sp"><span><span class="dot"></span>setline.local</span><span id="onlineCount"></span></div>
 </header>
@@ -159,6 +157,7 @@
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let USERS=SL.load(), cur=USERS[0], sel=null;
+{ const want=new URLSearchParams(location.search).get('u'); const f=want&&USERS.find(u=>u.id===want); if(f) cur=f; } // opened from Band › Customize layout…
 const COLORS=['#f5a524','#22c3a6','#a46bff','#5aa9ff','#ff5fa2','#3ddc84','#ff9f43','#7d8696'];
 const SIZE={land:{cols:12,rows:8,W:780,H:520},port:{cols:6,rows:10,W:360,H:600},mac:{cols:16,rows:10,W:832,H:520}};
 
@@ -212,7 +211,7 @@ const PV={
   transport:()=>`<span style="background:var(--green);color:#03200e;padding:5px 14px;border-radius:7px">▶ Play</span>`,
   exitloop:()=>`<span style="color:#ff5fa2">⟲ Exit loop</span>`, jumpmode:()=>`<span style="font-size:11px;color:var(--muted)">Next bar · Section end · Now</span>`,
   upnext:()=>`<span style="font-size:12px">2. Glasshouse ›</span>`, setlist:()=>`<span style="font-size:11px;color:var(--muted);line-height:1.6;text-align:left">1. Neon Rivers<br>2. Glasshouse<br>3. Low Tide…</span>`,
-  mutes:()=>`<span style="font-size:10px;color:var(--muted)">Drums Bass Keys Gtrs BGVs Synth</span>`, patches:()=>`<span style="font:10px var(--mono);color:var(--blue)">QC Scene A · Axe Scene 1</span>`,
+  mutes:()=>`<span style="font-size:10px;color:var(--muted)">Drums Bass Keys Gtrs BGVs Synth</span>`, patches:()=>`<span style="font:10px var(--mono);color:var(--blue)">Rig Clean · Lights Scene 4</span>`,
   beats:()=>`<div class="bm"><i></i><i></i><i></i><i></i></div>`,
   countdown:()=>`<div class="cd"><small>NOW</small><b>Intro</b><b style="font-size:26px;font-family:var(--mono)">8</b></div>`,
   next:()=>`<span style="font-size:11px;color:var(--muted)">NEXT</span> Verse 1`,

@@ -125,7 +125,7 @@ MappedSong mapSong(const juce::var& payload, double sr, int numOutputs,
             const auto role = roleOf(t);
             if (role == "click") {
                 const auto o = outsFor(t);
-                if (o.empty()) warn(quoted(t) + " isn't routed to an output (Outputs & MIDI page), so it won't be heard.");
+                if (o.empty()) warn(quoted(t) + " has no output (choose one on its track header), so it won't be heard.");
                 if (t == "Click" && ! haveClick) {
                     haveClick = true;
                     def.clickOuts = o;
@@ -140,7 +140,7 @@ MappedSong mapSong(const juce::var& payload, double sr, int numOutputs,
                 out.engineTrack[t] = Engine::CueTrack;
                 if (def.cueOuts.empty()) {
                     def.cueOuts = outsFor(t);
-                    if (def.cueOuts.empty() && s["cues"].size() > 0) warn("The cues aren't routed to an output (Outputs & MIDI page), so they won't be heard.");
+                    if (def.cueOuts.empty() && s["cues"].size() > 0) warn("The Cues track has no output (choose one on its header), so the cues won't be heard.");
                 }
             } else {
                 const auto f = s["files"][tid];
@@ -156,7 +156,7 @@ MappedSong mapSong(const juce::var& payload, double sr, int numOutputs,
                 d.name = t.toStdString();
                 d.source = std::make_shared<FileSource>(reader);
                 d.outs = outsFor(t);
-                if (d.outs.empty()) warn(quoted(t) + " isn't routed (Outputs & MIDI page), so it plays nowhere.");
+                if (d.outs.empty()) warn(quoted(t) + " has no output (choose one on its track header), so it plays nowhere.");
                 // Clips in seconds on the song's timeline (Edit page: s.clips[track]). None stored yet: the
                 // page's default, the whole file from 0 up to the end of the song.
                 std::vector<ClipDef> clips;
@@ -253,11 +253,16 @@ MappedSong mapSong(const juce::var& payload, double sr, int numOutputs,
     }
 
     // ---- MIDI: events of the alternate in use, inside its regions ----
+    int midiK = -1;
     if (auto* ts = tracks.getArray())
         for (auto& tv : *ts) {
             const auto t = tv.toString();
             const juce::Identifier tid(t.isEmpty() ? "_" : t);
             if (! midiCfg.isObject() || ! midiCfg.hasProperty(tid)) continue;
+            const int k = ++midiK; // this MIDI track: its events carry k, so its M button mutes them live
+            out.engineTrack[t] = Engine::midiTrackId(k);
+            const size_t first = def.midi.size();
+            struct Tag { std::vector<MidiEventDef>& m; size_t from; int k; ~Tag() { for (size_t i = from; i < m.size(); ++i) m[i].track = k; } } tag { def.midi, first, k };
             const auto cfg = midiCfg[tid];
             const int ch = juce::jlimit(1, 16, toInt(cfg["ch"], 1)) - 1;
             const auto portName = cfg["port"].toString();
@@ -308,7 +313,9 @@ MappedSong mapSong(const juce::var& payload, double sr, int numOutputs,
                     addMsg(def, port, bar, beat, earlySec, { 0xC0 | ch, b7(p % 128) }, label);
                 } else if (kind == "axScene") {
                     addMsg(def, port, bar, beat, earlySec, { 0xB0 | ch, 34, b7(toInt(e["scene"], 1) - 1) }, label);
-                } else if (kind == "pc") {
+                } else if (kind == "pc") { // Program Change, after an optional Bank Select (CC0 MSB, CC32 LSB), any device
+                    if (e.hasProperty("msb")) addMsg(def, port, bar, beat, earlySec, { 0xB0 | ch, 0, b7(toInt(e["msb"], 0)) }, label);
+                    if (e.hasProperty("lsb")) addMsg(def, port, bar, beat, earlySec, { 0xB0 | ch, 32, b7(toInt(e["lsb"], 0)) }, label);
                     addMsg(def, port, bar, beat, earlySec, { 0xC0 | ch, b7(toInt(e["pc"], 0)) }, label);
                 } else if (kind == "cc") {
                     addMsg(def, port, bar, beat, earlySec, { 0xB0 | ch, b7(toInt(e["cc"], 0)), b7(toInt(e["val"], 0)) }, label);

@@ -23,9 +23,10 @@ interface Page {
   // step 2: spoken cues
   cueCfg(s: Song): CueVoice; cueVoiceAll(): CueVoice; setVoices(list: VoiceInfo[]): void;
   setDirty(d: boolean): void; freshShow(): void;
+  setOutputs(device: string, names: string[]): void; routeLog(): string[];
+  openSettings(tab?: string): void; settingsChanged(): void;
   setListen(st: ListenState, what?: string): void;
   nameBox(o: { title: string; value: string; where: string }, done: (r: { name?: string; elsewhere?: boolean } | null) => void): void;
-  prefsBox(f: Folders, act: (a: string) => void): void;
   copyStatus(p: { done: number; total: number; files?: number; filesDone?: number; finished: boolean; error?: string }): void;
   recFor(s: Song, text: string): string; wordFiles(): { path: string; copy?: boolean }[];
   addWords(s: Song, list: { name: string; ref: string }[], only: boolean): void;
@@ -51,101 +52,20 @@ interface FileResult { name?: string; path?: string; text?: string; cancelled?: 
 interface Stats { running: boolean; xruns: number | null; underruns: number; midiSent: number; midiDropped: number; midiLateMaxMs: number; cpu: number; callbackMaxMs: number; budgetMs: number }
 interface Setup { current: { driver: string; device: string; rate: number; buffer: number; latencyMs: number; outputs?: string[] } | null; error?: string }
 
-declare global { interface Window { SLPage?: Page; SLE?: typeof SLE; SLR?: typeof SLR; SLW?: typeof SLW; SLC?: typeof SLC } }
+interface Routes { setOverride(s: Song, t: string, o: number[] | null): void; label(s: Song, t: string): string; outsOf(s: Song, t: string): number[] }
+declare global { interface Window { SLPage?: Page; SLE?: typeof SLE; SLR?: Routes; SLW?: typeof SLW; SLC?: typeof SLC } }
 
-// ---------------------------------------------------------------- output routing (by track name)
-// Each distinct track name is routed once for the whole show: every song's track with that name follows
-// it. A song can override a track's outputs for that song only (s.outs[track]). A name with no route
-// plays nowhere ("not routed") until it's routed on the Outputs & MIDI page. Click and cues are tracks
-// like any other. Stored in the session as routing: {v: 2, tracks: {name: [outputs, 1-based]}}.
-interface Routing { v: 2; tracks: Record<string, number[]> }
-let route: Routing = { v: 2, tracks: {} };
-let outNames: string[] = [];
-
-// Step 1 routed fixed track types (roles); these were its defaults.
-const OLD_DEFAULTS: Record<string, number[]> = {
-  click: [1], cues: [2], drums: [3, 4], bass: [5], keys: [7, 8], guitars: [9, 10], bgvs: [11, 12], synth: [13, 14], fx: [15],
-};
-const STEREO_ROLES = new Set(["drums", "keys", "guitars", "bgvs", "synth", "strings"]);
+// ---------------------------------------------------------------- outputs (6d)
+// Every track has its own output in its song (s.outs[track], 1-based outputs); the page owns that model and
+// migrates shows saved with the old show-wide routing (1-arrange.html, migrateRouting).
 const isMidiTrack = (s: Song, t: string) => !!(s.midiCfg && s.midiCfg[t]);
-
-// Every routable (non-MIDI) track name in the session, in order of first appearance.
-function trackNames(): { name: string; songs: number; ch: number; overrides: number }[] {
-  const m = new Map<string, { name: string; songs: number; ch: number; overrides: number }>();
-  for (const s of page().songs)
-    for (const t of s.tracks) {
-      if (isMidiTrack(s, t)) continue;
-      let e = m.get(t);
-      if (!e) { e = { name: t, songs: 0, ch: 0, overrides: 0 }; m.set(t, e); }
-      e.songs++;
-      const f = (s.files || {})[t];
-      e.ch = Math.max(e.ch, f && f.ch ? f.ch : STEREO_ROLES.has(page().roleOf(t)) ? 2 : 1);
-      if (s.outs && Array.isArray(s.outs[t])) e.overrides++;
-    }
-  return [...m.values()];
-}
-// Old type-based routing {role: outputs} -> {name: outputs}, through each name's role.
-function migrate(old: Record<string, unknown> | null | undefined): Routing {
-  const src = old && typeof old === "object" ? old : OLD_DEFAULTS;
-  const r: Routing = { v: 2, tracks: {} };
-  for (const { name } of trackNames()) {
-    const o = src[page().roleOf(name)];
-    if (Array.isArray(o) && o.length) r.tracks[name] = o.map(Number);
-  }
-  return r;
-}
-function oldLocalRouting(): Record<string, unknown> | null {
-  try { const o = JSON.parse(localStorage.getItem("setline.routing") || "null"); return o && !o.v ? o : null; } catch { return null; }
-}
-function loadRouting(o: any) {
-  route = o && o.v === 2 && o.tracks && typeof o.tracks === "object" ? { v: 2, tracks: { ...o.tracks } } : migrate(o || oldLocalRouting());
-}
-// The outputs track t plays on in song s ([] = not routed).
-function outsOf(s: Song, t: string): number[] {
-  const o = s.outs && Array.isArray(s.outs[t]) ? s.outs[t] : route.tracks[t];
-  return Array.isArray(o) ? o : [];
-}
-// "Line 3-4", "Out 5", "ADAT 1-2 + Line 7"
-function outLabel(outs: number[]): string {
-  const sorted = [...outs].sort((a, b) => a - b), runs: number[][] = [];
-  for (const o of sorted) { const r = runs[runs.length - 1]; if (r && o === r[r.length - 1] + 1) r.push(o); else runs.push([o]); }
-  const nm = (o: number) => outNames[o - 1] || `Out ${o}`;
-  return runs.map((r) => {
-    const a = nm(r[0]), b = nm(r[r.length - 1]);
-    if (r.length === 1) return a;
-    const ma = a.match(/^(.*?)\s*(\d+)$/), mb = b.match(/^(.*?)\s*(\d+)$/);
-    return ma && mb && ma[1] === mb[1] ? `${ma[1]} ${ma[2]}-${mb[2]}` : `${a} – ${b}`;
-  }).join(" + ");
-}
-const SLR = {
-  label: (s: Song, t: string) => { const o = outsOf(s, t); return o.length ? outLabel(o) : ""; },
-  isOverride: (s: Song, t: string) => !!(s.outs && Array.isArray(s.outs[t])),
-  // Choices for the inspector's per-song menu: the show's routing, then each output and stereo pair.
-  choices(s: Song, t: string) {
-    const show = route.tracks[t] || [], cur = SLR.isOverride(s, t) ? JSON.stringify(s.outs[t]) : "";
-    const list = [{ v: "", l: `Show: ${show.length ? outLabel(show) : "not routed"}`, on: cur === "" }];
-    const n = Math.max(outNames.length, ...show, ...(s.outs?.[t] || []), 2);
-    const stereo = ((s.files || {})[t]?.ch || (STEREO_ROLES.has(page().roleOf(t)) ? 2 : 1)) === 2;
-    const add = (o: number[]) => { const v = JSON.stringify(o); list.push({ v, l: `This song: ${outLabel(o)}`, on: v === cur }); };
-    if (stereo) for (let i = 1; i < n; i += 2) add([i, i + 1]);
-    for (let i = 1; i <= n; i++) add([i]);
-    add([]);
-    list[list.length - 1].l = "This song: nowhere";
-    if (cur && !list.some((c) => c.on)) list.push({ v: cur, l: `This song: ${outLabel(s.outs[t])}`, on: true });
-    return list;
-  },
-  setOverride(s: Song, t: string, outs: number[] | null) {
-    if (outs) (s.outs || (s.outs = {}))[t] = outs;
-    else if (s.outs) { delete s.outs[t]; if (!Object.keys(s.outs).length) delete s.outs; }
-    loadedKey = null;
-  },
-};
-window.SLR = SLR;
+const outsOf = (s: Song, t: string): number[] => (window.SLR ? window.SLR.outsOf(s, t) : []);
 
 const page = () => window.SLPage!;
 let loadedKey: string | null = null, loadedSongId: string | null = null, warnedKey: string | null = null, loopKey = "";
 let busy = false, pending: { s: Song; t: number } | null = null;
 let peaks: number[] = [];
+let trackPeaks: Record<string, number> = {}; // each track after its fader (the engine meters every track)
 
 // ---------------------------------------------------------------- positions (page seconds <-> bar/beat)
 function toBarBeat(s: Song, t: number): { bar: number; beat: number } {
@@ -271,13 +191,10 @@ const SLE = {
       SL.call("setTrackLevel", { tracks }).catch(() => {});
     });
   },
-  // Meter level for a track: the peak of the outputs it's routed to (the engine meters outputs).
+  // Meter level for a track: its own peak after the fader, as the engine played it.
   trackLevel(s: Song, t: string): number {
     if (s.id !== loadedSongId) return 0;
-    const outs = outsOf(s, t);
-    let v = 0;
-    for (const o of outs) v = Math.max(v, peaks[o - 1] || 0);
-    return v;
+    return trackPeaks[t] || 0;
   },
   save: (as: boolean) => saveSession(as),
   open: () => openSession(),
@@ -289,7 +206,8 @@ const SLE = {
   preferences: () => preferences(),
   openBackup: () => openBackup(),
   cleanUpAudio: () => cleanUpAudio(),
-  listenMenu: (at: { clientX: number; clientY: number }) => listenMenu(at),
+  // Settings (6d) asks the app directly: audio setup, listen devices, MIDI outputs, folders...
+  call: <T = any>(name: string, args?: unknown) => SL.call<T>(name, args),
   fileMenu: (at: { clientX: number; clientY: number }) => fileMenu(at),
   // ---- step 2: stems ----
   pickStems: () => pickStems(),
@@ -309,22 +227,27 @@ function onTransport(st: Transport) {
 }
 
 // ---------------------------------------------------------------- status chip
-let setupText = "", setupTip = "";
+// One status pill (6d): "iD14 · 48k · 128" with a dot that turns red on a dropout or when the interface is gone.
+// Clicking it opens Settings › Audio.
+let setupText = "", setupTip = "", lastProblems = -1, problemSince = 0;
 function showStatus(stats?: Stats) {
   const chip = document.getElementById("statusChip"), dot = document.getElementById("statusDot"), txt = document.getElementById("statusTxt");
   if (!chip || !dot || !txt) return;
   txt.textContent = setupText || "No audio device";
-  let tip = setupTip, colour = setupText ? "var(--green)" : "var(--red, #ff4d5e)";
+  let tip = setupTip, red = !setupText;
   if (stats) {
     const problems = (stats.xruns || 0) + stats.underruns + stats.midiDropped;
-    if (setupText && problems > 0) colour = "var(--amber, #f5a524)";
-    if (setupText && !stats.running) colour = "var(--red, #ff4d5e)";
-    tip += `\nDSP load ${Math.round(stats.cpu)}% · worst callback ${stats.callbackMaxMs.toFixed(2)} of ${stats.budgetMs.toFixed(2)} ms`
+    if (lastProblems >= 0 && problems > lastProblems) problemSince = Date.now(); // a new dropout: red for a while
+    lastProblems = problems;
+    if (Date.now() - problemSince < 30000) red = true;
+    if (setupText && !stats.running) red = true;
+    tip += `\nAudio load ${Math.round(stats.cpu)}% · worst callback ${stats.callbackMaxMs.toFixed(2)} of ${stats.budgetMs.toFixed(2)} ms`
          + `\nDropouts ${stats.xruns === null ? "n/a" : stats.xruns} · disk underruns ${stats.underruns}`
-         + `\nMIDI ${stats.midiSent} sent, ${stats.midiDropped} dropped, latest ${stats.midiLateMaxMs.toFixed(2)} ms late at most`;
+         + `\nMIDI ${stats.midiSent} sent, ${stats.midiDropped} dropped`;
   }
-  chip.title = tip;
-  dot.style.background = colour;
+  chip.title = tip + "\nClick for Settings › Audio";
+  dot.style.background = red ? "var(--red, #ff453a)" : "var(--green, #30d158)";
+  chip.classList.toggle("bad", red);
 }
 // ---------------------------------------------------------------- listen on this computer
 // The show's interface output names, remembered while it's open (when listening, the device is the computer's).
@@ -355,39 +278,19 @@ async function setListen(req: Partial<ListenState>) {
   loadedKey = null; // mapped again for the new outputs
   onSetup(await SL.call<Setup>("getAudioSetup"));
 }
-async function listenMenu(at: { clientX: number; clientY: number }) {
-  const devices = await SL.call<{ driver: string; device: string; default: boolean; rateOk: boolean }[]>("listenDevices", { rate: sessionRate || deviceRate || 48000 });
-  // the show outputs the songs use, as pairs / singles
-  const groups = new Map<string, number[]>();
-  for (const s of page().songs) for (const t of s.tracks) { const o = outsOf(s, t); if (o.length) groups.set(o.join("-"), [...o].sort((a, b) => a - b)); }
-  const outs = [...groups.values()].sort((a, b) => a[0] - b[0]);
-  const tick = (b: boolean | undefined) => (b !== false ? "✓" : "");
-  const same = (a?: number[], b?: number[]) => JSON.stringify(a || []) === JSON.stringify(b || []);
-  page().menu(at, [
-    { label: "Play on", icon: "", dis: true, act: () => {} },
-    ...devices.map((d) => ({ label: `${d.device}${d.rateOk ? "" : " (not at the show's rate)"}`, icon: listen.on && listen.device === d.device ? "●" : "", dis: !d.rateOk,
-      act: () => { setListen({ on: true, driver: d.driver, device: d.device }); } })),
-    "-",
-    { label: "Listen to", icon: "", dis: true, act: () => {} },
-    { label: "Everything (folded to stereo)", icon: listen.mode !== "output" ? "●" : "", act: () => { setListen({ on: true, mode: "everything" }); } },
-    ...outs.map((o) => ({ label: showOutLabel(o) + " only", icon: listen.mode === "output" && same(listen.output, o) ? "●" : "", act: () => { setListen({ on: true, mode: "output", output: o }); } })),
-    "-",
-    { label: "Click", icon: tick(listen.click), act: () => { setListen({ click: listen.click === false }); } },
-    { label: "Cues", icon: tick(listen.cues), act: () => { setListen({ cues: listen.cues === false }); } },
-    { label: "Send MIDI", icon: tick(listen.midi), act: () => { setListen({ midi: listen.midi === false }); } },
-  ]);
-}
-
 function onSetup(s: Setup) {
   const c = s.current;
   deviceRate = c ? c.rate : null;
-  outNames = c?.outputs || [];
+  page().setOutputs(c ? c.device : "", c?.outputs || []);
   if (!listen.on && c?.outputs?.length) { showOutNames = c.outputs; localStorage.setItem("setline.showOutputNames", JSON.stringify(showOutNames)); }
   page().rerender();
-  setupText = c ? `${String(Math.round(c.rate / 100) / 10).replace(/\.0$/, "")} kHz · ${c.buffer}` : "";
+  // "Audient USB Audio ASIO Driver" -> "Audient USB Audio": the name without the driver words, kept short
+  const short = (d: string) => d.replace(/\s*\((ASIO|WASAPI|Windows Audio|CoreAudio)[^)]*\)\s*$/i, "").replace(/\s+(ASIO\s+)?Driver$/i, "").replace(/\s+ASIO$/i, "").slice(0, 22);
+  setupText = c ? `${short(c.device)} · ${String(Math.round(c.rate / 100) / 10).replace(/\.0$/, "")}k · ${c.buffer}` : "";
   setupTip = c ? `${c.device} (${c.driver.replace(/^Windows Audio/, "WASAPI")}) · ${c.rate / 1000} kHz · ${c.buffer} samples · ${c.latencyMs.toFixed(1)} ms output latency`
-               : s.error || "No audio device. Choose one on the Outputs & MIDI page.";
+               : s.error || "No audio device. Choose one in Settings › Audio.";
   showStatus();
+  page().settingsChanged();
 }
 
 // ---------------------------------------------------------------- sessions
@@ -412,7 +315,7 @@ function tidy(v: any): any {
 let sessionRate: number | null = null;
 let deviceRate: number | null = null;
 const rateForImport = () => sessionRate || deviceRate || 48000;
-const sessionText = () => JSON.stringify(tidy({ format: "setline-session", version: 1, ...(sessionRate ? { rate: sessionRate } : {}), ...page().sessionData(), routing: route }), null, 1);
+const sessionText = () => JSON.stringify(tidy({ format: "setline-session", version: 2, ...(sessionRate ? { rate: sessionRate } : {}), ...page().sessionData() }), null, 1);
 let lastReported = "";
 
 // ---------------------------------------------------------------- spoken cues (step 2)
@@ -449,7 +352,7 @@ const SLC = {
   async preview(s: Song, text: string) {
     const t = cuesTrack(s), c = page().cueCfg(s);
     const outs = t ? outsOf(s, t) : [];
-    if (!outs.length) { page().toast("The Cues track isn't routed (Outputs & MIDI page), so a preview can't be heard"); return; }
+    if (!outs.length) { page().toast("The Cues track has no output (choose one on its header), so a preview can't be heard"); return; }
     const r = await SL.call<{ ok?: boolean; error?: string; fellBack?: boolean }>("previewCue",
       { text, voice: c.voice || "", name: c.name || "", speed: c.speed || 1, pron: page().pron(), rec: page().recFor(s, text), outs, db: t ? page().gainOf(s, t) : 0 });
     if (r.error) page().toast(r.error);
@@ -482,9 +385,7 @@ const SLC = {
 };
 
 function remember(text = sessionText()) {
-  // tracks: what the Outputs & MIDI page lists (it's a separate page; it edits routing in this copy).
-  const tracks = trackNames().map((x) => ({ ...x, colour: page().colourOf(x.name) }));
-  try { sessionStorage.setItem("setline.session", JSON.stringify({ doc, text, tracks })); } catch {}
+  try { sessionStorage.setItem("setline.session", JSON.stringify({ doc, text })); } catch {}
   const dirty = text !== doc.savedText;
   page().setDirty(dirty);
   const key = doc.name + "|" + dirty;
@@ -497,8 +398,9 @@ function applySession(text: string) {
   if (page().playing) { SLE.stop(); page().setPlaying(false); }
   loadedKey = null; loadedSongId = null;
   sessionRate = typeof o.rate === "number" && o.rate > 0 ? o.rate : null;
-  page().loadSession(o);
-  loadRouting(o.routing); // after the songs: old type-based routing is migrated through their track names
+  page().loadSession(o); // shows saved with the old show-wide routing get one output per track (logged)
+  const log = page().routeLog();
+  if (log.length) SL.call("logLine", { text: "Routing moved onto the tracks: " + log.join("; ") }).catch(() => {});
   page().setSessionName(doc.name);
   page().rerender();
 }
@@ -689,15 +591,8 @@ async function cleanUpAudio() {
       page().toast(`${r.moved} file${r.moved === 1 ? "" : "s"} moved to the ${bin}${r.failed.length ? ` · ${r.failed.length} couldn’t be moved` : ""}`);
     });
 }
-// Preferences (6c item 3): where new shows go, the Library, the logs.
-async function preferences() {
-  const f = await SL.call<Folders>("folders");
-  page().prefsBox(f, async (a) => {
-    if (a === "shows") { const r = await SL.call<Folders & { cancelled?: boolean }>("chooseShowsFolder"); if (!r.cancelled) page().toast("New shows go in " + r.shows); preferences(); }
-    else if (a === "showsDefault") { const r = await SL.call<Folders>("resetShowsFolder"); page().toast("New shows go in " + r.shows); preferences(); }
-    else await SL.call("revealFolder", { which: a });
-  });
-}
+// Preferences: the Settings sheet (6d), also File › Preferences… and Ctrl/Cmd+,.
+function preferences() { page().openSettings(); }
 
 // ---------------------------------------------------------------- File menu (phase 6b)
 // Before replacing the session (New, Open, Open Recent, Close, Quit): Save / Don't save / Cancel when it has
@@ -738,7 +633,7 @@ async function openAtStart(path: string): Promise<string> {
     page().setSessionName(doc.name);
     remember();
   } catch (e) {
-    loadRouting(null); doc = { name: "", savedText: sessionText() }; page().rerender();
+    doc = { name: "", savedText: sessionText() }; page().rerender();
     return `“${name}” couldn't be read (${String((e as Error)?.message || e)}).`;
   }
   if (r.path) checkAudio(r.path);
@@ -789,8 +684,6 @@ async function fileMenu(at: { clientX: number; clientY: number }) {
     "-",
     { label: "Preferences…", icon: "⚙", key: mod + ",", act: () => { preferences(); } },
     "-",
-    { label: "Copy diagnostics", icon: "⧉", act: () => { diagnostics("copy"); } },
-    { label: "Save diagnostics…", icon: "", act: () => { diagnostics("save"); } },
     { label: "About set.Line", icon: "ⓘ", act: () => { showAbout(); } },
   ];
   page().menu(at, items);
@@ -1005,7 +898,7 @@ async function main() {
   window.SLC = SLC;
   await SL.ready;
   SL.on("transport", onTransport);
-  SL.on("meters", (m: { peaks: number[] }) => { peaks = m.peaks || []; });
+  SL.on("meters", (m: { peaks: number[]; tracks?: Record<string, number> }) => { peaks = m.peaks || []; trackPeaks = m.tracks || {}; });
   SL.on("audioSetupChanged", (s: Setup) => { loadedKey = null; onSetup(s); });
   SL.on("engineStats", (x: Stats) => showStatus(x));
   SL.on("audioProgress", onProgress);
@@ -1040,11 +933,11 @@ async function main() {
   try {
     const kept = JSON.parse(sessionStorage.getItem("setline.session") || "null");
     if (kept && kept.text) { doc = kept.doc; applySession(kept.text); keptSession = true; }
-    else { loadRouting(oldLocalRouting()); doc = { name: "", savedText: sessionText() }; }
+    else { doc = { name: "", savedText: sessionText() }; }
   } catch (e) {
     console.warn("set.Line: session", e);
     showProblem = `It couldn't be read (${String((e as Error)?.message || e)}).`;
-    loadRouting(null); doc = { name: "", savedText: sessionText() };
+    doc = { name: "", savedText: sessionText() };
   }
   page().rerender();
   addEventListener("pagehide", () => remember()); // switching pages: keep the very latest
@@ -1100,7 +993,7 @@ async function main() {
     try {
       const AsyncFn = Object.getPrototypeOf(async () => {}).constructor;
       const hooks = { SLE, page, importStems, probe, audioFiles, applyRefMap, checkAudio, onFileDrag, sessionText, applySession,
-        getRate: () => sessionRate, openPath: (p: string) => openPath(p), retryStartShow: () => retryStartShow(), docName: () => doc.name, saveTo: (path: string) => saveSession(false, path), cueList: () => cueList(), setListen: (r: Partial<ListenState>) => setListen(r), SLR, SLW, waves, SLC, prepareCues, remember, payload, getRoute: () => route, isDirty: () => sessionText() !== doc.savedText, setDoc: (n: string) => { doc = { name: n, savedText: "" }; } };
+        getRate: () => sessionRate, openPath: (p: string) => openPath(p), retryStartShow: () => retryStartShow(), docName: () => doc.name, saveTo: (path: string) => saveSession(false, path), cueList: () => cueList(), setListen: (r: Partial<ListenState>) => setListen(r), SLR: window.SLR, SLW, waves, SLC, prepareCues, remember, payload, isDirty: () => sessionText() !== doc.savedText, setDoc: (n: string) => { doc = { name: n, savedText: "" }; } };
       out = await new AsyncFn("SL", "hooks", info.testScript)(SL, hooks);
     } catch (e) { out = { error: String((e as Error)?.stack || e) }; }
     if (out !== undefined) await SL.call("testDone", { text: JSON.stringify(out, null, 1) }); // undefined: it went to another page

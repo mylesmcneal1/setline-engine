@@ -311,7 +311,7 @@
 <body>
 <header class="mtop">
   <a class="mbrand" href="1-arrange.html"><span>set<span style="color:#f5a524">.</span>Line</span></a>
-  <nav class="mtabs"><a href="1-arrange.html">Edit</a><a class="on" href="3-satellite.html?mac">Perform</a><a href="2-routing.html">Outputs &amp; MIDI</a><a href="3-satellite.html">Satellite</a><a href="4-users.html">Users &amp; Canvases</a></nav>
+  <nav class="mtabs"><a href="1-arrange.html">Show</a><a class="on" href="3-satellite.html?mac">Perform</a><a href="5-band.html">Band</a></nav>
   <div class="sp"><button class="eb" id="hEdit">Edit canvas</button><button class="eb" id="hStyle">Style</button><span class="conn"><i></i>48 kHz</span></div>
 </header>
 <div class="app">
@@ -344,8 +344,8 @@ const fmt=x=>{ x=Math.max(0,x); return Math.floor(x/60)+':'+String(Math.floor(x%
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 // ---------------- show (same songs as the Edit page) ----------------
-const QCS={intro:'Scene A',verse:'Clean verse',pre:'Scene B',chorus:'Chorus wall',bridge:'Scene D',outro:'Scene A',turn:'Scene E'};
-const AXS={intro:'Scene 1',verse:'Scene 2',pre:'Scene 3',chorus:'Scene 4',bridge:'Ambient swell',outro:'Scene 1',turn:'Scene 6'};
+const QCS={intro:'Clean',verse:'Clean',pre:'Crunch',chorus:'Lead',bridge:'Ambient swell',outro:'Clean',turn:'Crunch'};
+const AXS={intro:'Scene 4',verse:'Scene 4',pre:'Scene 9',chorus:'Scene 9',bridge:'Scene 4',outro:'Scene 4',turn:'Scene 9'};
 const N=(drums,keys,md,vocals)=>({drums,keys,md,vocals});
 const SET=[
   {name:'Neon Rivers',key:'A min',trans:'segue',tmap:[{bar:1,bpm:128,sig:[4,4]}],stems:['Drums','Bass','Keys','Gtrs','BGVs','Synth','FX','Cues'],
@@ -450,7 +450,7 @@ const W={
               update:el=>el.firstChild.classList.toggle('dis',!can('song')||st.song===0) },
   nextbtn:  { build:el=>{ el.innerHTML=`<button class="bigbtn act ico">⏭</button>`; el.firstChild.onclick=()=>{ if(!can('song')) return; const was=st.playing; loadSong(st.song+1); if(was) start(); }; },
               update:el=>el.firstChild.classList.toggle('dis',!can('song')||st.song>=SET.length-1) },
-  resend:   { build:el=>{ el.innerHTML=`<button class="bigbtn act">↻ Resend</button>`; el.firstChild.onclick=()=>{ if(!can('resend')) return; const c=ctx(); toast(`Sent · QC ${QCS[c.sec.type]} · Axe ${AXS[c.sec.type]}`); }; },
+  resend:   { build:el=>{ el.innerHTML=`<button class="bigbtn act">↻ Resend</button>`; el.firstChild.onclick=()=>{ if(!can('resend')) return; const c=ctx(); toast(`Sent · Guitar rig ${QCS[c.sec.type]} · Lights ${AXS[c.sec.type]}`); }; },
               update:el=>el.firstChild.classList.toggle('dis',!can('resend')) },
   song:{ build:el=>el.innerHTML=`<div class="wsong"><span class="p"></span><span class="n"></span><span class="m"></span></div>`,
     update:(el,c)=>{ el.querySelector('.p').textContent=`${st.song+1}/${SET.length}`; el.querySelector('.n').textContent=c.s.name; el.querySelector('.m').innerHTML=`<b>${c.bpm}</b> BPM · <b>${c.b.sig.join('/')}</b> · ${c.s.key}`; } },
@@ -486,8 +486,8 @@ const W={
       const pg=l.querySelector('.pg'); if(pg) pg.style.width=(c.pos/c.s.len*100)+'%'; } },
   mutes:{ build:el=>{ const s=S(); el.innerHTML=`<div class="wmutes act">${s.stems.map(n=>`<button data-n="${n}" class="${st.mutes[s.name+n]?'m':''}">${n}</button>`).join('')}</div>`;
       el.querySelectorAll('button').forEach(b=>b.onclick=()=>{ if(!can('mute')) return; const k=s.name+b.dataset.n; st.mutes[k]=!st.mutes[k]; b.classList.toggle('m',st.mutes[k]); }); if(!can('mute')) el.firstChild.classList.add('ro'); }, update:()=>{} },
-  patches:{ build:el=>{ el.innerHTML=`<div class="wpatch"><div class="v"></div><button class="act">↻ Resend</button></div>`; el.querySelector('button').onclick=()=>{ if(!can('resend')) return; const c=ctx(); toast(`Sent · QC ${QCS[c.sec.type]} · Axe ${AXS[c.sec.type]}`); }; },
-    update:(el,c)=>{ el.querySelector('.v').innerHTML=`QC&nbsp;&nbsp;<b>${QCS[c.sec.type]}</b><br>Axe <b>${AXS[c.sec.type]}</b>`; el.querySelector('button').classList.toggle('hidden',!me.perms.resend); } },
+  patches:{ build:el=>{ el.innerHTML=`<div class="wpatch"><div class="v"></div><button class="act">↻ Resend</button></div>`; el.querySelector('button').onclick=()=>{ if(!can('resend')) return; const c=ctx(); toast(`Sent · Guitar rig ${QCS[c.sec.type]} · Lights ${AXS[c.sec.type]}`); }; },
+    update:(el,c)=>{ el.querySelector('.v').innerHTML=`Rig&nbsp;&nbsp;<b>${QCS[c.sec.type]}</b><br>Lights <b>${AXS[c.sec.type]}</b>`; el.querySelector('button').classList.toggle('hidden',!me.perms.resend); } },
   beats:{ build:el=>el.innerHTML=`<div class="wbeats"></div>`,
     update:(el,c)=>{ const g=el.firstChild; if(+g.dataset.n!==c.nBeats){ g.dataset.n=c.nBeats; g.style.gridTemplateColumns=`repeat(${c.nBeats},1fr)`; g.innerHTML=Array.from({length:c.nBeats},(_,i)=>`<i class="${i?'':'one'}">${i+1}</i>`).join(''); }
       [...g.children].forEach((x,i)=>x.classList.toggle('on',i===c.beat&&c.flash)); } },
@@ -510,7 +510,7 @@ const W={
     update:el=>{ el.firstChild.classList.toggle('on',st.locked); el.firstChild.textContent=st.locked?'🔒 Locked':'🔓 Lock'; } },
   custom:{ build:(el,o)=>{ o=o||{}; el.innerHTML=`<button class="wcustom act">${esc(o.label||'Custom')}</button>`;
       el.firstChild.onclick=()=>{ const a=o.act||'toast', c=ctx();
-        if(a==='resend'){ if(!can('resend')) return toast('“Resend MIDI” is off for '+me.name); toast(`Sent · QC ${QCS[c.sec.type]} · Axe ${AXS[c.sec.type]}`); }
+        if(a==='resend'){ if(!can('resend')) return toast('“Resend MIDI” is off for '+me.name); toast(`Sent · Guitar rig ${QCS[c.sec.type]} · Lights ${AXS[c.sec.type]}`); }
         else if(a==='play'){ if(!can('start')) return toast('“Start / stop” is off for '+me.name); st.playing?stop():start(); }
         else if(a==='next'||a==='prev'){ if(!can('song')) return toast('“Change songs” is off for '+me.name); const was=st.playing; loadSong(st.song+(a==='next'?1:-1)); if(was) start(); }
         else if(a==='exitloop'){ if(!can('loop')) return toast('“Exit loops” is off for '+me.name); st.loopExit=!st.loopExit; render(); }

@@ -32,8 +32,8 @@ window.SL = (function(){
     ready:     {g:'Controls', n:'Ready button',     i:'✋', w:3,  h:1},
     lock:      {g:'Controls', n:'Lock',             i:'🔒', w:2,  h:1},
     custom:    {g:'Controls', n:'Custom button',    i:'⚡', w:3,  h:1},
-    qcpatch:   {g:'Status',   n:'Quad Cortex patch',i:'◈',  w:2,  h:1, lab:'Quad Cortex', label:true},
-    axepatch:  {g:'Status',   n:'Axe-Fx patch',     i:'◈',  w:2,  h:1, lab:'Axe-Fx', label:true},
+    qcpatch:   {g:'Status',   n:'MIDI patch 1',     i:'◈',  w:2,  h:1, lab:'Guitar rig', label:true},
+    axepatch:  {g:'Status',   n:'MIDI patch 2',     i:'◈',  w:2,  h:1, lab:'Lights', label:true},
     readyflags:{g:'Status',   n:'Band ready',       i:'✓',  w:4,  h:1},
   };
   const GROUPS=['Song','Section','Set','Notes','Controls','Status'];
@@ -43,7 +43,7 @@ window.SL = (function(){
     ['loop','Exit loops',''],
     ['song','Change songs','Prev / next / pick from setlist'],
     ['mute','Mute stems','Per song'],
-    ['resend','Resend MIDI','Re-fire guitar patches'],
+    ['resend','Resend MIDI','Send this section’s MIDI again'],
     ['lock','Lock screen',''],
     ['layout','Edit own layout','Rearrange and restyle their canvas on their device'],
   ];
@@ -109,10 +109,10 @@ window.SL = (function(){
     section:'Section that’s playing now, in its color.',barsleft:'Bars left in this section (seconds during an auto-next wait).',nextsec:'Section coming up next.',beats:'Flashes on every beat; beat 1 in the accent color.',
     exitloop:'Leaves a looping section after the current pass.',jumpmode:'When a tapped section jump happens.',nextsong:'Next song in the set. Tap to open the setlist.',transition:'What happens after this song: Segue, Stop or Auto-next.',
     setlist:'The whole set. Tap a song to cue it (needs “Change songs”).',mynote:'This player’s note for the current section.',nextnote:'This player’s note for the next section.',play:'Starts and stops playback.',
-    prevbtn:'Previous song.',nextbtn:'Next song.',mutes:'Mute stems for this song.',resend:'Fires the guitar patches for this section again.',ready:'Player taps when ready; shows on Band ready.',
-    lock:'Locks this screen so nothing gets bumped.',custom:'A button that does one thing you choose.',qcpatch:'Quad Cortex scene for this section.',axepatch:'Axe-Fx scene for this section.',readyflags:'Who has tapped Ready.'};
+    prevbtn:'Previous song.',nextbtn:'Next song.',mutes:'Mute stems for this song.',resend:'Sends this section’s MIDI (patches, scenes) again.',ready:'Player taps when ready; shows on Band ready.',
+    lock:'Locks this screen so nothing gets bumped.',custom:'A button that does one thing you choose.',qcpatch:'The first MIDI track’s patch for this section.',axepatch:'The second MIDI track’s patch for this section.',readyflags:'Who has tapped Ready.'};
   const SWATCH=['#e9ebef','#8a909b','#f5a524','#3ddc84','#5aa9ff','#45c8d6','#a46bff','#ff5fa2','#ff5468','#0b0c0e'];
-  const ACTIONS=[['resend','Resend guitar patches'],['play','Play / stop'],['next','Next song'],['prev','Previous song'],['exitloop','Exit loop'],['jump','Jump to a section…'],['mute','Mute a stem…'],['toast','Just show a message']];
+  const ACTIONS=[['resend','Resend MIDI'],['play','Play / stop'],['next','Next song'],['prev','Previous song'],['exitloop','Exit loop'],['jump','Jump to a section…'],['mute','Mute a stem…'],['toast','Just show a message']];
   const SECS=['Intro','Verse','Pre','Chorus','Bridge','Turn','Outro'], STEMS=['Drums','Bass','Keys','Gtrs','BGVs','Synth','FX','Cues'];
   const OPTS_CSS=`.op{font-size:12.5px} .op h4{font-size:10.5px;font-weight:700;letter-spacing:.09em;color:var(--faint);margin:16px 0 8px;text-transform:uppercase}
     .op .d{color:var(--muted);line-height:1.45} .op .warn{color:var(--accent);margin-top:6px;line-height:1.4}

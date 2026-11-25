@@ -38,6 +38,7 @@ struct MidiEventDef {
     int len = 0;
     std::string label;
     double earlySeconds = 0; // send this much before its bar/beat (e.g. so a preset is loaded by the downbeat)
+    int track = -1;          // which MIDI track it came from (0-based, for the live mute; -1 = none)
 };
 
 // One click the user entered (a note in a click clip). Bar is 1-based, beat 1-based and may be fractional.

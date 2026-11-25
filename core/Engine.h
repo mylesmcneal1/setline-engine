@@ -71,12 +71,19 @@ public:
     static constexpr int ClickTrack = -1, CueTrack = -2;
     // Click track k (0 = the main click, 1.. = SongDef::moreClicks[k-1]) for setTrackLevel.
     static constexpr int clickTrackId(int k) { return k == 0 ? ClickTrack : -100 - k; }
+    // MIDI track k (MidiEventDef::track) for setTrackLevel: only its mute counts (a muted MIDI track sends nothing).
+    static constexpr int midiTrackId(int k) { return -200 - k; }
+    static constexpr int MaxMidiTracks = 64;
     void setTrackLevel(int track, float db, bool mute);
     int numStems() const { return (int) stems.size(); }
 
     // Output meters: the peak of each device output since the last call (audio thread writes, UI reads).
     static constexpr int MaxMeters = 64;
     float takeOutputPeak(int output) { return output >= 0 && output < MaxMeters ? meters[(size_t) output].exchange(0.0f, std::memory_order_relaxed) : 0.0f; }
+    // Track meters: the peak of one track after its fader (an engine track id as for setTrackLevel), since the last call.
+    static constexpr int MaxTrackMeters = 128;
+    static int meterSlot(int track) { return track >= 0 ? (track < 96 ? track : -1) : track == CueTrack ? 120 : track == ClickTrack ? 96 : (track <= -101 && track > -124) ? 96 + (-100 - track) : -1; }
+    float takeTrackPeak(int track) { const int k = meterSlot(track); return k >= 0 ? trackMeters[(size_t) k].exchange(0.0f, std::memory_order_relaxed) : 0.0f; }
     bool takeFinished() { return finished.exchange(false); }
 
     // Audio callback body.
@@ -92,7 +99,7 @@ public:
     MidiScheduler midi;
     std::vector<LoggedMidi> midiLog; // offline mode only (pre-reserved)
     struct ClickHit { int64_t sample; bool accent; float gain = 1; };
-    struct MidiAt { int64_t sample; int port; uint8_t d[3]; int len; };
+    struct MidiAt { int64_t sample; int port; uint8_t d[3]; int len; int track = -1; };
     const std::vector<ClickHit>& clickList(int k = 0) const { static const std::vector<ClickHit> none; return k < (int) clickLanes.size() ? clickLanes[(size_t) k].hits : none; }
     int numClickTracks() const { return (int) clickLanes.size(); }
     const std::vector<MidiAt>& midiList() const { return midiEvents; }
@@ -118,6 +125,9 @@ private:
     LiveGain cueLive;
     float cueGain = 1.0f;
     std::array<std::atomic<float>, MaxMeters> meters {};
+    std::array<std::atomic<float>, MaxTrackMeters> trackMeters {};
+    std::array<std::atomic<bool>, MaxMidiTracks> midiMuted {};
+    void meterTrack(int slot, float pk) { if (slot >= 0 && slot < MaxTrackMeters && pk > trackMeters[(size_t) slot].load(std::memory_order_relaxed)) trackMeters[(size_t) slot].store(pk, std::memory_order_relaxed); }
     int rampSamples = 480, fadeOutSamples = 480;
     int64_t songLen = 0;
     int maxOut = 1;

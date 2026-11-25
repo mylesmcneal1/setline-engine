@@ -297,6 +297,45 @@ Bridge::Options Bridge::addTo(Options o)
             done(juce::var(r));
         });
     });
+    // Library files every show shares (6d: Cue Phrases.json). {name} reads ({text}, "" if none); {name, text} writes it.
+    o = add(o, "libraryText", [](const juce::var& a) {
+        static const juce::StringArray allowed { "Cue Phrases.json" };
+        const auto name = a["name"].toString();
+        if (! allowed.contains(name)) return errorVar("libraryText: unknown file " + name);
+        const auto f = folders::library().getChildFile(name);
+        auto* r = new juce::DynamicObject();
+        if (a.hasProperty("text")) {
+            juce::TemporaryFile tmp(f); // atomic: written next to it, then swapped in
+            if (! tmp.getFile().replaceWithText(a["text"].toString()) || ! tmp.overwriteTargetFileWithTemporary()) return errorVar("Couldn't write " + f.getFullPathName());
+            r->setProperty("ok", true);
+        } else r->setProperty("text", f.existsAsFile() ? f.loadFileAsString() : juce::String());
+        return juce::var(r);
+    });
+    // Settings › MIDI: "Send MIDI early by" (ms, this computer). The next song load uses it.
+    o = add(o, "midiOffset", [this](const juce::var& a) {
+        if (a.isObject() && a.hasProperty("ms")) { settings.setValue("midiOffsetMs", juce::jlimit(-200.0, 200.0, (double) a["ms"])); settings.saveIfNeeded(); }
+        auto* r = new juce::DynamicObject(); r->setProperty("ms", settings.getDoubleValue("midiOffsetMs", 0.0)); return juce::var(r);
+    });
+    // Settings › Outputs › Export patch sheet: the page makes the PDF; this saves it ({name, base64}; tests: {to}).
+    o = addAsync(o, "savePdf", [this](const juce::var& a, auto done) {
+        juce::MemoryOutputStream bytes;
+        if (! juce::Base64::convertFromBase64(bytes, a["base64"].toString())) { done(errorVar("savePdf: bad data")); return; }
+        auto block = std::make_shared<juce::MemoryBlock>(bytes.getData(), bytes.getDataSize());
+        auto write = [block](const juce::File& f) {
+            auto* r = new juce::DynamicObject();
+            if (f == juce::File()) r->setProperty("cancelled", true);
+            else if (f.replaceWithData(block->getData(), block->getSize())) { r->setProperty("path", f.getFullPathName()); applog::line("Patch sheet saved: " + f.getFullPathName()); }
+            else r->setProperty("error", "Couldn't write " + f.getFullPathName());
+            return juce::var(r);
+        };
+        if (a["to"].toString().isNotEmpty()) { done(write(juce::File(a["to"].toString()))); return; }
+        const auto name = juce::File::createLegalFileName(a["name"].toString().isNotEmpty() ? a["name"].toString() : juce::String("Patch sheet")) + ".pdf";
+        pdfChooser = std::make_unique<juce::FileChooser>("Export patch sheet", juce::File::getSpecialLocation(juce::File::userDesktopDirectory).getChildFile(name), "*.pdf");
+        pdfChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles | juce::FileBrowserComponent::warnAboutOverwriting,
+                                [done, write](const juce::FileChooser& fc) { done(write(fc.getResult())); });
+    });
+    // A line from the page into the log (e.g. what a show's migration changed).
+    o = add(o, "logLine", [](const juce::var& a) { applog::line(a["text"].toString().substring(0, 4000)); return juce::var(true); });
     o = add(o, "getListen", [this](const juce::var&) { return audio.listenState(); });
     o = add(o, "setListen", [this](const juce::var& a) { return audio.setListen(a); });
     o = add(o, "listenDevices", [this](const juce::var& a) { return audio.listenDevices((double) a.getProperty("rate", 0.0)); });

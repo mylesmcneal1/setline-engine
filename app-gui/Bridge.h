@@ -71,7 +71,7 @@ private:
     void syncShow();
     juce::String diagnostics();
     double cueRate() const;
-    std::unique_ptr<juce::FileChooser> diagChooser, folderChooser;
+    std::unique_ptr<juce::FileChooser> diagChooser, folderChooser, pdfChooser;
     Options addRest(Options o);
     void preparePeaks(const juce::var& refs, const juce::File& sessionFile);
     bool dirty = false;

@@ -51,6 +51,7 @@ std::string Engine::load(const SongDef& song, const Config& c, std::vector<std::
     }
     // Live levels: a new song starts at 0 dB, unmuted; the app sets its levels after loading.
     stemGains = std::make_unique<LiveGain[]>(stems.size());
+    for (auto& m : midiMuted) m.store(false, std::memory_order_relaxed);
     cueLive.set(1.0f);
     for (int o : song.clickOuts) maxOut = std::max(maxOut, o);
     for (auto& c : song.moreClicks) for (int o : c.outs) maxOut = std::max(maxOut, o);
@@ -133,7 +134,7 @@ std::string Engine::load(const SongDef& song, const Config& c, std::vector<std::
     // --- MIDI ---
     for (auto& m : song.midi) {
         if (m.port < 0) { warnings.push_back("MIDI event \"" + m.label + "\" at bar " + std::to_string(m.bar) + " has no output port; skipped."); continue; }
-        MidiAt e; e.port = m.port; e.len = m.len;
+        MidiAt e; e.port = m.port; e.len = m.len; e.track = m.track;
         e.sample = std::max<int64_t>(0, tmap.sampleAt(m.bar, m.beat) - (int64_t) std::llround(m.earlySeconds * cfg.sampleRate));
         std::copy(m.bytes, m.bytes + 3, e.d);
         midiEvents.push_back(e);
@@ -164,7 +165,8 @@ void Engine::seekClicks(int64_t p)
 void Engine::setTrackLevel(int track, float db, bool mute)
 {
     const float g = mute ? 0.0f : LiveGain::dbToGain(db);
-    if (track == ClickTrack || track <= -101) {
+    if (track <= -200) { const int k = -200 - track; if (k < MaxMidiTracks) midiMuted[(size_t) k].store(mute, std::memory_order_relaxed); }
+    else if (track == ClickTrack || track <= -101) {
         const int k = track == ClickTrack ? 0 : -100 - track;
         if (clickLives && k < (int) clickLanes.size()) clickLives[(size_t) k].set(g);
     } else if (track == CueTrack) cueLive.set(g); // cue audio arrives with step 2; the level is ready for it
@@ -372,7 +374,9 @@ void Engine::renderSegment(float* const* outs, int numOuts, int off, int count, 
     for (size_t k = 0; k < stems.size(); ++k) {
         auto& s = stems[k];
         if (cfg.offline) while (s->readable() < count) s->fill();
-        if (s->mixInto(seg, no, count, stemGains[k].next(count, rampSamples))) stats.underruns.fetch_add(1, std::memory_order_relaxed);
+        float pk = 0.0f;
+        if (s->mixInto(seg, no, count, stemGains[k].next(count, rampSamples), &pk)) stats.underruns.fetch_add(1, std::memory_order_relaxed);
+        meterTrack(meterSlot((int) k), pk);
     }
 
     // 2) clicks, per click track: a short decaying cosine burst starting exactly on the hit's sample
@@ -381,6 +385,7 @@ void Engine::renderSegment(float* const* outs, int numOuts, int off, int count, 
         if (c.outs.empty()) continue;
         const GainRamp live = clickLives[k].next(count, rampSamples);
         auto& voice = c.voice;
+        float pk = 0.0f;
         for (int i = 0; i < count; ++i) {
             const int64_t s = p + i;
             while (c.next < c.hits.size() && c.hits[c.next].sample < s) ++c.next; // skip anything missed
@@ -396,10 +401,12 @@ void Engine::renderSegment(float* const* outs, int numOuts, int off, int count, 
             }
             if (voice.remaining > 0) {
                 const float v = voice.amp * (float) (std::cos(voice.phase) * voice.env) * live.at(i);
+                pk = std::max(pk, std::fabs(v));
                 for (int o : c.outs) if (o >= 0 && o < no && seg[o]) seg[o][i] += v;
                 voice.phase += voice.inc; voice.env *= voice.decay; --voice.remaining;
             }
         }
+        meterTrack(meterSlot(clickTrackId((int) k)), pk);
     }
 
     // 2b) spoken cues: what plays at song sample s depends only on s (sample s - start of every cue that
@@ -410,21 +417,25 @@ void Engine::renderSegment(float* const* outs, int numOuts, int off, int count, 
         const int64_t end = p + count;
         // first cue that could still be sounding at p
         auto it = std::lower_bound(cues.begin(), cues.end(), p - longestCue, [](const CueAt& c, int64_t x) { return c.sample < x; });
+        float pk = 0.0f;
         for (; it != cues.end() && it->sample < end; ++it) {
             const auto& a = *it->audio;
             const int64_t from = std::max(p, it->sample), to = std::min(end, it->sample + (int64_t) a.size());
             for (int64_t s = from; s < to; ++s) {
                 const int i = (int) (s - p);
                 const float v = a[(size_t) (s - it->sample)] * live.at(i) * cueGain;
+                pk = std::max(pk, std::fabs(v));
                 for (int o : cueOuts) if (o >= 0 && o < no && seg[o]) seg[o][i] += v;
             }
         }
+        meterTrack(meterSlot(CueTrack), pk);
     }
 
     // 3) MIDI: schedule each event for the moment its sample leaves the interface
     const double sr = cfg.sampleRate;
     while (nextMidi < midiEvents.size() && midiEvents[nextMidi].sample < p + count) {
         const auto& e = midiEvents[nextMidi++];
+        if (e.track >= 0 && e.track < MaxMidiTracks && midiMuted[(size_t) e.track].load(std::memory_order_relaxed)) continue; // a muted MIDI track
         const int64_t at = std::max<int64_t>(p, e.sample);
         if (cfg.offline) {
             if (midiLog.size() < midiLog.capacity()) { LoggedMidi l; l.sample = at; l.port = e.port; l.len = e.len; std::copy(e.d, e.d + 3, l.d); midiLog.push_back(l); }

@@ -120,7 +120,8 @@ public:
     // Returns true on an underrun inside the file.
     // After an underrun the frames that were missed are skipped when they arrive ("debt"),
     // so the stem stays locked to the timeline instead of drifting late.
-    bool mixInto(float* const* out, int numOut, int n, const GainRamp& live = {})
+    // peak (optional): the largest level added (after the stem gain and the live level), for the track meter.
+    bool mixInto(float* const* out, int numOut, int n, const GainRamp& live = {}, float* peak = nullptr)
     {
         if (pending >= 0) { // a jump came before the disk had the target ready
             if (standbyPrimedFor(pending)) { const int64_t ahead = timeline - pending; swapRings(); debt = (int) ahead; pending = -1; }
@@ -132,6 +133,7 @@ public:
         const int got = std::min(avail, n);
         const int nch = ring.channels();
         ring.peek(got, [&](int c, const float* p, int count, int dstOff) {
+            if (peak != nullptr) { float m = 0.0f; for (int i = 0; i < count; ++i) m = std::max(m, std::fabs(p[i])); m *= gain * std::max(live.at(dstOff), live.end); if (m > *peak) *peak = m; }
             if (nch == 1) {
                 for (int o : outs) if (o >= 0 && o < numOut && out[o]) addWithGain(out[o] + dstOff, p, count, gain, live, dstOff);
             } else if (outs.size() >= 2) {

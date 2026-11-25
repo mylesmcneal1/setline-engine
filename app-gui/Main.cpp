@@ -78,7 +78,7 @@ public:
         platform::enableHighResolutionTimers();
         const auto args = getCommandLineParameterArray();
         const bool dev = args.contains("--dev");
-        const int pi = args.indexOf("--page"); // open another page first (testing), e.g. --page 2-routing.html
+        const int pi = args.indexOf("--page"); // open another page first (testing), e.g. --page 3-satellite.html?mac
         const juce::String page = pi >= 0 ? args[pi + 1] : juce::String();
         if (const int kt = args.indexOf("--kokoro-test"); kt >= 0 && kt + 1 < args.size()) {
             kokoroTest(juce::File::getCurrentWorkingDirectory().getChildFile(args[kt + 1].unquoted()));
@@ -140,9 +140,9 @@ public:
                   splash->setStep(Splash::audio, Splash::State::done, audio->deviceSummary());
                   openMain(startPage);
               } },
-              { juce::String::fromUTF8("Choose another output\xe2\x80\xa6"), [this] { // the Outputs & MIDI page, which lists every device
-                  splash->setStep(Splash::audio, Splash::State::done, audio->deviceSummary().isNotEmpty() ? audio->deviceSummary() : juce::String("choose on Outputs & MIDI"));
-                  openMain("2-routing.html");
+              { juce::String::fromUTF8("Choose another output\xe2\x80\xa6"), [this] { // the show, with Settings › Audio open (every device)
+                  splash->setStep(Splash::audio, Splash::State::done, audio->deviceSummary().isNotEmpty() ? audio->deviceSummary() : juce::String("choose in Settings"));
+                  openMain("1-arrange.html?settings=audio");
               } },
               { "Listen on this computer", [this] { // the show's routing stays; this computer's speakers / headphones play it
                   auto* req = new juce::DynamicObject();

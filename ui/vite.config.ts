@@ -17,9 +17,9 @@ export default defineConfig({
       onwarn(w, warn) { if (w.code === "EVAL" && String(w.id ?? "").includes("/juce/")) return; warn(w); },
       input: {
         arrange: page("1-arrange.html"),
-        routing: page("2-routing.html"),
         satellite: page("3-satellite.html"),
         users: page("4-users.html"),
+        band: page("5-band.html"),
       },
     },
   },

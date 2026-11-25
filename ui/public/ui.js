@@ -76,6 +76,7 @@
   const set=v=>{ try{ localStorage.setItem(K,v); }catch(e){} apply(); };
   const apply=()=>{ root.classList.toggle('ap-darker',get()==='darker'); const b=document.getElementById('apBtn'); if(b){ b.classList.toggle('on',get()==='darker'); b.title='Appearance: '+(get()==='darker'?'Darker':'Dark'); } };
   apply();
+  window.SLAppearance={ get, set }; // Settings › Appearance (the Show page)
   const st=document.createElement('style'); st.textContent=`
   html.ap-darker{--bg:#000;--s1:#0a0a0b;--s2:#141416;--s3:#1c1c1f;--panel:#0a0a0b;--hair:rgba(255,255,255,.07)}
   html.ap-darker body{background:#000}
@@ -98,7 +99,7 @@
     p.querySelectorAll('button').forEach(b=>b.onclick=()=>{ set(b.dataset.v); draw(); });
     document.body.appendChild(p); const r=btn.getBoundingClientRect(); p.style.top=(r.bottom+8)+'px'; p.style.left=Math.max(8,Math.min(innerWidth-p.offsetWidth-8,r.right-p.offsetWidth))+'px';
     setTimeout(()=>document.addEventListener('pointerdown',function f(e){ if(!p.contains(e.target)&&e.target!==btn&&!btn.contains(e.target)){ p.remove(); document.removeEventListener('pointerdown',f,true); } },true),0); }
-  function mount(){ const top=document.querySelector('.top'); if(!top||document.getElementById('apBtn')) return;
+  function mount(){ const top=document.querySelector('.top'); if(!top||document.getElementById('apBtn')||document.getElementById('gearBtn')) return; // the Show page: Settings › Appearance
     const b=document.createElement('button'); b.id='apBtn';
     b.innerHTML='<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 2a6 6 0 0 1 0 12z" fill="currentColor"/></svg>';
     b.onclick=e=>{ e.stopPropagation(); pop(b); }; top.appendChild(b); apply(); }
