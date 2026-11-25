@@ -1888,12 +1888,40 @@ function multiPanel(s){ const items=selItems().filter(it=>it.s===s); if(items.le
     +(aud.length?'<div class="kv"><label>Gain'+(aud.length<items.length?' (audio)':'')+'</label><div style="display:flex;align-items:center;gap:8px"><input type="range" class="fad wide" id="mGain" min="-24" max="6" step="0.5" value="'+(g??0)+'" style="--p:'+((((g??0)+24)/30)*100).toFixed(1)+'%"><span class="db" id="mGainV">'+(g===null?'mixed':(g>0?'+':'')+g.toFixed(1))+'</span></div></div>'
       +'<div class="kv"><label>Mute</label><label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="mMute" '+(allMuted?'checked':'')+'> the '+aud.length+' audio clip'+(aud.length>1?'s':'')+'</label></div>':'')
     +'<p class="faint" style="font-size:11px;margin-top:10px;line-height:1.5">Drag any of them to move them together. Shift / Ctrl+click adds or removes one; drag on an empty part of the lanes to draw a box.</p>'
-    +'<div class="acts"><button class="btn line" data-mk="copy">Copy</button><button class="btn line" data-mk="dup">Duplicate</button><button class="btn danger" data-mk="del">Delete</button></div></div>'; }
+    +'<div class="acts"><button class="btn line" data-mk="glue" title="Join them into one clip per track  Ctrl+J">Glue</button><button class="btn line" data-mk="copy">Copy</button><button class="btn line" data-mk="dup">Duplicate</button><button class="btn danger" data-mk="del">Delete</button></div></div>'; }
 function wireMultiPanel(s){ const c=$('mClose'); if(!c) return; c.onclick=()=>{ clearMulti(); renderInsp(); };
   const items=()=>selItems().filter(it=>it.s===s), aud=()=>items().filter(it=>it.kind==='audio').map(it=>it.o);
   const gr=$('mGain'); if(gr){ gr.onpointerdown=()=>snap(); gr.onkeydown=()=>snap(); gr.oninput=()=>{ const v=+gr.value; aud().forEach(c=>c.gain=v); gr.style.setProperty('--p',((v+24)/30*100).toFixed(1)+'%'); $('mGainV').textContent=(v>0?'+':'')+v.toFixed(1); redrawSong(s); }; }
   const mm=$('mMute'); if(mm) mm.onchange=()=>{ snap(); aud().forEach(c=>c.mute=mm.checked); redrawSong(s); };
-  document.querySelectorAll('[data-mk]').forEach(b=>b.onclick=()=>{ const a=b.dataset.mk; if(a==='copy') groupCopy(); else if(a==='dup') groupDup(); else groupDelete(); }); }
+  document.querySelectorAll('[data-mk]').forEach(b=>b.onclick=()=>{ const a=b.dataset.mk; if(a==='glue') glueSel(); else if(a==='copy') groupCopy(); else if(a==='dup') groupDup(); else groupDelete(); }); }
+
+// ---------- glue (6c item 7): Ctrl/Cmd+J joins the selected clips on each track into one ----------
+// Audio pieces of the file that follow on exactly (same gain, no fades between them) simply rejoin. Anything
+// else is rendered by the app exactly as it plays into a new WAV in the show's Audio folder (the glued clip plays
+// it at 0 dB, no fades). Click and MIDI clips merge (their beats / events stay where they are). One undo step.
+async function glueSel(){ const items=selItems(), s=items[0]&&items[0].s;
+  if(!s||items.length<2){ toast('Select two or more clips on one track, then Glue (Ctrl+J)'); return; }
+  const byT=new Map(); items.filter(it=>it.kind!=='cue').forEach(it=>{ const k=it.kind+'|'+it.t; if(!byT.has(k)) byT.set(k,[]); byT.get(k).push(it); });
+  const groups=[...byT.values()].filter(g=>g.length>1);
+  if(!groups.length){ toast('Glue joins clips on the same track: select two or more on one track'); return; }
+  const pre=ser(), made=[], eps=1e-6; let did=0, rendered=0;
+  for(const g of groups){ const {kind,t}=g[0];
+    if(kind==='audio'){ const cl=g.map(x=>x.o).sort((a,b)=>a.start-b.start), a=cl[0].start, b=cl[cl.length-1].end;
+      if(clipsOf(s,t).some(c=>!cl.includes(c)&&c.start<b-eps&&c.end>a+eps)){ toast('Another clip on '+t+' sits between them: select it too'); continue; }
+      const rejoin=cl.every((c,i)=>i===0||(Math.abs(cl[i-1].end-c.start)<eps&&Math.abs(cl[i-1].off+(cl[i-1].end-cl[i-1].start)-c.off)<eps&&c.gain===cl[0].gain&&!!c.mute===!!cl[0].mute&&!cl[i-1].fo&&!c.fi));
+      let n;
+      if(rejoin) n={...cl[0],id:clipSeq++,end:b,fo:cl[cl.length-1].fo};
+      else { if(!(window.SLE&&SLE.glueAudio)){ toast('In the app, Glue renders these clips into one'); continue; }
+        const r=await SLE.glueAudio(s,t,a,b); if(!r||r.error){ toast((r&&r.error)||'Couldn’t glue '+t); continue; }
+        s.files[t]={...s.files[t],path:r.ref,frames:r.frames,len:r.seconds,fmt:'WAV',copy:false};
+        n={id:clipSeq++,start:a,end:b,off:r.offset,gain:0,fi:0,fo:0,mute:false}; rendered++; }
+      s.clips[t]=clipsOf(s,t).filter(c=>!cl.includes(c)).concat([n]).sort((x,y)=>x.start-y.start); made.push({kind,s,t,o:n}); did++; }
+    else { const L=regList(s,t,kind), rs=g.map(x=>x.o).sort((x,y)=>x.bar-y.bar), b0=rs[0].bar, b1=Math.max(...rs.map(r=>r.bar+r.bars));
+      if(L.some(q=>!rs.includes(q)&&q.bar<b1&&q.bar+q.bars>b0)){ toast('Another clip on '+t+' sits between them: select it too'); continue; }
+      const n={id:'r'+regSeq++,bar:b0,bars:b1-b0}; if(kind==='ck') n.notes=rs.flatMap(r=>(r.notes||[]).map(x=>({...x,b:x.b+(r.bar-b0)})));
+      const keep=L.filter(q=>!rs.includes(q)); L.splice(0,L.length,...keep,n); L.sort((x,y)=>x.bar-y.bar); made.push({kind,s,t,o:n}); did++; } }
+  if(!did) return; undoS.push(pre); redoS=[]; setMulti(s,made); refresh();
+  toast('Glued'+(did>1?' on '+did+' tracks':'')+(rendered?' · new audio in the show’s Audio folder':'')); }
 // ---------- clipboard: copy / cut / paste / duplicate / delete ----------
 function curItem(){ if(selClip){ const s=songs.find(x=>x.id===selClip.song), cl=s&&clipsOf(s,selClip.track).find(c=>c.id===selClip.id); return cl?{kind:'audio',s,t:selClip.track,o:cl}:null; }
   if(pick){ const s=songs.find(x=>x.id===pick.song); if(!s) return null; const L=pick.kind==='cue'?cuesOf(s):regList(s,pick.track,pick.kind), o=L.find(x=>x.id===pick.id); return o?{kind:pick.kind,s,t:pick.track,o}:null; }
@@ -2584,6 +2612,7 @@ try{ if(localStorage.getItem('setline.panelL')==='0') setPanel('L',false); if(lo
 document.addEventListener('keydown',e=>{ if(/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
   if(e.metaKey||e.ctrlKey){ const k=e.key.toLowerCase(); if(k===','){ e.preventDefault(); if(window.SLE) SLE.preferences(); return; } if(k==='s'){ e.preventDefault(); if(window.SLE) SLE.save(e.shiftKey); return; } if(k==='o'){ e.preventDefault(); if(window.SLE) SLE.open(); return; } if(k==='n'){ e.preventDefault(); if(window.SLE) SLE.newSession(); return; } if(k==='z'){ e.preventDefault(); e.shiftKey?redo():undo(); return; } if(k==='y'){ e.preventDefault(); redo(); return; }
     if(k==='a'&&selId&&!ed.song){ e.preventDefault(); const s=songs.find(x=>x.id===selId); if(s) selectAllIn(s); return; }
+    if(k==='j'){ e.preventDefault(); glueSel(); return; }
     if(k==='c'){ e.preventDefault(); doCopy(); return; } if(k==='x'){ e.preventDefault(); doCut(); return; } if(k==='v'){ e.preventDefault(); doPaste(); return; } if(k==='d'){ e.preventDefault(); doDup(); return; } }
   if(multiOn()&&(e.key==='Delete'||e.key==='Backspace')){ e.preventDefault(); groupDelete(); return; }
   if(multiOn()&&e.key==='Escape'){ clearMulti(); renderInsp(); return; }

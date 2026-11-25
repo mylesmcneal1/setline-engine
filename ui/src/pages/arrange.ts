@@ -169,7 +169,11 @@ function toTime(s: Song, bar: number, beat: number): number {
 // ---------------------------------------------------------------- loading songs
 function payload(s: Song) {
   const p = page();
-  const song = JSON.parse(JSON.stringify(s, (k, v) => (k === "bars" || k === "secPos" || k === "_yy" ? undefined : v)));
+  // the song's own computed bar list / section positions stay behind; a MIDI or click clip's "bars" (its length)
+  // goes with it (dropping those too made every MIDI clip one bar long: events after its first bar never played)
+  const song = JSON.parse(JSON.stringify(s, function (this: Record<string, unknown>, k: string, v: unknown) {
+    return this === (s as unknown) && (k === "bars" || k === "secPos" || k === "_yy") ? undefined : v;
+  }));
   const roles: Record<string, string> = {};
   s.tracks.forEach((t) => (roles[t] = p.ROLE[t] || ""));
   const outs: Record<string, number[]> = {};
@@ -278,6 +282,8 @@ const SLE = {
   save: (as: boolean) => saveSession(as),
   open: () => openSession(),
   newSession: () => newSession(),
+  // Glue (6c item 7): the clips of t from a to b (seconds) rendered exactly as they play into a new WAV
+  glueAudio: (s: Song, t: string, a: number, b: number) => SL.call<{ ref?: string; offset?: number; frames?: number; seconds?: number; error?: string }>("glueAudio", { payload: payload(s), track: t, ref: s.files[t]?.path || "", from: a, to: b }),
   listen: (req: Partial<ListenState>) => setListen(req),
   diagnostics: (how: "copy" | "save") => diagnostics(how),
   preferences: () => preferences(),

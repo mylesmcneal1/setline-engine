@@ -28,6 +28,13 @@ public:
     // "iD14 · ASIO · 48 kHz · 128" for the open device, or "" if none.
     juce::String deviceSummary();
 
+    // ---- Glue (6c item 7) ----
+    // One track's audio from sample a to b exactly as the engine plays it: its clips with their gains and fades,
+    // silence between them (not the track's fader, mute or routing), one channel per file channel, at the show
+    // rate. Rendered from the song's start, so nothing about starting mid-song (preroll) touches it.
+    std::vector<std::vector<float>> bakeTrack(const juce::var& payload, const juce::String& track, int64_t a, int64_t b, int channels, juce::String& err);
+    double showRate() const { const double r = sampleRate(); return r > 0 ? r : 48000.0; } // what offline renders use
+
     // ---- "Listen on this computer" (stored per computer, never in the show) ----
     // The show's routing never changes. Instead of the show's interface, the computer's own output plays:
     //  - everything: every routed track folded to stereo (stereo stays stereo, mono centred at -3 dB),

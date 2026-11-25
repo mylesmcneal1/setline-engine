@@ -211,6 +211,56 @@ Bridge::Options Bridge::addTo(Options o)
         else { r->setProperty("text", f.loadFileAsString()); applog::line("Opened backup " + f.getFullPathName()); }
         return juce::var(r);
     });
+    // Glue (6c item 7): {payload, track, ref, from, to (seconds)} -> a new WAV in the show's Audio folder: the
+    // track's file as it is, then the glued stretch exactly as it plays (float, at the show rate). The glued clip
+    // plays it from {offset} seconds at 0 dB with no fades; the track's other clips keep their places in the file.
+    // -> {ref, offset, frames, channels, rate, seconds} | {error}
+    o = add(o, "glueAudio", [this](const juce::var& a) {
+        auto fail = [](const juce::String& e) { auto* r = new juce::DynamicObject(); r->setProperty("error", e); return juce::var(r); };
+        if (session.file() == juce::File()) return fail("Save the show first: glued audio goes in its Audio folder.");
+        const auto src = Media::resolve(a["ref"].toString(), session.file());
+        juce::AudioFormatManager fm; fm.registerBasicFormats();
+        std::unique_ptr<juce::AudioFormatReader> rd(fm.createReaderFor(src));
+        if (! rd) return fail("Couldn't read " + src.getFileName());
+        const double sr = audio.showRate();
+        if (std::abs(rd->sampleRate - sr) > 0.5) return fail(src.getFileName() + " isn't at the show's rate.");
+        const int ch = (int) rd->numChannels; const int64_t L = rd->lengthInSamples;
+        const int64_t from = (int64_t) std::llround((double) a["from"] * sr), to = (int64_t) std::llround((double) a["to"] * sr);
+        juce::String err;
+        if (auto* p = a["payload"].getDynamicObject()) p->setProperty("sessionFile", session.file().getFullPathName()); // stems are relative to it
+        auto baked = audio.bakeTrack(a["payload"], a["track"].toString(), from, to, ch, err);
+        if (baked.empty()) return fail(err.isNotEmpty() ? err : "Nothing to glue");
+        const int64_t N = to - from;
+        juce::AudioBuffer<float> all(ch, (int) (L + N));
+        all.clear();
+        rd->read(&all, 0, (int) L, 0, true, ch > 1);
+        for (int c = 0; c < ch; ++c) std::copy(baked[(size_t) c].begin(), baked[(size_t) c].end(), all.getWritePointer(c) + L);
+        const auto dir = session.file().getParentDirectory().getChildFile("Audio");
+        dir.createDirectory();
+        const auto dst = dir.getChildFile(Media::portableName(src.getFileNameWithoutExtension() + " glued.wav")).getNonexistentSibling(true);
+        {
+            // 32-bit float (bit-exact with what the engine played), written next to it and then moved into place
+            juce::TemporaryFile tmp(dst);
+            bool ok = false;
+            {
+                std::unique_ptr<juce::OutputStream> os = std::make_unique<juce::FileOutputStream>(tmp.getFile());
+                juce::WavAudioFormat wav;
+                const auto opts = juce::AudioFormatWriterOptions {}.withSampleRate(sr).withNumChannels(ch).withBitsPerSample(32)
+                                      .withSampleFormat(juce::AudioFormatWriterOptions::SampleFormat::floatingPoint);
+                if (auto w = wav.createWriterFor(os, opts)) ok = w->writeFromAudioSampleBuffer(all, 0, all.getNumSamples());
+            }
+            if (! ok || ! tmp.overwriteTargetFileWithTemporary()) return fail("Couldn't write " + dst.getFullPathName());
+        }
+        applog::line("Glued \"" + a["track"].toString() + "\" into " + dst.getFullPathName());
+        auto* r = new juce::DynamicObject();
+        r->setProperty("ref", Media::makeRef(dst, session.file()));
+        r->setProperty("offset", (double) L / sr);
+        r->setProperty("frames", (juce::int64) (L + N));
+        r->setProperty("channels", ch);
+        r->setProperty("rate", sr);
+        r->setProperty("seconds", (double) (L + N) / sr);
+        return juce::var(r);
+    });
     o = add(o, "forgetLastShow", [this](const juce::var&) { session.forgetLast(); return juce::var(true); });
     o = add(o, "getAudioSetup", [this](const juce::var& a) { return audio.getSetup(a.isObject() && (bool) a["rescan"]); });
     o = add(o, "setAudioSetup", [this](const juce::var& a) {

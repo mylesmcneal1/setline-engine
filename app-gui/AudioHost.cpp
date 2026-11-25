@@ -1,5 +1,7 @@
 #include "AudioHost.h"
 #include "Log.h"
+#include <algorithm>
+#include <cstring>
 #include <cmath>
 
 namespace setline::gui {
@@ -256,6 +258,38 @@ juce::var AudioHost::setListen(const juce::var& req)
     loaded = false; ++deviceEpoch; // the song is mapped again for the new outputs
     saveListen();
     return listenState();
+}
+
+std::vector<std::vector<float>> AudioHost::bakeTrack(const juce::var& payload, const juce::String& track, int64_t a, int64_t b, int channels, juce::String& err)
+{
+    const double sr = showRate();
+    std::vector<std::vector<float>> out;
+    if (b <= a || channels < 1 || channels > 2) { err = "Nothing to glue"; return out; }
+    auto mapped = mapSong(payload, sr, channels, [](const juce::String&, std::vector<std::string>&) { return 0; },
+                          [](const juce::String&, const juce::var&, std::vector<std::string>&) { return std::shared_ptr<const std::vector<float>>(); });
+    auto& def = mapped.def;
+    // only this track, straight to its own channels at unity (the fader / mute / routing aren't part of the clip audio)
+    def.stems.erase(std::remove_if(def.stems.begin(), def.stems.end(), [&](const StemDef& st) { return juce::String(st.name) != track; }), def.stems.end());
+    if (def.stems.size() != 1) { err = "\"" + track + "\" has no audio to glue"; return out; }
+    def.stems[0].outs = channels == 1 ? std::vector<int> { 0 } : std::vector<int> { 0, 1 };
+    def.stems[0].gainDb = 0;
+    def.clickOuts.clear(); for (auto& c : def.moreClicks) c.outs.clear(); def.cueOuts.clear();
+    Engine e;
+    Engine::Config cfg; cfg.sampleRate = sr; cfg.numOutputs = channels; cfg.offline = true;
+    std::vector<std::string> warnings;
+    if (auto loadErr = e.load(def, cfg, warnings); ! loadErr.empty()) { err = juce::String(loadErr); return out; }
+    for (auto& [name, id] : mapped.engineTrack) e.setTrackLevel(id, 0.0f, false);
+    out.assign((size_t) channels, std::vector<float>((size_t) (b - a), 0.0f));
+    const int block = 512;
+    std::vector<std::vector<float>> buf((size_t) channels, std::vector<float>(block));
+    std::vector<float*> ptrs; for (auto& x : buf) ptrs.push_back(x.data());
+    if (! e.start(0)) { err = "Couldn't render \"" + track + "\""; out.clear(); return out; }
+    for (int64_t pos = e.position(); pos < b && e.isPlaying(); pos += block) {
+        e.process(ptrs.data(), channels, block);
+        for (int c = 0; c < channels; ++c)
+            for (int i = 0; i < block; ++i) { const int64_t t = pos + i; if (t >= a && t < b) out[(size_t) c][(size_t) (t - a)] = buf[(size_t) c][(size_t) i]; }
+    }
+    return out;
 }
 
 // The fold-down (see setListen). Tracks the show doesn't route stay silent; Click / Cues can be left out.
@@ -728,6 +762,9 @@ juce::var AudioHost::renderOffline(const juce::var& payload, const juce::var& op
     o->setProperty("midi", midi);
     o->setProperty("warnings", w);
     o->setProperty("samples", juce::var(samples));
+    juce::Array<juce::var> hashes; // FNV-1a over the float bits of each whole output
+    for (auto& ch : out) { uint64_t h = 1469598103934665603ull; for (float v : ch) { uint32_t u; std::memcpy(&u, &v, 4); for (int k = 0; k < 4; ++k) { h ^= (u >> (8 * k)) & 0xff; h *= 1099511628211ull; } } hashes.add(juce::String::toHexString((juce::int64) h)); }
+    o->setProperty("hashes", hashes);
     return juce::var(o);
 }
 
