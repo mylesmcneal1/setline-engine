@@ -475,6 +475,7 @@ juce::var AudioHost::loadSong(const juce::var& payload)
     std::vector<std::string> warnings = mapped.warnings;
     if (auto err = eng.load(mapped.def, cfg, warnings); ! err.empty()) { loaded = false; applog::line("Song \"" + juce::String(mapped.def.name) + "\" didn't load: " + juce::String(err)); return errorObj(err); }
     applog::line("Loaded \"" + juce::String(mapped.def.name) + "\"" + (listen.on ? " (listening on this computer)" : "") + (warnings.empty() ? juce::String() : ", " + juce::String((int) warnings.size()) + " warning(s): " + juce::String(warnings.front())));
+    eng.setSegue(false); // a song loaded directly: whatever waits in the next slot was queued for another song
     loaded = true;
     loadedEpoch = deviceEpoch;
     loadedName = juce::String(mapped.def.name);
