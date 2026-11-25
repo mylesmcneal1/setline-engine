@@ -128,6 +128,7 @@
   .listenbar{position:fixed;left:50%;transform:translateX(-50%);top:46px;z-index:9000;display:flex;align-items:center;gap:12px;padding:5px 8px 5px 14px;border-radius:0 0 10px 10px;background:#f5a524;color:#1a1000;font-size:12px;font-weight:600;box-shadow:0 6px 20px rgba(0,0,0,.4)}
   .listenbar[hidden]{display:none} .listenbar button{background:rgba(0,0,0,.16);color:#1a1000;border-radius:6px;padding:3px 9px;font-weight:600}
   .trk.tsel .lh{box-shadow:inset 2px 0 0 var(--accent)} .trk .lh{cursor:pointer}
+  .song.msel,.ps.msel{background:rgba(245,165,36,.14)!important;box-shadow:inset 2px 0 0 var(--accent)} .folder.msel>.fhead .fh{background:rgba(245,165,36,.12)}
   .selbox{position:fixed;border:1px solid #f5a524;background:rgba(245,165,36,.08);pointer-events:none;z-index:9500;border-radius:2px}
   .xm .it kbd{margin-left:auto;padding-left:22px;color:var(--muted);font:inherit;font-size:11px;opacity:.8}
   .gridc{align-items:center;margin-left:6px;flex:none;width:max-content} .gridc select{flex:none;width:auto;min-width:96px;height:24px;background:transparent;border:0;color:var(--text);font:inherit;font-size:12px;padding:0 4px;border-radius:6px;cursor:pointer}
@@ -1042,17 +1043,56 @@ function ctxMenu(e,items){ document.querySelectorAll('.xm.ctx').forEach(x=>x.rem
     if(!it.dis) d.onclick=ev=>{ ev.stopPropagation(); m.remove(); it.act(); }; m.appendChild(d); });
   document.body.appendChild(m); m.style.left=Math.min(innerWidth-m.offsetWidth-8,e.clientX)+'px'; m.style.top=Math.min(innerHeight-m.offsetHeight-8,e.clientY)+'px';
   m.addEventListener('pointerdown',ev=>ev.stopPropagation()); setTimeout(()=>document.addEventListener('pointerdown',function off(){ m.remove(); document.removeEventListener('pointerdown',off); }),0); }
-function songMenu(e,id,where){ const s=songs.find(x=>x.id===id), inSet=setOrder.includes(id), i=setOrder.indexOf(id);
+function songMenu(e,id,where){ if(songSel.size>1&&songSel.has(id)){ const ids=[...songSel], n=ids.length, inSet=ids.filter(x=>setOrder.includes(x));
+    ctxMenu(e,[...(inSet.length?[{label:'Remove '+(inSet.length===n?n+' songs':inSet.length)+' from this setlist',icon:'−',act:()=>removeFromSet(ids)}]:[]),
+      ...(inSet.length<n?[{label:'Add '+(n-inSet.length)+' to '+curSetObj().name,icon:'＋',act:()=>{ snap(); ids.forEach(x=>{ if(!setOrder.includes(x)) setOrder.push(x); }); songSel.clear(); refresh(); }}]:[]),
+      '-',{label:'Delete '+n+' songs…',icon:'⌫',danger:true,act:()=>deleteSongs(ids,'menu')}]); return; }
+  const s=songs.find(x=>x.id===id), inSet=setOrder.includes(id), i=setOrder.indexOf(id);
   const others=setlists.filter(l=>l.id!==curSet);
   ctxMenu(e,[{label:open.has(id)?'Close':'Open',icon:'›',act:()=>{ open.has(id)?open.delete(id):open.add(id); select(id,false); renderFolders(); }},
     {label:'Rename…',icon:'✎',act:()=>renameSong(id)},
     '-',
-    inSet?{label:`Remove from ${curSetObj().name}`,icon:'−',act:()=>{ setOrder.splice(i,1); refresh(); toast(`Removed “${s.name}” from ${curSetObj().name}`,()=>{ setOrder.splice(i,0,id); refresh(); }); }}:{label:`Add to ${curSetObj().name}`,icon:'＋',act:()=>{ setOrder.push(id); refresh(); }},
+    inSet?{label:'Remove from this setlist',icon:'−',act:()=>{ setOrder.splice(i,1); refresh(); toast(`Removed “${s.name}” from ${curSetObj().name}`,()=>{ setOrder.splice(i,0,id); refresh(); }); }}:{label:`Add to ${curSetObj().name}`,icon:'＋',act:()=>{ setOrder.push(id); refresh(); }},
     ...(inSet?[{label:'Move to top',icon:'↑',dis:i===0,act:()=>{ setOrder.splice(i,1); setOrder.unshift(id); refresh(); }},{label:'Move to bottom',icon:'↓',dis:i===setOrder.length-1,act:()=>{ setOrder.splice(i,1); setOrder.push(id); refresh(); }}]:[]),
     ...others.map(l=>({label:l.order.includes(id)?`Remove from ${l.name}`:`Add to ${l.name}`,icon:l.order.includes(id)?'−':'＋',act:()=>{ const k=l.order.indexOf(id); k>=0?l.order.splice(k,1):l.order.push(id); refresh(); toast(k>=0?`Removed from ${l.name}`:`Added to ${l.name}`); }})),
     '-',
     {label:'Duplicate song',icon:'⧉',act:()=>dupSong(id)},
-    {label:'Delete song…',icon:'⌫',danger:true,act:()=>deleteSong(id)}]); }
+    {label:'Delete from show…',icon:'⌫',danger:true,act:()=>deleteSong(id)}]); }
+
+// ---------- several songs at once (6c item 8) ----------
+// Ctrl / Cmd+click adds or removes a song, Shift+click a range, in the setlist, "Not in this set" or the song
+// folders. Delete (or right-click "Delete N songs…") asks once; from the setlist the choice is "Remove from
+// <setlist>" or "Delete from show". Audio files are never deleted with songs (File > Clean up unused audio…).
+let songSel=new Set(), songSelFrom=null, songAnchor=null;
+const folderOrder=()=>[...document.querySelectorAll('.folder')].map(f=>f.dataset.id);
+const poolOrder=()=>[...document.querySelectorAll('#pool .ps')].map(r=>r.dataset.id);
+// true: the click was a multi-selection click (the caller does nothing else)
+function songRowClick(e,id,from,order){
+  if(e.ctrlKey||e.metaKey){ if(songSelFrom!==from||!songSel.size){ songSel.clear(); if(selId&&order.includes(selId)&&selId!==id) songSel.add(selId); } songSelFrom=from; songSel.has(id)?songSel.delete(id):songSel.add(id); songAnchor=id; markSongSel(); return true; }
+  if(e.shiftKey&&songAnchor&&order.includes(songAnchor)){ const a=order.indexOf(songAnchor), b=order.indexOf(id); songSel=new Set(order.slice(Math.min(a,b),Math.max(a,b)+1)); songSelFrom=from; markSongSel(); return true; }
+  songSel.clear(); songSelFrom=from; songAnchor=id; markSongSel(); return false; }
+function markSongSel(){ const on=id=>songSel.size>1&&songSel.has(id);
+  document.querySelectorAll('#songs .song,#pool .ps').forEach(r=>r.classList.toggle('msel',on(r.dataset.id))); document.querySelectorAll('.folder').forEach(f=>f.classList.toggle('msel',on(f.dataset.id))); }
+function removeFromSet(ids){ syncSet(); const before=[...setOrder]; const n=ids.filter(id=>setOrder.includes(id)).length; if(!n) return;
+  snap(); setOrder.splice(0,setOrder.length,...setOrder.filter(id=>!ids.includes(id))); songSel.clear(); refresh(); toast('Removed '+n+' song'+(n>1?'s':'')+' from '+curSetObj().name,()=>undo()); }
+function deleteSongs(ids,from){ ids=ids.filter(id=>songs.some(s=>s.id===id)); if(!ids.length) return;
+  const names=ids.map(id=>songs.find(s=>s.id===id).name), n=ids.length, inSet=ids.filter(id=>setOrder.includes(id)).length;
+  const list=names.slice(0,8).map(x=>'“'+esc(x)+'”').join(', ')+(n>8?' and '+(n-8)+' more':'');
+  const del=()=>{ snap(); syncSet();
+    ids.forEach(id=>{ const k=songs.findIndex(s=>s.id===id); if(k>=0) songs.splice(k,1); setlists.forEach(l=>{ const j=l.order.indexOf(id); if(j>=0) l.order.splice(j,1); }); open.delete(id); });
+    if(ids.includes(playId)){ if(NATIVE&&window.SLE) SLE.stop(); playing=false; playId=null; pos=0; $('playBtn').classList.remove('on'); }
+    if(ids.includes(selId)){ const nxt=[...songs].sort(byName)[0]; selId=nxt?nxt.id:null; } selSec=null; selClip=null; if(ids.includes(ed.song)) closeMidi();
+    songSel.clear(); refresh(); toast('Deleted '+(n>1?n+' songs':'“'+names[0]+'”')+' (the audio files stay)',()=>undo()); };
+  const body='Removes '+list+' with all their versions, sections, MIDI and audio edits from this show, and from every setlist. The audio files on disk aren’t touched (File ▾ › Clean up unused audio… lists the ones nothing uses).';
+  if(from==='set'&&inSet){ // in a setlist: just take them out of it, or delete them from the show
+    const bg=document.createElement('div'); bg.className='cfbg';
+    bg.innerHTML='<div class="cfbox"><b>'+(n>1?n+' songs':'“'+esc(names[0])+'”')+'</b><p>Take '+(n>1?'them':'it')+' out of “'+esc(curSetObj().name)+'” (still in the show), or delete '+(n>1?'them':'it')+' from the show?</p><div class="cfa"><button class="btn line" data-a="no">Cancel</button><button class="btn line" data-a="rm">Remove from this setlist</button><button class="btn danger" data-a="del">Delete from show…</button></div></div>';
+    document.body.appendChild(bg); const close=()=>{ bg.remove(); document.removeEventListener('keydown',key,true); }; const key=e=>{ if(e.key==='Escape'){ e.stopPropagation(); close(); } };
+    document.addEventListener('keydown',key,true); bg.onclick=e=>{ if(e.target===bg) close(); };
+    bg.querySelector('[data-a=no]').onclick=close; bg.querySelector('[data-a=rm]').onclick=()=>{ close(); removeFromSet(ids); };
+    bg.querySelector('[data-a=del]').onclick=()=>{ close(); confirmBox('Delete '+(n>1?n+' songs':'“'+esc(names[0])+'”')+' from the show?',body,n>1?'Delete '+n+' songs':'Delete song',del); };
+    bg.querySelector('[data-a=rm]').focus(); return; }
+  confirmBox('Delete '+(n>1?n+' songs':'“'+esc(names[0])+'”')+'?',body,n>1?'Delete '+n+' songs':'Delete song',del); }
 function renameSong(id){ const s=songs.find(x=>x.id===id); open.add(id); select(id,false); renderFolders(); const nm=document.querySelector(`.folder[data-id="${id}"] .fh .nm`); if(!nm) return;
   nm.innerHTML=`<input value="${esc(s.name)}" style="font:inherit;width:100%;height:26px;padding:2px 6px">`; const i=nm.firstChild; i.onclick=e=>e.stopPropagation(); i.onpointerdown=e=>e.stopPropagation(); i.focus(); i.select();
   const done=()=>{ s.name=i.value.trim()||s.name; refresh(); }; i.onblur=done; i.onkeydown=e=>{ if(e.key==='Enter') i.blur(); if(e.key==='Escape'){ i.value=s.name; i.blur(); } }; }
@@ -1144,8 +1184,10 @@ function renderSetlist(){
   el.querySelectorAll('.rmx').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const id=b.dataset.id, i=setOrder.indexOf(id); setOrder.splice(i,1); refresh(); toast(`Removed “${songs.find(x=>x.id===id).name}” from ${curSetObj().name}`,()=>{ setOrder.splice(i,0,id); refresh(); }); });
   $('pool').querySelectorAll('.addx').forEach(b=>b.onclick=e=>{ e.stopPropagation(); setOrder.push(b.dataset.id); refresh(); });
   $('pool').querySelectorAll('.ps').forEach(r=>r.oncontextmenu=e=>{ e.preventDefault(); songMenu(e,r.dataset.id,'pool'); });
+  $('pool').querySelectorAll('.ps').forEach(r=>r.onclick=e=>{ if(e.target.closest('.addx')) return; if(songRowClick(e,r.dataset.id,'pool',poolOrder())) return; select(r.dataset.id,true); });
+  markSongSel();
   el.querySelectorAll('.song').forEach(row=>{
-    row.onclick=e=>{ if(e.target.closest('.rmx,.xs')) return; select(row.dataset.id,true); };
+    row.onclick=e=>{ if(e.target.closest('.rmx,.xs')) return; if(songRowClick(e,row.dataset.id,'set',[...setOrder])) return; select(row.dataset.id,true); };
     row.oncontextmenu=e=>{ e.preventDefault(); songMenu(e,row.dataset.id,'set'); };
     row.ondragstart=()=>{dragId=row.dataset.id; dragFrom='set'; row.classList.add('dragging');};
     row.ondragend=()=>row.classList.remove('dragging');
@@ -1479,7 +1521,7 @@ function renderFolders(){
   wireVerSelects(sc); wireAltSelects(sc);
   sc.querySelectorAll('.cgear').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const so=songs.find(x=>x.id===b.dataset.song); b.dataset.kind==='cues'?openCuePanel(so):openClickPanel(so,b.dataset.track); });
   sc.querySelectorAll('.fh').forEach(hd=>hd.oncontextmenu=e=>{ e.preventDefault(); songMenu(e,hd.closest('.folder').dataset.id,'list'); });
-  sc.querySelectorAll('.fh').forEach(hd=>hd.onclick=e=>{ if(e.target.closest('.fplay')) return; const id=hd.closest('.folder').dataset.id; open.has(id)?open.delete(id):open.add(id); select(id,false); renderFolders(); });
+  sc.querySelectorAll('.fh').forEach(hd=>hd.onclick=e=>{ if(e.target.closest('.fplay')) return; const id=hd.closest('.folder').dataset.id; if(songRowClick(e,id,'folders',folderOrder())) return; open.has(id)?open.delete(id):open.add(id); select(id,false); renderFolders(); });
   sc.querySelectorAll('.fmore').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const r=b.getBoundingClientRect(); songMenu({clientX:r.left,clientY:r.bottom+4},b.dataset.song,'list'); });
   sc.querySelectorAll('.fplay').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const s=songs.find(x=>x.id===b.dataset.song); locate(s,0); if(!playing) toggle(); });
   sc.querySelectorAll('.fsec i[data-t]').forEach(i=>i.onclick=e=>{ e.stopPropagation(); const s=songs.find(x=>x.id===i.closest('.freg').dataset.song); locate(s,+i.dataset.t); });
@@ -2628,7 +2670,8 @@ document.addEventListener('keydown',e=>{ if(/INPUT|SELECT|TEXTAREA/.test(documen
     if((e.key==='ArrowLeft'||e.key==='ArrowRight')&&!first){ e.preventDefault(); const n=ev.bar+(e.key==='ArrowRight'?1:-1); if(n>1&&n<=s.total&&!s.tmap.some(o=>o!==ev&&o.bar===n)){ ev.bar=n; buildBars(s); tsel={song:s.id,i:s.tmap.indexOf(ev)}; tempoRefresh(); setTimeout(()=>openTpop(),20); } return; }
     if((e.key==='Delete'||e.key==='Backspace')&&!first){ e.preventDefault(); s.tmap.splice(s.tmap.indexOf(ev),1); closeTpop(); buildBars(s); tempoRefresh(); return; }
     if(e.key==='Escape'){ closeTpop(); return; } } }
-  if((e.key==='Delete'||e.key==='Backspace')&&!selSec&&!selClip&&!tsel&&!ed.song&&selId&&document.activeElement===document.body&&!document.querySelector('.cfbg')){ e.preventDefault(); deleteSong(selId); return; }
+  if(songSel.size>1&&e.key==='Escape'){ songSel.clear(); markSongSel(); return; }
+  if((e.key==='Delete'||e.key==='Backspace')&&!selSec&&!selClip&&!tsel&&!ed.song&&selId&&document.activeElement===document.body&&!document.querySelector('.cfbg')){ e.preventDefault(); if(songSel.size>1) deleteSongs([...songSel],songSelFrom); else if(songSelFrom==='set'&&setOrder.includes(selId)) deleteSongs([selId],'set'); else deleteSong(selId); return; }
   if(selClip && !selSec && !ed.song){ const s=songs.find(x=>x.id===selClip.song), t=selClip.track, cl=s&&clipsOf(s,t).find(c=>c.id===selClip.id);
     if(cl){ if(e.key==='Escape'){ selectClip(s,t,null); return; } if(e.key==='Backspace'||e.key==='Delete'){ e.preventDefault(); delClip(s,t,cl); return; }
       if(e.key==='s'||e.key==='S'){ if(playId===s.id) splitClip(s,t,cl,pos); return; } if(e.key==='ArrowLeft'||e.key==='ArrowRight'){ e.preventDefault(); nudgeClip(s,t,cl,e.key==='ArrowLeft'?-1:1,e.altKey); return; } } }

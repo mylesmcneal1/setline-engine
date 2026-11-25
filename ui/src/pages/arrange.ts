@@ -288,6 +288,7 @@ const SLE = {
   diagnostics: (how: "copy" | "save") => diagnostics(how),
   preferences: () => preferences(),
   openBackup: () => openBackup(),
+  cleanUpAudio: () => cleanUpAudio(),
   listenMenu: (at: { clientX: number; clientY: number }) => listenMenu(at),
   fileMenu: (at: { clientX: number; clientY: number }) => fileMenu(at),
   // ---- step 2: stems ----
@@ -672,6 +673,22 @@ async function openBackup(at?: { clientX: number; clientY: number }) {
     }) })),
   ]);
 }
+// File > Clean up unused audio… (6c item 8): the show's audio files nothing uses (not the show as it is now or as
+// last saved, not its versions or backups), with their sizes; moved to the Recycle Bin / Trash only after OK.
+async function cleanUpAudio() {
+  if (!doc.name) { page().toast("Save the show first"); return; }
+  const list = await SL.call<{ path: string; name: string; size: number }[]>("unusedAudio", { text: sessionText() });
+  if (!list.length) { page().toast("Every audio file in the show is in use"); return; }
+  const esc = (x: string) => x.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]!));
+  const mb = (n: number) => (n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB");
+  const total = list.reduce((a, f) => a + f.size, 0), bin = navigator.platform.startsWith("Mac") ? "Trash" : "Recycle Bin";
+  page().confirm(`${list.length} unused audio file${list.length > 1 ? "s" : ""} · ${mb(total)}`,
+    `<span style="display:block;max-height:220px;overflow:auto;font-size:12px;line-height:1.7;margin:6px 0 10px">${list.map((f) => `${esc(f.name)} <span class="faint">· ${mb(f.size)}</span>`).join("<br>")}</span>Nothing in this show, its versions or its backups uses ${list.length > 1 ? "them" : "it"}. ${list.length > 1 ? "They go" : "It goes"} to the ${bin}, so you can still get ${list.length > 1 ? "them" : "it"} back.`,
+    `Move to the ${bin}`, async () => {
+      const r = await SL.call<{ moved: number; failed: string[] }>("trashAudio", { paths: list.map((f) => f.path) });
+      page().toast(`${r.moved} file${r.moved === 1 ? "" : "s"} moved to the ${bin}${r.failed.length ? ` · ${r.failed.length} couldn’t be moved` : ""}`);
+    });
+}
 // Preferences (6c item 3): where new shows go, the Library, the logs.
 async function preferences() {
   const f = await SL.call<Folders>("folders");
@@ -767,6 +784,7 @@ async function fileMenu(at: { clientX: number; clientY: number }) {
     { label: "Save As…", icon: "", key: (mod === "⌘" ? "⇧⌘" : "Ctrl+Shift+") + "S", act: () => { saveSession(true); } },
     "-",
     { label: "Open Backup…", icon: "🕘", dis: !doc.name, act: () => { openBackup(at); } },
+    { label: "Clean up unused audio…", icon: "🧹", dis: !doc.name, act: () => { cleanUpAudio(); } },
     { label: "Close", icon: "✕", act: () => newSession("Closing the session.") },
     "-",
     { label: "Preferences…", icon: "⚙", key: mod + ",", act: () => { preferences(); } },

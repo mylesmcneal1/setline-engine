@@ -1,6 +1,7 @@
 #include "Media.h"
 #include "Folders.h"
 #include <map>
+#include <set>
 #include <mutex>
 #include <thread>
 #if JUCE_WINDOWS
@@ -497,6 +498,70 @@ void Media::collect(const juce::var& arg, Done done)
         else done(obj({ { "map", mapVar }, { "missing", missing } }));
     };
     runJob(std::move(job));
+}
+
+namespace {
+// every string anywhere in a JSON value
+void stringsIn(const juce::var& v, juce::StringArray& out)
+{
+    if (v.isString()) { out.add(v.toString()); return; }
+    if (auto* a = v.getArray()) { for (auto& x : *a) stringsIn(x, out); return; }
+    if (auto* o = v.getDynamicObject()) for (auto& p : o->getProperties()) stringsIn(p.value, out);
+}
+} // namespace
+
+juce::var Media::unused(const juce::File& sessionFile, const juce::String& sessionText)
+{
+    juce::Array<juce::var> out;
+    const auto folder = sessionFolder(sessionFile);
+    if (folder == juce::File()) return out;
+    // what the show (and each of its backups) points at
+    std::set<juce::String> used;
+    auto addUses = [&](const juce::String& text) {
+        juce::StringArray strs; stringsIn(juce::JSON::parse(text), strs);
+        for (auto& s : strs) {
+            if (s.length() < 5 || ! (s.containsChar('/') || s.containsChar('\\') || s.endsWithIgnoreCase(".wav") || s.endsWithIgnoreCase(".aif") || s.endsWithIgnoreCase(".aiff") || s.endsWithIgnoreCase(".flac"))) continue;
+            const auto f = resolve(s, sessionFile);
+            if (f != juce::File()) used.insert(f.getFullPathName().toLowerCase());
+        }
+    };
+    addUses(sessionText);
+    if (sessionFile.existsAsFile()) addUses(sessionFile.loadFileAsString()); // and the show as last saved (unsaved changes aren't final)
+    for (auto& b : folder.getChildFile("Backups").findChildFiles(juce::File::findFiles, false, juce::String("*") + ".setline")) addUses(b.loadFileAsString());
+    for (auto sub : { "Audio", "Cues/Words" }) {
+        const auto dir = folder.getChildFile(sub);
+        juce::StringArray pending; // a copy still in progress isn't unused
+        if (const auto journal = juce::JSON::parse(journalFor(dir)); auto* l = journal["copies"].getArray())
+            for (auto& c : *l) pending.add(dir.getChildFile(c["dst"].toString()).getFullPathName().toLowerCase());
+        for (auto& f : dir.findChildFiles(juce::File::findFiles, true, "*")) {
+            if (! isAudioFile(f) || f.getFileName().startsWithChar('.')) continue;
+            const auto key = f.getFullPathName().toLowerCase();
+            if (used.count(key) || pending.contains(key)) continue;
+            auto* o = new juce::DynamicObject();
+            o->setProperty("path", f.getFullPathName());
+            o->setProperty("name", f.getRelativePathFrom(folder).replaceCharacter('\\', '/'));
+            o->setProperty("folder", sub);
+            o->setProperty("size", (double) f.getSize());
+            out.add(juce::var(o));
+        }
+    }
+    std::sort(out.begin(), out.end(), [](const juce::var& a, const juce::var& b) { return (double) a["size"] > (double) b["size"]; });
+    return out;
+}
+
+juce::var Media::trash(const juce::File& sessionFile, const juce::var& paths)
+{
+    const auto folder = sessionFolder(sessionFile);
+    int moved = 0;
+    juce::Array<juce::var> failed;
+    if (auto* l = paths.getArray())
+        for (auto& p : *l) {
+            const juce::File f(p.toString());
+            const bool inShow = folder != juce::File() && (f.isAChildOf(folder.getChildFile("Audio")) || f.isAChildOf(folder.getChildFile("Cues").getChildFile("Words")));
+            if (! inShow || ! f.existsAsFile() || ! isAudioFile(f)) { failed.add(f.getFileName()); continue; }
+            if (f.moveToTrash()) ++moved; else failed.add(f.getFileName());
+        }
+    return obj({ { "moved", moved }, { "failed", failed } });
 }
 
 juce::var Media::check(const juce::var& arg)

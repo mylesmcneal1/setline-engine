@@ -261,6 +261,13 @@ Bridge::Options Bridge::addTo(Options o)
         r->setProperty("seconds", (double) (L + N) / sr);
         return juce::var(r);
     });
+    // File > Clean up unused audio (Media.h): {text: the show as it is now} -> [{path, name, folder, size}]
+    o = add(o, "unusedAudio", [this](const juce::var& a) { return media.unused(session.file(), a["text"].toString()); });
+    o = add(o, "trashAudio", [this](const juce::var& a) {
+        const auto r = media.trash(session.file(), a["paths"]);
+        applog::line("Clean up unused audio: " + r["moved"].toString() + " file(s) to the trash");
+        return r;
+    });
     o = add(o, "forgetLastShow", [this](const juce::var&) { session.forgetLast(); return juce::var(true); });
     o = add(o, "getAudioSetup", [this](const juce::var& a) { return audio.getSetup(a.isObject() && (bool) a["rescan"]); });
     o = add(o, "setAudioSetup", [this](const juce::var& a) {

@@ -62,6 +62,13 @@ public:
     // A file name that's valid on Windows and macOS: no < > : " / \ | ? * or control characters, no trailing
     // dots / spaces, not a reserved Windows name (CON, NUL, COM1...), Unicode NFC. "" stays "".
     static juce::String portableName(const juce::String& name);
+    // File > Clean up unused audio (6c item 8): the files in the show's Audio and Cues/Words folders that nothing
+    // refers to: not the show (any song, version or alternate: every string in sessionText that points at a
+    // file), not its backups, not a copy still in progress. -> [{path, name, folder, size}] largest first
+    juce::var unused(const juce::File& sessionFile, const juce::String& sessionText);
+    // Moves those files to the Recycle Bin / Trash (only files in that show's Audio or Cues/Words folders).
+    // -> {moved, failed: [names]}
+    juce::var trash(const juce::File& sessionFile, const juce::var& paths);
     // Unicode NFC (macOS file names often come as NFD: "e" + combining accent).
     static juce::String nfc(const juce::String& s);
     // How a file is stored in a session saved at sessionFile.
