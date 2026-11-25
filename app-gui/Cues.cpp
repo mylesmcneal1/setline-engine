@@ -266,7 +266,24 @@ juce::String Cues::storeKeyOf(const juce::String& text, const Choice& c, double 
     return b + "|" + juce::String((int) rate);
 }
 
-void Cues::setShowFolder(const juce::File& folder) { std::lock_guard<std::mutex> g(dataLock); if (folder != showDir) ++showGen; showDir = folder; }
+void Cues::setShowFolder(const juce::File& folder)
+{
+    {
+        std::lock_guard<std::mutex> g(dataLock);
+        if (folder == showDir) return;
+    }
+    // Another show: the cues it stored win over anything this computer made earlier with the same key (the
+    // start-up show, another show), so they sound exactly as they did where the show was made.
+    juce::StringArray stored;
+    if (folder != juce::File()) {
+        const auto m = juce::JSON::parse(folder.getChildFile("Cues").getChildFile("cues.json")); // (kept alive while read)
+        if (auto* l = m["cues"].getArray()) for (auto& e : *l) stored.add(e["key"].toString());
+    }
+    std::lock_guard<std::mutex> g(dataLock);
+    ++showGen;
+    showDir = folder;
+    for (auto& k : stored) memo.erase(k);
+}
 
 juce::var& Cues::manifest(const juce::File& dir)
 {
