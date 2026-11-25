@@ -75,6 +75,8 @@ public:
     static juce::String makeRef(const juce::File& f, const juce::File& sessionFile);
 
     static bool isAudioFile(const juce::File& f);
+    // A quick content hash of an audio file (the Library stores audio by it: Audio/<hash>.<ext>).
+    static juce::String contentHash(const juce::File& f);
     static constexpr const char* audioWildcard = "*.wav;*.wave;*.aif;*.aiff;*.flac";
 
 private:

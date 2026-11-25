@@ -285,6 +285,32 @@ void Cues::setShowFolder(const juce::File& folder)
     for (auto& k : stored) memo.erase(k);
 }
 
+void Cues::mergeStore(const juce::File& from)
+{
+    post([this, from] {
+        juce::File dir;
+        { std::lock_guard<std::mutex> g(dataLock); if (showDir != juce::File()) dir = showDir.getChildFile("Cues"); }
+        if (dir == juce::File() || ! dir.createDirectory()) return;
+        const auto src = juce::JSON::parse(from.getChildFile("cues.json"));
+        auto* list = manifest(dir)["cues"].getArray();
+        if (list == nullptr) return;
+        int added = 0;
+        if (auto* sl = src["cues"].getArray())
+            for (auto& e : *sl) {
+                const auto key = e["key"].toString(), file = e["file"].toString();
+                if (key.isEmpty() || file.isEmpty() || file.contains("..")) continue;
+                bool have = false;
+                for (auto& x : *list) if (x["key"].toString() == key) { have = true; break; }
+                if (have) continue;
+                const auto f = from.getChildFile(file), dst = dir.getChildFile(file);
+                if (! f.existsAsFile() || (! dst.existsAsFile() && ! f.copyFileTo(dst))) continue;
+                list->add(e); ++added;
+                std::lock_guard<std::mutex> g(dataLock); memo.erase(key);
+            }
+        if (added) writeManifest(dir);
+    }, false);
+}
+
 juce::var& Cues::manifest(const juce::File& dir)
 {
     if (manifestDir != dir) {

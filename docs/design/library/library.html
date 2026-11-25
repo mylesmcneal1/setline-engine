@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>set.Line — Library (mockup)</title>
+<link rel="stylesheet" href="base.css">
+<style>
+.main{grid-template-columns:290px minmax(0,1fr) 300px}
+.left{display:flex;flex-direction:column;padding:10px 8px}
+.picker{display:flex;align-items:center;gap:9px;background:var(--s3);border-radius:9px;padding:9px 11px;margin-bottom:10px;position:relative}
+.picker .cb{width:4px;height:22px;border-radius:2px}
+.picker b{flex:1}
+.ssong{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:7px}
+.ssong.on{background:var(--s3)}
+.ssong .n{color:var(--muted);width:14px;font-size:11px}
+.ssong .bar{width:3px;height:22px;border-radius:2px}
+.ssong .t{flex:1}
+.ssong .d{color:var(--muted);font-size:12px}
+.sub2{font-size:11px;color:var(--muted);padding:0 8px 3px 45px}
+.libh{display:flex;align-items:center;justify-content:space-between;margin:14px 6px 8px;font-weight:600}
+.search{background:var(--s3);border-radius:8px;padding:7px 10px;color:var(--muted);font-size:12px;display:flex;gap:8px;margin:0 4px 6px}
+.filt{display:flex;gap:6px;margin:0 4px 8px;flex-wrap:wrap}
+.filt span{font-size:11px;padding:3px 8px;border-radius:12px;background:var(--s3);color:#c9c9cf}
+.filt span.on{background:#3a2d12;color:#ffd38a}
+.lsong{display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:7px;font-size:13px}
+.lsong .bar{width:3px;height:18px;border-radius:2px}
+.lsong .t{flex:1}
+.lsong .in{width:6px;height:6px;border-radius:50%;background:#22c3a6}
+.lsong .vb{font-size:10px;background:#2a2a2e;border-radius:8px;padding:1px 6px;color:#c9c9cf}
+.lsong .d{color:var(--muted);font-size:11px}
+.lsong.drag{background:#1d2d44;outline:1px dashed var(--blue)}
+.dropline{height:2px;background:var(--blue);margin:2px 8px;border-radius:1px;display:none}
+.menu{position:absolute;z-index:40;background:#2c2c30;border:0.5px solid #48484e;border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.6);padding:5px;min-width:230px;display:none}
+.menu.show{display:block}
+.menu .it{padding:6px 10px;border-radius:6px;font-size:13px;display:flex;justify-content:space-between;gap:18px;color:#e4e4e8;align-items:center}
+.menu .it small{color:var(--muted)}
+.menu .it.hi{background:var(--blue);color:#fff}
+.menu .sep{height:1px;background:#3e3e44;margin:4px 6px}
+.menu .cap{font-size:10px;color:var(--muted);padding:5px 10px 3px;text-transform:uppercase;letter-spacing:.05em}
+.dlg{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:50}
+.dlg.show{display:flex}
+.box{width:620px;background:#1c1c1e;border-radius:14px;border:0.5px solid #3a3a40;box-shadow:0 30px 80px rgba(0,0,0,.6);padding:22px 24px}
+.box h2{font-size:18px;margin-bottom:6px}
+.box p{color:var(--muted);font-size:13px;margin-bottom:14px;line-height:1.5}
+.box .row2{display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--s2);border-radius:9px;margin-bottom:6px}
+.box .ck{width:18px;height:18px;border-radius:5px;background:var(--blue);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center}
+.box .btns{display:flex;justify-content:flex-end;gap:10px;margin-top:16px}
+.box .btns span{padding:8px 16px;border-radius:8px;background:var(--s3);font-weight:500}
+.box .btns span.pri{background:var(--blue);color:#fff}
+.syncbtn{white-space:nowrap;flex:none;display:flex;align-items:center;gap:8px;background:#0a3a52;border:1px solid #64d2ff;color:#dff6ff;border-radius:9px;padding:7px 14px;font-size:13px;font-weight:700}
+.syncbtn.done{background:#16301c;border-color:#30d158;color:#bff0cb}
+.syncbtn i{font-style:normal;color:#64d2ff}
+.syncpop{position:absolute;right:120px;top:50px;z-index:40;width:300px;background:#2c2c30;border:0.5px solid #48484e;border-radius:12px;box-shadow:0 14px 40px rgba(0,0,0,.6);padding:12px;display:none}
+.syncpop.show{display:block}
+.syncpop .r{display:flex;justify-content:space-between;padding:6px 4px;font-size:13px}
+.syncpop .ok{color:var(--green)}
+/* settings midi */
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;z-index:30;align-items:center;justify-content:center}
+.scrim.show{display:flex}
+.msg{font-family:"JetBrains Mono",monospace;font-size:12px;background:var(--s3);border-radius:6px;padding:4px 8px;color:#e4e4e8}
+.tl{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.minibtn{font-size:11px;background:var(--s3);border-radius:6px;padding:4px 9px;color:#e4e4e8}
+.top>*{flex-shrink:0;white-space:nowrap}
+</style></head>
+<body>
+<div class="top">
+  <div class="logo">set.Line</div>
+  <div class="seg"><span class="on">Show</span><span>Perform</span><span>Band</span></div>
+  <span class="tb" id="filebtn">File ▾</span><div class="sp"></div>
+  <div class="tp"><b>⏮</b><b>◀◀</b><b>■</b><b class="play">▶</b><b>▶▶</b><b>↻</b></div>
+  <div class="pos mono"><div><span class="big">1 . 1 . 1</span><small>0:00.0</small></div><div><span class="big">128</span><small>BPM · 4/4</small></div></div>
+  <div class="sp"></div>
+  <span class="syncbtn" id="syncbtn"><i>⇄</i> <span id="synclbl">Sync MIDI</span></span>
+  <div class="seg"><span class="on">Show outputs</span><span>This computer</span></div>
+  <div class="pill"><span class="dot"></span>iD14 · 48k · 128</div><div class="gear">⚙</div>
+</div>
+<div class="tool">
+  <span class="nm">My Band</span><span class="saved">Library · saved</span><span class="tb">↶</span><span class="tb">↷</span><span class="chip">Snap · Bar ▾</span>
+  <div class="sp"></div><span class="btn">＋ Track</span><span class="btn acc">＋ Song</span>
+</div>
+
+<div class="main">
+  <div class="left" id="left">
+    <div class="picker" id="picker"><span class="cb" style="background:#ff9f0a"></span><b>Fall Tour</b><span style="color:var(--muted);font-size:12px">5 · 16:29</span><span>▾</span></div>
+    <div id="set"></div>
+    <div class="dropline" id="dropline"></div>
+    <div class="libh"><span>Library</span><span style="color:var(--muted);font-weight:400;font-size:12px">24 songs</span></div>
+    <div class="search">⌕ <span id="q">Search songs</span></div>
+    <div class="filt"><span>A–Z ▾</span><span id="ftun">Tuning: any ▾</span><span>Recently added</span></div>
+    <div id="lib"></div>
+  </div>
+  <div style="display:grid;grid-template-rows:58px auto 1fr;min-height:0">
+    <div class="sh"><span style="width:5px;height:30px;border-radius:3px;background:#ff6b6b"></span><h1>Neon Rivers</h1><span class="meta mono">Album · 128 BPM · 4/4 · A min · 3:45</span></div>
+    <div style="padding:14px"><div style="display:flex;gap:3px;height:28px">
+      <i style="flex:1;background:var(--s-intro);border-radius:4px"></i><i style="flex:2;background:var(--s-verse);border-radius:4px"></i><i style="flex:2;background:var(--s-chorus);border-radius:4px"></i><i style="flex:2;background:var(--s-verse);border-radius:4px"></i><i style="flex:2;background:var(--s-chorus);border-radius:4px"></i><i style="flex:1.5;background:var(--s-bridge);border-radius:4px"></i><i style="flex:2;background:var(--s-chorus);border-radius:4px"></i><i style="flex:1;background:var(--s-outro);border-radius:4px"></i></div>
+      <div style="color:var(--muted);font-size:12px;margin-top:10px">(Song view as in the earlier mockups)</div></div>
+    <div></div>
+  </div>
+  <div class="right">
+    <div class="rh"><span class="tab2" style="background:#ff9f0a"></span><h2>Fall Tour</h2><small>Setlist</small></div>
+    <div class="card"><h3>Setlist</h3>
+      <div class="f"><span>Name</span><span class="sel2">Fall Tour</span></div>
+      <div class="f"><span>Colour</span><div class="sw"><i style="background:#ff9f0a" class="on"></i><i style="background:#5aa9ff"></i><i style="background:#30d158"></i><i style="background:#bf5af2"></i></div></div>
+      <div class="f"><span>Finish by</span><span class="sel2">10:45 PM ▾</span></div>
+    </div>
+    <div class="card"><h3>MIDI sync point</h3>
+      <div class="f"><span>Guitar rig</span><span class="msg">PC 12 · CC 43=2</span></div>
+      <div class="f"><span>Keys rig</span><span class="msg">Bank 1 · PC 5</span></div>
+      <div class="f"><span>Lights</span><span class="msg">PC 1</span></div>
+      <div class="f"><span></span><span class="sel2" id="editsync">Edit…</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- menus -->
+<div class="menu" id="pickmenu" style="left:8px;top:150px;width:290px">
+  <div class="cap">Setlists</div>
+  <div class="it hi"><span><span style="display:inline-block;width:3px;height:12px;background:#ff9f0a;margin-right:8px;border-radius:2px"></span>Fall Tour</span><small style="color:#dbeaff">5 songs ✓</small></div>
+  <div class="it"><span><span style="display:inline-block;width:3px;height:12px;background:#5aa9ff;margin-right:8px;border-radius:2px"></span>Thursday practice</span><small>9 songs</small></div>
+  <div class="it"><span><span style="display:inline-block;width:3px;height:12px;background:#30d158;margin-right:8px;border-radius:2px"></span>Acoustic night</span><small>6 songs</small></div>
+  <div class="it"><span><span style="display:inline-block;width:3px;height:12px;background:#bf5af2;margin-right:8px;border-radius:2px"></span>Festival 30 min</span><small>7 songs</small></div>
+  <div class="sep"></div>
+  <div class="it">New setlist <small>Ctrl+N</small></div><div class="it">Duplicate “Fall Tour”</div><div class="it">Rename…</div><div class="it" style="color:var(--red)">Delete…</div>
+</div>
+<div class="menu" id="filemenu" style="left:300px;top:46px">
+  <div class="it">New setlist <small>Ctrl+N</small></div>
+  <div class="it">Duplicate setlist</div>
+  <div class="sep"></div>
+  <div class="it hi">Export setlist… <small style="color:#dbeaff">Ctrl+E</small></div>
+  <div class="it">Import…</div>
+  <div class="sep"></div>
+  <div class="it">Library <small>▸</small></div>
+  <div class="it">Backups <small>▸</small></div>
+  <div class="it">Clean up unused audio…</div>
+  <div class="sep"></div>
+  <div class="it">Settings… <small>Ctrl+,</small></div>
+  <div class="it">Copy diagnostics</div>
+  <div class="sep"></div>
+  <div class="it">Quit <small>Ctrl+Q</small></div>
+</div>
+<div class="syncpop" id="syncpop">
+  <div style="font-weight:600;margin-bottom:6px">Sent to all devices at once</div>
+  <div class="r"><span>Guitar rig · USB MIDI Ch 1</span><span class="ok">✓</span></div>
+  <div class="r"><span>Keys rig · iD14 MIDI Ch 2</span><span class="ok">✓</span></div>
+  <div class="r"><span>Lights · loopMIDI Ch 16</span><span class="ok">✓</span></div>
+  <div style="font-size:11px;color:var(--muted);margin-top:6px">Songs take over from here.</div>
+</div>
+
+<!-- dialogs -->
+<div class="dlg" id="migrate"><div class="box">
+  <h2>Bring your shows into the Library</h2>
+  <p>set.Line now keeps every song in one Library. Each show becomes a setlist, and songs that appear in more than one show are merged. Your original show folders aren't changed.</p>
+  <div class="row2"><span class="ck">✓</span><b style="flex:1">Fall Tour</b><span style="color:var(--muted);font-size:12px">5 songs · 1.2 GB</span></div>
+  <div class="row2"><span class="ck">✓</span><b style="flex:1">Thursday practice</b><span style="color:var(--muted);font-size:12px">9 songs · 4 already in Fall Tour</span></div>
+  <div class="row2"><span class="ck">✓</span><b style="flex:1">Untitled show</b><span style="color:var(--muted);font-size:12px">2 songs</span></div>
+  <div class="btns"><span>Not now</span><span class="pri">Bring in 3 shows</span></div>
+</div></div>
+<div class="dlg" id="importd"><div class="box">
+  <h2>Import “Fall Tour.setline”</h2>
+  <p>7 songs. 5 are already in your Library and match exactly. 1 is new. 1 is different from yours:</p>
+  <div class="row2" style="flex-direction:column;align-items:stretch;gap:8px"><div style="display:flex;justify-content:space-between"><b>Glasshouse</b><span style="color:var(--muted);font-size:12px">imported has a new version “With intro”</span></div>
+   <div style="display:flex;gap:8px"><span class="minibtn" style="flex:1;text-align:center;padding:8px">Keep mine</span><span class="minibtn" style="flex:1;text-align:center;padding:8px;background:var(--blue);color:#fff">Use imported</span><span class="minibtn" style="flex:1;text-align:center;padding:8px">Keep both</span></div></div>
+  <p style="margin-top:12px;margin-bottom:0">Audio already in your Library won't be copied again. 312 MB to copy.</p>
+  <div class="btns"><span>Cancel</span><span class="pri">Import</span></div>
+</div></div>
+
+<div class="scrim" id="settings"><div class="sheet">
+  <div class="snav"><h2>Settings</h2><div>General</div><div>Audio</div><div>Outputs</div><div class="on">MIDI</div><div>Band</div><div>Voices</div><div>Appearance</div><div>Diagnostics</div></div>
+  <div class="sbody" style="overflow:auto">
+    <h3>MIDI</h3><p class="d">Any MIDI device works. Clock is sent on every port unless you turn it off.</p>
+    <div class="grp">
+      <div class="f" style="color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em"><span style="width:170px">Port</span><span style="flex:1">Used by</span><span style="width:70px">Clock</span><span style="width:120px">Start/Stop + SPP</span></div>
+      <div class="f"><span style="width:170px">USB MIDI</span><span style="flex:1;color:var(--muted);font-size:12px">Guitar rig</span><span style="width:70px"><div class="tog"></div></span><span style="width:120px"><div class="tog off"></div></span></div>
+      <div class="f"><span style="width:170px">iD14 MIDI Out</span><span style="flex:1;color:var(--muted);font-size:12px">Keys rig</span><span style="width:70px"><div class="tog"></div></span><span style="width:120px"><div class="tog off"></div></span></div>
+      <div class="f"><span style="width:170px">loopMIDI Port</span><span style="flex:1;color:var(--muted);font-size:12px">Lights</span><span style="width:70px"><div class="tog off"></div></span><span style="width:120px"><div class="tog off"></div></span></div>
+    </div>
+    <h3 style="margin-top:6px">Sync point · Fall Tour</h3><p class="d">What each device should be set to when the setlist starts. One press of Sync MIDI sends all of it at once.</p>
+    <div class="grp">
+      <div class="f"><span style="width:200px">Guitar rig <small style="color:var(--muted)">USB · Ch 1</small></span><div class="tl" style="flex:1"><span class="msg">Bank 0</span><span class="msg">PC 12</span><span class="msg">CC 43 = 2</span><span class="minibtn">＋</span></div></div>
+      <div class="f"><span style="width:200px">Keys rig <small style="color:var(--muted)">iD14 · Ch 2</small></span><div class="tl" style="flex:1"><span class="msg">Bank 1</span><span class="msg">PC 5</span><span class="minibtn">＋</span></div></div>
+      <div class="f"><span style="width:200px">Lights <small style="color:var(--muted)">loopMIDI · Ch 16</small></span><div class="tl" style="flex:1"><span class="msg">PC 1</span><span class="minibtn">＋</span></div></div>
+      <div class="f"><span class="sel2">Fill from first song</span><span style="color:var(--muted);font-size:12px">Copies Neon Rivers' opening patches</span></div>
+    </div>
+      </div>
+</div></div>
+
+<svg class="cursor" id="cur" viewBox="0 0 18 18"><path d="M2 1 L2 15 L6 11.5 L9 17 L11 16 L8 10.5 L13 10.5 Z" fill="#fff" stroke="#000" stroke-width="1"/></svg>
+<script>
+let SET=[['Neon Rivers','3:45','#ff6b6b','Album',''],['Glasshouse','3:48','#22c3a6','With intro ◆','↘ Segue'],['Low Tide','3:18','#5aa9ff','Album',''],['Satellites','2:46','#bf5af2','Album','↘ Segue'],['Copper Sun','2:50','#ff9f43','Festival cut','']];
+const LIB=[['Copper Sun','#ff9f43',3,'Drop C'],['Glasshouse','#22c3a6',3,'E Std'],['Halfway Home','#64d2ff',1,'E Std'],['Iron Coast','#ff375f',2,'Drop C'],['Low Tide','#5aa9ff',1,'E Std'],['Neon Rivers','#ff6b6b',1,'E Std'],['Paper Kings','#ac8e68',2,'Drop D'],['Satellites','#bf5af2',1,'Drop C'],['Soundcheck loop','#9aa0aa',1,'—'],['Undertow','#5e5ce6',2,'Drop C']];
+let filt=null,drag=null;
+function render(){document.getElementById('set').innerHTML=SET.map((s,i)=>`<div class="ssong${i==0?' on':''}"><span class="n">${i+1}</span><span class="bar" style="background:${s[2]}"></span><span class="t">${s[0]}<br><span style="font-size:11px;color:var(--muted)">${s[3]}</span></span><span class="d mono">${s[1]}</span></div>${s[4]?`<div class="sub2">${s[4]}</div>`:''}`).join('');
+ const inSet=new Set(SET.map(s=>s[0]));
+ document.getElementById('lib').innerHTML=LIB.filter(l=>!filt||l[3]==filt).map(l=>`<div class="lsong${drag==l[0]?' drag':''}" id="lib-${l[0].replace(/\W/g,'')}"><span class="bar" style="background:${l[1]}"></span><span class="t">${l[0]}</span>${l[2]>1?`<span class="vb">${l[2]} versions</span>`:''}${inSet.has(l[0])?'<span class="in"></span>':''}<span class="d">${l[3]}</span></div>`).join('');
+ document.getElementById('ftun').textContent='Tuning: '+(filt||'any')+' ▾';document.getElementById('ftun').classList.toggle('on',!!filt)}
+function synced(on){const b=document.getElementById('syncbtn');b.classList.toggle('done',on);document.getElementById('synclbl').textContent=on?'Synced ✓':'Sync MIDI'}
+function show(id,on){document.getElementById(id).classList.toggle('show',on)}
+function setFilt(f){filt=f;render()}
+function addSong(name){const l=LIB.find(x=>x[0]==name);SET.push([l[0],'3:12',l[1],'Album','']);drag=null;render()}
+function cursorTo(id,dx=0,dy=0){const r=document.getElementById(id).getBoundingClientRect(),c=document.getElementById('cur');c.classList.add('show');c.style.left=(r.left+r.width/2+dx)+'px';c.style.top=(r.top+r.height/2+dy)+'px'}
+function hideCursor(){document.getElementById('cur').classList.remove('show')}
+render();
+</script>
+</body></html>

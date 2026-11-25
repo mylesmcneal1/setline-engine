@@ -160,7 +160,9 @@ if(SETLINE_WITH_JUCE)
       app-gui/Ort.cpp
       app-gui/SpeechWin.cpp
       app-gui/WebUi.cpp
-      app-gui/WinIcon.cpp)
+      app-gui/WinIcon.cpp
+      app-gui/LibraryStore.cpp
+      app-gui/Package.cpp)
     if(APPLE)
       target_sources(setline PRIVATE app-gui/MacDrop.mm app-gui/SpeechMac.mm)
       # Objective-C++ without changing how JUCE's own sources compile.

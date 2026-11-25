@@ -30,6 +30,31 @@ juce::File sessionFolder(const juce::File& sessionFile)
 // A free name in dir for src: the same name, or "name 2.wav", "name 3.wav"...
 // An existing file of the same name and size is taken to be this file (copied before).
 // The copy gets a name that's valid on Windows and macOS (shows move between them).
+} // namespace
+
+// A quick content hash (16 hex digits): FNV-1a 64 over the size and three 256 KB samples (start, middle, end). Two
+// different audio files with the same size and the same bytes in all three places don't happen in practice; reading
+// 768 KB keeps an import of a big set fast.
+juce::String Media::contentHash(const juce::File& f)
+{
+    juce::FileInputStream in(f);
+    uint64_t h = 1469598103934665603ull;
+    auto mix = [&](const void* p, size_t n) { auto* b = (const uint8_t*) p; for (size_t i = 0; i < n; ++i) { h ^= b[i]; h *= 1099511628211ull; } };
+    const int64_t size = in.openedOk() ? in.getTotalLength() : 0;
+    mix(&size, sizeof size);
+    if (in.openedOk()) {
+        constexpr int64_t chunk = 256 * 1024;
+        std::vector<uint8_t> buf((size_t) chunk);
+        for (int64_t at : { (int64_t) 0, std::max<int64_t>(0, size / 2 - chunk / 2), std::max<int64_t>(0, size - chunk) }) {
+            in.setPosition(at);
+            const int n = in.read(buf.data(), (int) std::min<int64_t>(chunk, size - at));
+            if (n > 0) mix(buf.data(), (size_t) n);
+        }
+    }
+    return juce::String::toHexString((juce::int64) h).paddedLeft('0', 16);
+}
+
+namespace {
 juce::File destinationFor(const juce::File& dir, const juce::File& src, bool& alreadyThere)
 {
     alreadyThere = false;
@@ -433,7 +458,13 @@ void Media::import(const juce::var& arg, Done done)
         for (auto& p : *files) {
             const juce::File src(p.toString());
             juce::String ref = src.getFullPathName();
-            if (copy && folder != juce::File() && ! src.isAChildOf(folder)) {
+            if ((bool) arg["hashed"] && folder != juce::File()) {
+                // the Library (6f): stored by content, so the same file imported twice is stored once
+                const auto dst = folder.getChildFile(copyFolder(arg)).getChildFile(contentHash(src) + src.getFileExtension().toLowerCase());
+                const bool there = dst.existsAsFile() && dst.getSize() == src.getSize();
+                if (! there && src != dst) { bool dup = false; for (auto& c : job->copies) dup |= c.dst == dst; if (! dup) job->copies.push_back({ src, dst }); }
+                ref = makeRef(dst, session);
+            } else if (copy && folder != juce::File() && ! src.isAChildOf(folder)) {
                 bool there = false;
                 auto dst = destinationFor(folder.getChildFile(copyFolder(arg)), src, there);
                 // Two picked files can't both claim the same free name.

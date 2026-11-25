@@ -8,6 +8,12 @@ import { SL } from "../bridge";
 interface Bar { bar: number; t: number; dur: number; sig: [number, number]; beatT: number[] }
 interface Song { id: string; name: string; tracks: string[]; bars: Bar[]; total: number; audio: number; [k: string]: any }
 interface Page {
+  // 6f: the Library
+  setlistCmd(cmd: "new" | "dup"): void; curSetId(): string; setSaveState(st: "saving" | "saved" | "error", why?: string): void;
+  importPlan(pkg: any): { differ: any[]; same: number; added: number }; importBox(name: string, plan: any, note: string): Promise<Record<string, string> | null>;
+  importMerge(pkg: any, decisions: Record<string, string>): { setlist: string; added: number; same: number; replaced: number; both: number };
+  mergeShow(o: any, name: string, refMap: Record<string, string>): { setlists: string[]; added: number; merged: number; notes: string[] };
+  migrationBox(shows: { path: string; name: string; songs: number; bytes: number }[]): Promise<string[] | null>; exportProgress(p: any): void;
   songs: Song[]; playId: string | null; selId: string | null; pos: number; playing: boolean;
   isOff(s: Song, t: string): boolean; loopRange(s: Song): [number, number] | null;
   toast(msg: string): void; ROLE: Record<string, string>; PORTS: string[];
@@ -32,7 +38,7 @@ interface Page {
   setEngineBar(bar: number, beat: number): void; loopIsSection: boolean;
   addVerAudio(s: Song, v: any, list: { info: AudioInfo }[], refs: Record<string, string>, copy: boolean): void;
   setListen(st: ListenState, what?: string): void;
-  nameBox(o: { title: string; value: string; where: string }, done: (r: { name?: string; elsewhere?: boolean } | null) => void): void;
+  nameBox(o: { title: string; value: string; where: string; hint?: string }, done: (r: { name?: string; elsewhere?: boolean } | null) => void): void;
   copyStatus(p: { done: number; total: number; files?: number; filesDone?: number; finished: boolean; error?: string }): void;
   recFor(s: Song, text: string): string; wordFiles(): { path: string; copy?: boolean }[];
   addWords(s: Song, list: { name: string; ref: string }[], only: boolean): void;
@@ -45,7 +51,7 @@ interface Page {
 interface CueVoice { voice: string; name: string; speed: number }
 interface ListenState { on?: boolean; driver?: string; device?: string; current?: string; mode?: string; output?: number[]; click?: boolean; cues?: boolean; midi?: boolean; error?: string; devices?: { driver: string; device: string }[] }
 interface Folders { shows: string; defaultShows: string; library: string }
-interface MenuItem { label: string; icon?: string; key?: string; dis?: boolean; act: () => void }
+interface MenuItem { label: string; icon?: string; key?: string; dis?: boolean; danger?: boolean; act: () => void }
 interface VoiceInfo { id: string; name: string; lang: string; isDefault: boolean; engine?: string; gender?: string; grade?: string; rank?: number }
 // The built-in Kokoro voices' download (Kokoro.h): missing | downloading | ready | failed.
 interface VoiceModel { state: string; done: number; total: number; error: string }
@@ -332,9 +338,8 @@ const SLE = {
     if (s.id !== loadedSongId) return 0;
     return trackPeaks[t] || 0;
   },
-  save: (as: boolean) => saveSession(as),
-  open: () => openSession(),
-  newSession: () => newSession(),
+  // 6f: no Save or Open: Ctrl/Cmd+N is a new setlist
+  newSession: () => page().setlistCmd("new"),
   // Glue (6c item 7): the clips of t from a to b (seconds) rendered exactly as they play into a new WAV
   glueAudio: (s: Song, t: string, a: number, b: number) => SL.call<{ ref?: string; offset?: number; frames?: number; seconds?: number; error?: string }>("glueAudio", { payload: payload(s, page().ver.cur(s)), track: t, ref: s.files[t]?.path || "", from: a, to: b }),
   listen: (req: Partial<ListenState>) => setListen(req),
@@ -535,13 +540,208 @@ const SLC = {
 };
 
 function remember(text = sessionText()) {
-  try { sessionStorage.setItem("setline.session", JSON.stringify({ doc, text })); } catch {}
-  const dirty = text !== doc.savedText;
+  try { sessionStorage.setItem("setline.session", JSON.stringify({ doc, text, lib })); } catch {}
+  if (lib && text !== libText) libSave().catch(() => {});
+  if (lib) { const cs = page().curSetId(); if (cs !== lastSetSent) { lastSetSent = cs; SL.call("libraryState", { lastSetlist: cs }).catch(() => {}); } }
+  const dirty = lib ? text !== libText : text !== doc.savedText;
   page().setDirty(dirty);
   const key = doc.name + "|" + dirty;
   if (key !== lastReported) { lastReported = key; SL.call("setDocument", { name: doc.name, dirty }).catch(() => {}); }
   prepareCues();
 }
+
+// ---------------------------------------------------------------- the Library (6f)
+// One always-open Library of every song (with all its versions) and setlists replaces Shows: nothing to open or save.
+// The whole Library lives in memory as before (one object: songs, setlists, presets, ...) and is written to its
+// folder as separate files (LibraryStore.h): library.json, songs/<id>/song.json, setlists/<id>.json; only the files
+// whose text changed are written, a moment after each change (autosave), each atomically. Undo / redo work as before.
+interface LibInfo { name: string; root: string }
+let lib: LibInfo | null = null;
+let libWritten = new Map<string, string>(); // relative path -> the text last written
+let libText = "";                           // the whole library as last written
+let libSaving: Promise<void> | null = null, libBackupAt = 0, libBackupText = "";
+const BACKUP_EVERY = 10 * 60 * 1000;
+const safeId = (id: string) => String(id).replace(/[^A-Za-z0-9_-]/g, (c) => "_" + c.charCodeAt(0).toString(16));
+// The library's text, split into its files.
+function libFiles(text: string): Map<string, string> {
+  const o = JSON.parse(text), files = new Map<string, string>();
+  const { songs = [], setlists = [], curSet, format, version, ...rest } = o;
+  files.set("library.json", JSON.stringify({ format: "setline-library", version: 1, ...rest, name: lib ? lib.name : rest.name,
+    songOrder: songs.map((s: any) => s.id), setlistOrder: setlists.map((l: any) => l.id) }, null, 1));
+  for (const s of songs) files.set(`songs/${safeId(s.id)}/song.json`, JSON.stringify(s, null, 1));
+  for (const l of setlists) files.set(`setlists/${safeId(l.id)}.json`, JSON.stringify(l, null, 1));
+  return files;
+}
+// Autosave: whatever changed since the last write, now (called every second by remember(), and before anything
+// that replaces the library or quits). Resolves once it's on disk.
+function libSave(force = false): Promise<void> {
+  if (!lib) return Promise.resolve();
+  if (libSaving) return libSaving.then(() => libSave(force));
+  const text = sessionText();
+  if (text === libText && !force) return Promise.resolve();
+  const files = libFiles(text), changed: Record<string, string> = {}, remove: string[] = [];
+  for (const [k, v] of files) if (libWritten.get(k) !== v) changed[k] = v;
+  for (const k of libWritten.keys()) if (!files.has(k)) remove.push(k);
+  if (!Object.keys(changed).length && !remove.length) { libText = text; return Promise.resolve(); }
+  page().setSaveState("saving");
+  libSaving = SL.call<{ ok?: boolean; error?: string }>("libraryWrite", { files: changed, remove }).then((r) => {
+    libSaving = null;
+    if (r.error) { page().setSaveState("error", r.error); page().toast(r.error); return; }
+    libWritten = files; libText = text; doc.savedText = text;
+    page().setSaveState("saved");
+    if (Date.now() - libBackupAt > BACKUP_EVERY && text !== libBackupText) libBackup("");
+  }).catch((e) => { libSaving = null; page().setSaveState("error", String(e)); });
+  return libSaving;
+}
+function libBackup(reason: string) {
+  const text = libText || sessionText();
+  libBackupAt = Date.now(); libBackupText = text;
+  return SL.call("libraryBackup", { text, reason }).catch(() => {});
+}
+// Opens a library (by name; "" = the last one, or a new "My Library") and the setlist to start on.
+async function openLibrary(name = "", startEmpty?: boolean): Promise<string> {
+  if (page().playing) { page().toast("Stop playback first"); return "playing"; }
+  if (lib) await libSave();
+  const r = await SL.call<{ name?: string; root?: string; text?: string; created?: boolean; error?: string }>("libraryOpen", { name });
+  if (r.error || !r.text) { page().toast(r.error || "Couldn't open the library"); return r.error || "error"; }
+  lib = { name: r.name!, root: r.root! };
+  const st = await SL.call<{ lastSetlist: string; onLaunch: string }>("libraryState");
+  const o = JSON.parse(r.text);
+  o.setlists = Array.isArray(o.setlists) ? o.setlists : [];
+  const empty = startEmpty ?? st.onLaunch === "empty";
+  if (!o.setlists.length) o.setlists.push({ id: "L1", name: "Setlist 1", order: [] });
+  let cur = o.setlists.find((l: any) => l.id === st.lastSetlist) || o.setlists[0];
+  if (empty && cur.order && cur.order.length) { cur = { id: "L" + Date.now().toString(36), name: "New setlist", order: [] }; o.setlists.push(cur); }
+  o.curSet = cur.id;
+  doc = { name: lib.name, savedText: "" };
+  applySession(JSON.stringify(o));
+  // what's on disk now (so nothing is rewritten just for opening); format updates on open are written once
+  libWritten = libFiles(r.text.length ? JSON.stringify({ ...JSON.parse(r.text), curSet: undefined }) : "{}");
+  libWritten.delete("library.json"); // the index is always written once on open (it may have been damaged; unchanged text is skipped natively)
+  libText = "";
+  await libSave();
+  libBackup("on launch");
+  page().setSessionName(lib.name);
+  remember();
+  return "";
+}
+// ---- Export / Import (.setline packages) ----
+// A setlist with every song it uses (all versions), only the audio those need, the song fields, dashboards, patch
+// name lists, presets and cue words they use.
+function exportText(listId: string): { text: string; audio: string[]; name: string } {
+  const o = JSON.parse(sessionText());
+  const L = o.setlists.find((l: any) => l.id === listId) || o.setlists[0];
+  const songs = o.songs.filter((s: any) => L.order.includes(s.id));
+  const audio = new Set<string>();
+  for (const s of songs) for (const f of Object.values(s.files || {}) as any[]) if (f && f.path) audio.add(f.path);
+  const words = (o.cueWords || []).filter((w: any) => songs.some((s: any) => (s.cues || []).some((c: any) => String(c.text || "").trim().toLowerCase() === String(w.word || "").trim().toLowerCase())));
+  for (const w of words) if (w.path) audio.add(w.path);
+  const pkg = { format: "setline-package", version: 1, from: lib ? lib.name : "", rate: o.rate, setlist: L, songs,
+    presets: o.presets || [], click: o.click, clickT: o.clickT, cueVoice: o.cueVoice, pron: o.pron, cueWords: words,
+    fields: o.fields || [], dashboards: o.dashboards || [], patchLists: o.patchLists || [], phrases: o.phrases };
+  return { text: JSON.stringify(pkg, null, 1), audio: [...audio], name: L.name };
+}
+async function exportSetlist(listId?: string, to?: string) {
+  await libSave();
+  const e = exportText(listId || page().curSetId());
+  const r = await SL.call<{ path?: string; cancelled?: boolean; error?: string }>("exportSetlist", { name: e.name, text: e.text, audio: e.audio, to: to || "" });
+  if (r.error) page().toast(r.error); else if (r.path) page().toast(`Exported “${e.name}” to ${r.path}`);
+  return r;
+}
+// Import: songs are matched by their id, then by their audio; one that differs asks Keep mine / Use imported / Keep both.
+async function importPackage(path?: string, choose?: (rows: any[]) => Promise<Record<string, string> | null>) {
+  if (page().playing) { page().toast("Stop playback first"); return { error: "playing" }; }
+  const r = await SL.call<{ path?: string; name?: string; text?: string; audio?: string[]; have?: string[]; cancelled?: boolean; error?: string }>("readPackage", { path: path || "" });
+  if (r.cancelled) return r;
+  if (r.error || !r.text) { page().toast(r.error || "Couldn't read that file"); return r; }
+  const pkg = JSON.parse(r.text);
+  const plan = page().importPlan(pkg);
+  const bytesNote = `${(r.audio || []).length - (r.have || []).length} audio file${(r.audio || []).length - (r.have || []).length === 1 ? "" : "s"} to copy`;
+  const decisions = plan.differ.length ? await (choose ? choose(plan.differ) : page().importBox(r.name || "", plan, bytesNote)) : await (choose ? Promise.resolve({}) : page().importBox(r.name || "", plan, bytesNote));
+  if (!decisions) return { cancelled: true };
+  const a = await SL.call<{ copied?: number; error?: string }>("importPackageAudio", { path: r.path });
+  if (a.error) { page().toast(a.error); return a; }
+  const res = page().importMerge(pkg, decisions);
+  forgetMissingPeaks(); loadedKey = null; nextKey = "";
+  await libSave();
+  page().toast(`Imported “${res.setlist}”: ${res.added} new song${res.added === 1 ? "" : "s"}, ${res.same} already here${res.replaced ? `, ${res.replaced} replaced` : ""}${res.both ? `, ${res.both} kept both` : ""}`);
+  return { ...res, copied: a.copied };
+}
+// ---- Bring your shows into the Library (first launch after 6f): each show becomes a setlist; songs that are the
+// same (name + audio) merge. The shows' folders are only read, never changed. ----
+async function migrateShows(paths: string[]) {
+  const log: string[] = [];
+  let made = 0;
+  for (const path of paths) {
+    const r = await SL.call<{ text?: string; folder?: string; error?: string }>("readShow", { path });
+    if (r.error || !r.text) { log.push(`${path}: ${r.error || "empty"}`); continue; }
+    let o: any;
+    try { o = JSON.parse(r.text); } catch (e) { log.push(`${path}: not readable (${e})`); continue; }
+    const name = path.split(/[\\/]/).pop()!.replace(/\.setline$/i, "");
+    // the show's audio (and recorded cue words) into the library by content; references become library ones
+    const refs = new Set<string>();
+    for (const s of o.songs || []) for (const f of Object.values(s.files || {}) as any[]) if (f && f.path) refs.add(f.path);
+    const wordRefs = new Set<string>();
+    for (const w of [...(o.cueWords || []), ...(o.songs || []).flatMap((s: any) => s.cueWords || [])]) if (w && w.path) wordRefs.add(w.path);
+    const abs = (ref: string) => (/^([A-Za-z]:[\\/]|\/)/.test(ref) ? ref : r.folder + "/" + ref);
+    const map: Record<string, string> = {}, missing: string[] = [];
+    const cur = await SL.call<FileResult>("getSessionFile");
+    const doImport = async (list: string[], sub?: string) => {
+      const exists = await SL.call<{ files: AudioInfo[] }>("probeAudio", { paths: list.map(abs), rate: 0 });
+      const ok = list.filter((_, i) => exists.files[i] && exists.files[i].ok);
+      list.filter((_, i) => !(exists.files[i] && exists.files[i].ok)).forEach((x) => missing.push(x));
+      if (!ok.length) return;
+      const im = await SL.call<{ files?: { path: string; ref: string }[]; error?: string }>("importAudio", { session: cur.path || "", copy: true, hashed: !sub, ...(sub ? { sub } : {}), files: ok.map(abs) });
+      if (im.error) { log.push(`${name}: ${im.error}`); return; }
+      (im.files || []).forEach((f, i) => { map[ok[i]] = f.ref; });
+    };
+    await doImport([...refs]);
+    await doImport([...wordRefs], "Cues/Words");
+    const res = page().mergeShow(o, name, map);
+    if (missing.length) log.push(`${name}: ${missing.length} audio file(s) missing (they play as silence): ${missing.slice(0, 8).join(", ")}`);
+    log.push(`${name} (${path}): setlist${res.setlists.length > 1 ? "s" : ""} ${res.setlists.map((x: string) => "“" + x + "”").join(", ")}; ${res.added} new song(s), ${res.merged} merged with songs already in the library${res.notes.length ? "; " + res.notes.join("; ") : ""}`);
+    await SL.call("mergeCues", { from: r.folder + "/Cues" });
+    made++;
+  }
+  const where = await SL.call<string>("migrationLog", { text: `Brought ${made} show(s) into the library “${lib ? lib.name : ""}”.\n` + log.join("\n") + "\nThe original show folders weren't changed; you can delete them yourself once you're happy." });
+  page().rerender(); loadedKey = null; nextKey = "";
+  await libSave(); remember(); prepareCues();
+  return { made, log, where };
+}
+async function offerMigration() {
+  if (await SL.call<boolean>("migrationAsked")) return;
+  const shows = await SL.call<{ path: string; name: string; songs: number; bytes: number }[]>("findShows");
+  if (!shows.length) { SL.call("migrationAsked", { set: true }); return; }
+  const picked = await page().migrationBox(shows);
+  SL.call("migrationAsked", { set: true });
+  if (!picked || !picked.length) return;
+  const r = await migrateShows(picked);
+  page().toast(`Brought ${r.made} show${r.made === 1 ? "" : "s"} into the library. Your show folders weren't changed (log: ${r.where})`);
+}
+async function restoreBackup(path: string, into: "replace" | "new") {
+  if (page().playing) { page().toast("Stop playback first"); return; }
+  const r = await SL.call<{ text?: string; error?: string }>("readBackup", { path });
+  if (r.error || !r.text) { page().toast(r.error || "Couldn't read that backup"); return; }
+  if (into === "new") {
+    const base = (lib ? lib.name : "Library") + " (restored)";
+    let name = base, n = 2; const libs = await SL.call<{ name: string }[]>("libraryList");
+    while (libs.some((l) => l.name === name)) name = `${base} ${n++}`;
+    const c = await SL.call<{ error?: string }>("libraryCreate", { name });
+    if (c.error) { page().toast(c.error); return; }
+    // the backup's audio is the current library's: copied along by reference (Audio/ files are shared by content)
+    const o = JSON.parse(r.text);
+    await openLibrary(name);
+    const refs = new Set<string>(); for (const s of o.songs || []) for (const f of Object.values(s.files || {}) as any[]) if (f && f.path) refs.add(f.path);
+    page().toast(`Restored into a new library “${name}”`);
+    applySession(JSON.stringify(o)); await libSave(true);
+    return;
+  }
+  await libBackup("before restoring");
+  applySession(r.text); await libSave(true);
+  page().toast("The library is back as it was in that backup (a backup of how it was just before is kept)");
+}
+
+let lastSetSent = "";
 
 function applySession(text: string) {
   const o = JSON.parse(text);
@@ -638,91 +838,42 @@ function forgetMissingPeaks() {
 }
 
 let saving = false;
-// Saves (asks where for a new session or Save As). true when the session is on disk afterwards.
-// to: tests only, the target path instead of the dialog.
-async function saveSession(as: boolean, to?: string): Promise<boolean> {
-  if (saving) return false;
+// Tests only (6f has no Save): writes the session as an old-style show (<folder>/<name>.setline with its stems in
+// <folder>/Audio), e.g. to make the shows a migration test brings into the library. Never while a library is open.
+async function saveSession(_as: boolean, to?: string): Promise<boolean> {
+  if (saving || !to || lib) return false;
   saving = true;
   try {
-    // A session lives in its own folder: <folder>/<name>.setline with the stems in <folder>/Audio.
     const cur = await SL.call<FileResult>("getSessionFile");
-    let target = to || cur.path || "";
-    if (!to && (as || !target)) {
-      const where = await askShowName(as);
-      if (!where) return false;
-      target = where;
-    }
-    // Stems flagged "Copy into session" are copied into its Audio folder; every reference becomes
-    // relative to the session folder (absolute only for files kept outside it).
     const files = audioFiles(), words = page().wordFiles();
     if (files.length || words.length) {
-      // the session saves right away; the audio is copied after it in the background ("Copying audio… n of N")
-      const c = await SL.call<{ map?: Record<string, string>; missing?: string[]; error?: string; copying?: number }>("collectAudio",
-        { from: cur.path || "", to: target, background: true, files: [...files.map((x) => ({ ref: x.f.path, copy: !!x.f.copy })), ...words.map((w) => ({ ref: w.path, copy: true, sub: "Cues/Words" }))] });
+      const c = await SL.call<{ map?: Record<string, string>; missing?: string[]; error?: string }>("collectAudio",
+        { from: cur.path || "", to, background: false, files: [...files.map((x) => ({ ref: x.f.path, copy: true })), ...words.map((w) => ({ ref: w.path, copy: true, sub: "Cues/Words" }))] });
       if (c.error) { page().toast(c.error); return false; }
       applyRefMap(c.map || {});
-      if (c.missing && c.missing.length) page().toast(`${c.missing.length} audio file${c.missing.length > 1 ? "s are" : " is"} missing; saved without copying ${c.missing.length > 1 ? "them" : "it"}`);
     }
     const text = sessionText();
-    const r = await SL.call<FileResult>("writeSession", { path: target, text });
+    const r = await SL.call<FileResult>("writeSession", { path: to, text });
     if (r.error) { page().toast(r.error); return false; }
-    // the show's cue audio goes into <show>/Cues, so it plays the same on any computer (rendered once)
     SL.call("storeCues", { cues: cueList() }).catch(() => {});
     doc = { name: r.name || doc.name, savedText: text };
-    page().setSessionName(doc.name);
-    page().toast(`Saved “${doc.name}”`);
-    remember(text);
     return true;
   } finally { saving = false; }
 }
 
-// Save / Save As (6c item 3): just a name; the show goes to <Shows>/<name>/<name>.setline ("Choose another
-// place…" for the old dialog). -> the path, or "" when cancelled.
-async function askShowName(as: boolean): Promise<string> {
-  const f = await SL.call<Folders>("folders");
-  const pick = await new Promise<{ name?: string; elsewhere?: boolean } | null>((res) =>
-    page().nameBox({ title: as ? "Save show as" : "Save show", value: doc.name || "Untitled show", where: f.shows }, res));
-  if (!pick) return "";
-  if (pick.elsewhere) {
-    const r = await SL.call<FileResult>("chooseSessionFile");
-    if (r.cancelled) return "";
-    if (r.error || !r.path) { page().toast(r.error || "Couldn't save"); return ""; }
-    return r.path;
-  }
-  const t = await SL.call<{ path: string; name: string; exists: boolean }>("showTarget", { name: pick.name });
-  const cur = await SL.call<FileResult>("getSessionFile");
-  if (t.exists && t.path !== cur.path) {
-    const yes = await new Promise<boolean>((res) => {
-      let answered = false;
-      page().confirm(`Replace “${t.name}”?`, `A show called “${t.name}” is already in ${f.shows}. Replacing it overwrites its show file (its audio stays).`, "Replace", () => { answered = true; res(true); });
-      // Cancel / Esc close the box without calling back
-      const watch = setInterval(() => { if (!document.querySelector(".cfbox")) { clearInterval(watch); if (!answered) res(false); } }, 150);
-    });
-    if (!yes) return askShowName(as);
-  }
-  const made = await SL.call<{ path?: string; error?: string }>("showTarget", { name: pick.name, create: true });
-  if (made.error || !made.path) { page().toast(made.error || "Couldn't save"); return ""; }
-  return made.path;
-}
-// File > Open Backup… (6c item 4): the show's automatic backups, newest first. Opening one replaces what's on
-// screen (after the usual Save question) and leaves it unsaved: Save makes it the show again, nothing is
-// overwritten before that.
+// File › Backups ▸ (6f): the library's automatic backups (on launch and every 10 minutes, the last 20), newest first.
+// Restoring one goes into a new library, or replaces this one (after a confirm; a backup of how it was is kept).
 async function openBackup(at?: { clientX: number; clientY: number }) {
-  const list = await SL.call<{ name: string; path: string; time: number; size: number }[]>("listBackups");
-  if (!list.length) { page().toast(doc.name ? "No backups yet: one is made each time a save changes the show" : "Save the show first: backups are kept next to it"); return; }
-  const when = (t: number) => new Date(t).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", second: "2-digit" });
-  page().menu(at || { clientX: 80, clientY: 60 }, [
-    { label: `Backups of “${doc.name}” (newest first)`, icon: "", dis: true, act: () => {} },
-    ...list.map((b) => ({ label: when(b.time), icon: "🕘", act: () => askSave("Opening a backup replaces what’s on screen.", async () => {
-      const r = await SL.call<{ text?: string; error?: string }>("readBackup", { path: b.path });
-      if (r.error || !r.text) { page().toast(r.error || "Couldn't read that backup"); return; }
-      applySession(r.text);
-      doc = { name: doc.name, savedText: "" }; // unsaved until you save it
-      page().rerender();
-      remember();
-      loadedKey = null;
-      page().toast(`Opened the backup from ${when(b.time)}. Save to make it the show again.`);
-    }) })),
+  const list = await SL.call<{ name: string; path: string; time: number; size: number }[]>("libraryBackups");
+  if (!list.length) { page().toast("No backups yet: one is made each time set.Line starts and every 10 minutes"); return; }
+  const when = (t: number) => new Date(t).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  const p = at || { clientX: 80, clientY: 60 };
+  page().menu(p, [
+    { label: `Backups of “${lib ? lib.name : ""}” (newest first)`, icon: "", dis: true, act: () => {} },
+    ...list.map((b) => ({ label: when(b.time) + (/on launch/.test(b.name) ? " · on launch" : /before/.test(b.name) ? " · before a restore" : ""), icon: "🕘", act: () => page().menu(p, [
+      { label: "Restore into a new library", icon: "＋", act: () => { restoreBackup(b.path, "new"); } },
+      { label: "Replace this library with it…", icon: "↺", danger: true, act: () => page().confirm("Replace the library?", `Everything in “${lib ? lib.name : ""}” goes back to how it was on ${when(b.time)}. A backup of how it is now is kept first, so you can come back.`, "Replace", () => { restoreBackup(b.path, "replace"); }) },
+    ]) })),
   ]);
 }
 // File > Clean up unused audio… (6c item 8): the show's audio files nothing uses (not the show as it is now or as
@@ -744,63 +895,26 @@ async function cleanUpAudio() {
 // Preferences: the Settings sheet (6d), also File › Preferences… and Ctrl/Cmd+,.
 function preferences() { page().openSettings(); }
 
-// ---------------------------------------------------------------- File menu (phase 6b)
-// Before replacing the session (New, Open, Open Recent, Close, Quit): Save / Don't save / Cancel when it has
-// unsaved changes. then() runs once it's saved or the user chose not to.
-const isDirty = () => sessionText() !== doc.savedText;
-function askSave(what: string, then: () => void) {
-  if (!isDirty()) { then(); return; }
-  const name = doc.name || "Untitled session";
-  page().saveBox(`Save changes to “${name}”?`, `${what} Your changes are lost if you don’t save them.`, async (c) => {
-    if (c === "discard") { then(); return; }
-    if (await saveSession(false)) then();
-  });
-}
-const BLANK = JSON.stringify({ songs: [], setlists: [{ id: "L1", name: "Setlist 1", order: [] }], curSet: "L1" });
-// New and Close: an empty, untitled session (the next Save asks where).
-function newSession(verb = "Starting a new session closes this one.") {
-  askSave(verb, async () => {
-    await SL.call("closeSession");
-    await SL.call("forgetLastShow").catch(() => {}); // a new / closed show: nothing to reopen next time
-    doc = { name: "", savedText: "" };
-    page().freshShow();
-    applySession(BLANK);
-    doc.savedText = sessionText();
-    remember();
-  });
-}
-// Start-up: open the last show quietly; "" when it opened, else why not (the loading window offers Retry).
-let startPath = "";
-async function openAtStart(path: string): Promise<string> {
-  startPath = path;
-  const name = path.split(/[\\/]/).pop()!.replace(/\.[^.]+$/, "");
-  const r = await SL.call<FileResult>("openSessionPath", { path }).catch((e) => ({ error: String(e) } as FileResult));
-  if (r.error || !r.text) return `“${name}” (${path}) couldn't be opened: ${r.error || "it's empty"}.`;
-  try {
-    doc = { name: r.name || "", savedText: "" };
-    applySession(r.text);
-    doc.savedText = sessionText();
-    page().setSessionName(doc.name);
-    remember();
-  } catch (e) {
-    doc = { name: "", savedText: sessionText() }; page().rerender();
-    return `“${name}” couldn't be read (${String((e as Error)?.message || e)}).`;
-  }
-  if (r.path) checkAudio(r.path);
-  return "";
+// ---------------------------------------------------------------- start-up (6f): the last library and setlist
+const isDirty = () => (lib ? sessionText() !== libText : sessionText() !== doc.savedText);
+let startProblem = "";
+async function openAtStart(): Promise<string> {
+  try { startProblem = await openLibrary(""); } catch (e) { startProblem = String((e as Error)?.message || e); }
+  return startProblem;
 }
 async function retryStartShow() {
-  const why = startPath ? await openAtStart(startPath) : "There's no show to try again.";
+  const why = await openAtStart();
   const n = page().songs.length;
   await SL.call("loadingStep", why ? { id: "show", state: "failed", detail: why } : { id: "show", state: "done", detail: `${doc.name} · ${n} song${n === 1 ? "" : "s"}` });
 }
+// Tests only: opens an old show file as the session (no library).
 async function openPath(path: string) {
   const r = await SL.call<FileResult>("openSessionPath", { path });
   if (r.error || !r.text) { page().toast(r.error || "Couldn't open that file"); return; }
+  lib = null;
   doc = { name: r.name || "", savedText: "" };
   applySession(r.text);
   doc.savedText = sessionText();
-  page().toast(`Opened “${doc.name}”`);
   remember();
   if (r.path) await checkAudio(r.path);
 }
@@ -813,30 +927,56 @@ async function diagnostics(how: "copy" | "save") {
 }
 async function showAbout() { page().about(await SL.call("getAppInfo")); }
 async function fileMenu(at: { clientX: number; clientY: number }) {
-  const mod = navigator.platform.startsWith("Mac") ? "⌘" : "Ctrl+";
-  let recent: { name: string; path: string; exists: boolean }[] = [];
-  try { recent = await SL.call("getRecentSessions"); } catch {}
+  const libs = await SL.call<{ name: string; current: boolean; songs: number }[]>("libraryList").catch(() => [] as { name: string; current: boolean; songs: number }[]);
+  const reveal = navigator.platform.startsWith("Mac") ? "Show in Finder" : "Show in Explorer";
+  const sub = (title: string, items: (MenuItem | "-")[]) => ({ label: title + " ▸", icon: "", act: () => page().menu(at, items) });
   const items: (MenuItem | "-")[] = [
-    { label: "New", icon: "＋", key: mod + "N", act: () => newSession() },
-    { label: "Open…", icon: "📂", key: mod + "O", act: () => openSession() },
-    { label: "Open Recent", icon: "", dis: true, act: () => {} },
-    ...(recent.length ? recent.map((x) => ({ label: x.name + (x.exists ? "" : " (not found)"), icon: "·", dis: !x.exists,
-      act: () => askSave("Opening another session closes this one.", () => openPath(x.path)) }))
-      : [{ label: "No recent sessions", icon: "", dis: true, act: () => {} }]),
-    ...(recent.length ? [{ label: "Clear the list", icon: "", act: () => { SL.call("clearRecentSessions").catch(() => {}); } }] : []),
+    { label: "New setlist", icon: "＋", act: () => page().setlistCmd("new") },
+    { label: "Duplicate setlist", icon: "⧉", act: () => page().setlistCmd("dup") },
     "-",
-    { label: "Save", icon: "💾", key: mod + "S", act: () => { saveSession(false); } },
-    { label: "Save As…", icon: "", key: (mod === "⌘" ? "⇧⌘" : "Ctrl+Shift+") + "S", act: () => { saveSession(true); } },
+    { label: "Export setlist…", icon: "⇪", act: () => { exportSetlist(); } },
+    { label: "Import…", icon: "⇩", act: () => { importPackage(); } },
     "-",
-    { label: "Open Backup…", icon: "🕘", dis: !doc.name, act: () => { openBackup(at); } },
-    { label: "Clean up unused audio…", icon: "🧹", dis: !doc.name, act: () => { cleanUpAudio(); } },
-    { label: "Close", icon: "✕", act: () => newSession("Closing the session.") },
+    sub("Library", [
+      ...libs.map((l) => ({ label: l.name + (l.current ? "  ✓" : ""), icon: "▤", dis: l.current, act: () => { switchLibrary(l.name); } })),
+      "-",
+      { label: "New library…", icon: "＋", act: () => { newLibrary(); } },
+      { label: "Rename…", icon: "✎", act: () => { renameLibrary(); } },
+      { label: reveal, icon: "📂", act: () => { SL.call("libraryReveal"); } },
+    ]),
+    { label: "Backups ▸", icon: "🕘", act: () => { openBackup(at); } },
+    { label: "Clean up unused audio…", icon: "🧹", act: () => { cleanUpAudio(); } },
     "-",
-    { label: "Preferences…", icon: "⚙", key: mod + ",", act: () => { preferences(); } },
+    { label: "Settings…", icon: "⚙", key: (navigator.platform.startsWith("Mac") ? "⌘" : "Ctrl+") + ",", act: () => { preferences(); } },
+    { label: "Copy diagnostics", icon: "⎘", act: () => { diagnostics("copy"); } },
     "-",
-    { label: "About set.Line", icon: "ⓘ", act: () => { showAbout(); } },
+    { label: "Quit", icon: "⏻", act: () => { quitApp(); } },
   ];
   page().menu(at, items);
+}
+async function quitApp() { await libSave().catch(() => {}); SL.call("quitNow").catch(() => {}); }
+async function switchLibrary(name: string) {
+  if (page().playing) { page().toast("Stop playback first: switching libraries is refused while playing"); return; }
+  const why = await openLibrary(name);
+  if (!why) page().toast(`Opened the library “${name}”`);
+}
+async function newLibrary() {
+  if (page().playing) { page().toast("Stop playback first"); return; }
+  const pick = await new Promise<{ name?: string } | null>((res) => page().nameBox({ title: "New library", value: "New Library", where: "", hint: "A library is completely separate: its own songs, setlists and audio." }, res));
+  if (!pick || !pick.name) return;
+  const r = await SL.call<{ name?: string; error?: string }>("libraryCreate", { name: pick.name });
+  if (r.error) { page().toast(r.error); return; }
+  await switchLibrary(r.name!);
+}
+async function renameLibrary() {
+  if (!lib) return;
+  const pick = await new Promise<{ name?: string } | null>((res) => page().nameBox({ title: "Rename library", value: lib!.name, where: "" }, res));
+  if (!pick || !pick.name || pick.name === lib.name) return;
+  await libSave();
+  const r = await SL.call<{ name?: string; root?: string; error?: string }>("libraryRename", { name: pick.name });
+  if (r.error) { page().toast(r.error); return; }
+  lib = { name: r.name!, root: r.root! }; doc.name = lib.name;
+  page().setSessionName(lib.name); await libSave(true); remember();
 }
 
 // After opening: find the session's audio. Files found in the session's Audio folder under their name are
@@ -867,21 +1007,6 @@ function askLocate(sessionPath: string, missing: string[]) {
     });
 }
 
-async function openSession() {
-  const go = async () => {
-    const r = await SL.call<FileResult>("openSession");
-    if (r.cancelled) return;
-    if (r.error || !r.text) { page().toast(r.error || "Couldn't open that file"); return; }
-    doc = { name: r.name || "", savedText: "" };
-    applySession(r.text);
-    doc.savedText = sessionText(); // what's on screen now is what's on disk
-    page().toast(`Opened “${doc.name}”`);
-    remember();
-    if (r.path) await checkAudio(r.path);
-  };
-  askSave("Opening another session closes this one.", go);
-}
-
 // ---------------------------------------------------------------- stems (step 2)
 const COPY_PREF = "setline.copyAudio";
 const copyPref = () => localStorage.getItem(COPY_PREF) !== "0";
@@ -903,8 +1028,9 @@ async function importStems(infos: AudioInfo[], copy: boolean): Promise<Record<st
   localStorage.setItem(COPY_PREF, copy ? "1" : "0");
   if (!infos.length) return {};
   const cur = await SL.call<FileResult>("getSessionFile");
+  // 6f: into the library, always copied, stored by content (the same file twice is stored once)
   const r = await SL.call<{ files?: { path: string; ref: string }[]; error?: string }>("importAudio",
-    { session: cur.path || "", copy, files: infos.map((i) => i.path) });
+    { session: cur.path || "", copy: lib ? true : copy, hashed: !!lib, files: infos.map((i) => i.path) });
   if (r.error) { page().toast(r.error); return null; }
   if (!sessionRate) sessionRate = infos.find((i) => i.rate)?.rate || rateForImport();
   const refs: Record<string, string> = {};
@@ -945,6 +1071,7 @@ async function addStems(s: Song) {
 // Copy progress: a small sheet with a bar while files are copied.
 let progressEl: HTMLElement | null = null;
 function onProgress(p: Progress) {
+  if ((p as any).kind === "export") { page().exportProgress(p); return; }
   if (p.kind === "save") { page().copyStatus(p); return; } // Save / Save As: a small indicator, nothing blocks
   if (p.finished) { progressEl?.remove(); progressEl = null; return; }
   if (!progressEl) {
@@ -971,7 +1098,8 @@ async function onFileDrag(d: { state: string; x: number; y: number; paths: strin
   if (d.state !== "drop") return;
   const sessions = d.paths.filter((x) => /\.setline$/i.test(x));
   if (!audio.length) {
-    p.toast(sessions.length ? "To open a session, use Open (Ctrl/Cmd+O)" : "Drop WAV, AIFF or FLAC files");
+    if (sessions.length) { await importPackage(sessions[0]); return; } // a .setline package: Import
+    p.toast("Drop WAV, AIFF or FLAC files, or a .setline package to import");
     return;
   }
   const list = await probe(audio);
@@ -1026,7 +1154,7 @@ async function reportLoading(showProblem: string, quick: boolean) {
   try {
     const n = page().songs.length;
     if (showProblem) await step("show", "failed", showProblem);
-    else await step("show", "done", `${doc.name || "Untitled session"} · ${n} song${n === 1 ? "" : "s"}`);
+    else await step("show", "done", `${doc.name || "Library"} · ${n} song${n === 1 ? "" : "s"}`);
     // waveforms
     const cur = await SL.call<FileResult>("getSessionFile");
     const refs = [...new Set(audioFiles().map((x) => x.f.path))];
@@ -1071,7 +1199,7 @@ async function main() {
   SL.on("fileDrag", (d) => { onFileDrag(d).catch((e) => page().toast(String(e))); });
   installDrop();
   const copyBox = document.getElementById("mCopy") as HTMLInputElement | null;
-  if (copyBox) {
+  if (copyBox && !SL.native) {
     document.getElementById("mCopyL")!.hidden = false;
     copyBox.checked = copyPref();
     copyBox.onchange = () => localStorage.setItem(COPY_PREF, copyBox.checked ? "1" : "0");
@@ -1084,21 +1212,23 @@ async function main() {
     if (st.state === "ready") { preparedKey = ""; prepareCues(); loadedKey = null; }
   });
   SL.on("menu", (m: { cmd: string }) => {
-    if (m.cmd === "open") openSession(); else if (m.cmd === "save") saveSession(false); else if (m.cmd === "saveAs") saveSession(true);
+    if (m.cmd === "export") exportSetlist(); else if (m.cmd === "import") importPackage();
+    else if (m.cmd === "dupSetlist") page().setlistCmd("dup"); else if (m.cmd === "cleanUp") cleanUpAudio();
     else if (m.cmd === "about") showAbout();
     else if (m.cmd === "retryShow") retryStartShow();
     else if (m.cmd === "prefs") preferences();
     else if (m.cmd === "openBackup") openBackup();
     else if (m.cmd === "copyDiagnostics") diagnostics("copy"); else if (m.cmd === "saveDiagnostics") diagnostics("save");
-    else if (m.cmd === "new") newSession(); else if (m.cmd === "close") newSession("Closing the session.");
-    else if (m.cmd === "quit") { SL.call("quitAnswered").catch(() => {}); askSave("Quitting set.Line.", () => { SL.call("quitNow").catch(() => {}); }); }
+    else if (m.cmd === "new") page().setlistCmd("new");
+    else if (m.cmd === "quit") { SL.call("quitAnswered").catch(() => {}); quitApp(); } // the last change goes to disk first
   });
 
+  const info = await SL.call<{ roundTrip?: { in: string; out: string }; testScript?: string; reopenLast?: boolean }>("getAppInfo");
   // Session: carry on with the one from before a page switch, else this is a new, unsaved session.
   let showProblem = "", keptSession = false;
   try {
     const kept = JSON.parse(sessionStorage.getItem("setline.session") || "null");
-    if (kept && kept.text) { doc = kept.doc; applySession(kept.text); keptSession = true; }
+    if (kept && kept.text) { doc = kept.doc; lib = kept.lib || null; applySession(kept.text); keptSession = true; }
     else { doc = { name: "", savedText: sessionText() }; }
   } catch (e) {
     console.warn("set.Line: session", e);
@@ -1111,9 +1241,8 @@ async function main() {
   remember();
   setInterval(() => remember(), 1000); // unsaved marker + page-switch copy
 
-  // Test hook (--session-roundtrip): open a file exactly as Open does, write it back exactly as Save does.
-  const info = await SL.call<{ roundTrip?: { in: string; out: string }; testScript?: string }>("getAppInfo");
 
+  // Test hook (--session-roundtrip): open a file and write it back exactly as the page holds it.
   if (info.roundTrip) {
     const r = await SL.call<{ text: string }>("roundTripRead");
     doc = { name: "roundtrip", savedText: "" };
@@ -1122,11 +1251,13 @@ async function main() {
     return;
   }
 
-  // Start-up: the show that was open when set.Line closed (if it can't be opened, the loading window asks:
-  // Retry / Open another / New show).
-  if (!keptSession && !showProblem) {
-    const st = await SL.call<{ path?: string }>("takeStartShow").catch(() => ({} as { path?: string }));
-    if (st.path) showProblem = await openAtStart(st.path);
+  // Start-up (6f): the last library and setlist (tests: only when a script asks, hooks.openLibrary). A page switch
+  // keeps what's on screen, and the library it belongs to: what's on disk is the baseline for the next autosave.
+  if (keptSession && lib) {
+    const r = await SL.call<{ text?: string; error?: string }>("libraryOpen", { name: lib.name }).catch(() => ({} as { text?: string }));
+    if (r.text) libWritten = libFiles(r.text); else lib = null;
+  } else if (!keptSession && !showProblem && (!info.testScript || info.reopenLast)) {
+    showProblem = await openAtStart();
   }
   try { listen = await SL.call<ListenState>("getListen"); page().setListen(listen, listenWhat()); } catch (e) { console.warn("set.Line: listen", e); }
   onSetup(await SL.call<Setup>("getAudioSetup"));
@@ -1153,13 +1284,17 @@ async function main() {
   } catch (e) { console.warn("set.Line: MIDI outputs", e); }
   // The loading window (app start): show, waveforms, cues; then the main window appears. Tests don't wait for it.
   await reportLoading(showProblem, !!info.testScript);
+  if (!info.testScript && lib) offerMigration().catch((e) => console.warn("set.Line: migration", e));
   // Test hook (--test-script): run an async script with the page and this module's functions; write its result.
   if (info.testScript) {
     let out: unknown;
     try {
       const AsyncFn = Object.getPrototypeOf(async () => {}).constructor;
       const hooks = { SLE, page, importStems, probe, audioFiles, applyRefMap, checkAudio, onFileDrag, sessionText, applySession,
-        getRate: () => sessionRate, openPath: (p: string) => openPath(p), retryStartShow: () => retryStartShow(), docName: () => doc.name, saveTo: (path: string) => saveSession(false, path), cueList: () => cueList(), setListen: (r: Partial<ListenState>) => setListen(r), SLR: window.SLR, SLW, waves, SLC, prepareCues, remember, payload, toBarBeat, toTime, getNext: () => nextMeta, getLoaded: () => ({ id: loadedSongId, ver: curVerId, map: curMap }), isDirty: () => sessionText() !== doc.savedText, setDoc: (n: string) => { doc = { name: n, savedText: "" }; } };
+        getRate: () => sessionRate, openPath: (p: string) => openPath(p), retryStartShow: () => retryStartShow(), docName: () => doc.name, saveTo: (path: string) => saveSession(false, path), cueList: () => cueList(), setListen: (r: Partial<ListenState>) => setListen(r), SLR: window.SLR, SLW, waves, SLC, prepareCues, remember, payload, toBarBeat, toTime, getNext: () => nextMeta, getLoaded: () => ({ id: loadedSongId, ver: curVerId, map: curMap }), isDirty: () => (lib ? sessionText() !== libText : sessionText() !== doc.savedText), setDoc: (n: string) => { doc = { name: n, savedText: "" }; },
+        // 6f: the Library
+        openLibrary: (n = "", empty?: boolean) => openLibrary(n, empty), libSave: () => libSave(), lib: () => lib, libFiles, exportSetlist: (id?: string, to?: string) => exportSetlist(id, to), exportText,
+        importPackage: (p: string, choose?: any) => importPackage(p, choose), migrateShows: (paths: string[]) => migrateShows(paths), restoreBackup: (p: string, how: "replace" | "new") => restoreBackup(p, how), switchLibrary: (n: string) => switchLibrary(n), offerMigration: () => offerMigration() };
       out = await new AsyncFn("SL", "hooks", info.testScript)(SL, hooks);
     } catch (e) { out = { error: String((e as Error)?.stack || e) }; }
     if (out !== undefined) await SL.call("testDone", { text: JSON.stringify(out, null, 1) }); // undefined: it went to another page

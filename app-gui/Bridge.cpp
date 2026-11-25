@@ -1,6 +1,19 @@
 #include "Bridge.h"
 #include "AudioHost.h"
 #include "Log.h"
+#include "Package.h"
+#include <set>
+
+namespace {
+// an "audioProgress" event for a package being written (6f)
+juce::var progressVar(int64_t done, int64_t total, const juce::String& file, bool finished = false, const juce::String& error = {})
+{
+    auto* o = new juce::DynamicObject();
+    o->setProperty("kind", "export"); o->setProperty("done", (double) done); o->setProperty("total", (double) total);
+    o->setProperty("file", file); o->setProperty("finished", finished); o->setProperty("error", error);
+    return juce::var(o);
+}
+} // namespace
 #include "Folders.h"
 
 #ifndef SETLINE_ORT_VERSION
@@ -18,7 +31,7 @@ juce::var errorVar(const juce::String& msg)
 }
 } // namespace
 
-Bridge::Bridge(AudioHost& host, juce::PropertiesFile& settings) : audio(host), settings(settings), session(settings), media(settings)
+Bridge::Bridge(AudioHost& host, juce::PropertiesFile& settings) : audio(host), settings(settings), session(settings), media(settings), lib(settings)
 {
     audio.onSetupChanged = [this] { emit("audioSetupChanged", audio.getSetup()); };
     audio.emit = [this](const juce::Identifier& id, const juce::var& v) { emit(id, v); };
@@ -109,9 +122,18 @@ juce::String Bridge::diagnostics()
     return t.joinIntoString("\n");
 }
 
+// The library just opened (or renamed): its index is the "session file" everything else resolves against.
+juce::var Bridge::libraryOpened(const juce::var& r)
+{
+    if (r["error"].toString().isEmpty()) { session.setCurrent(lib.index()); syncShow(); if (onDocument) onDocument(lib.name(), false); }
+    return r;
+}
+
 void Bridge::syncShow() { cues.setShowFolder(session.file() == juce::File() ? juce::File() : session.file().getParentDirectory()); }
 
-Bridge::~Bridge() { kokoro::setListener(nullptr); *alive = nullptr; audio.onSetupChanged = nullptr; audio.emit = nullptr; audio.cueAudio = nullptr; media.emit = nullptr; }
+Bridge::~Bridge() {
+    exportCancel->store(true);
+    if (exporter.joinable()) exporter.join(); kokoro::setListener(nullptr); *alive = nullptr; audio.onSetupChanged = nullptr; audio.emit = nullptr; audio.cueAudio = nullptr; media.emit = nullptr; }
 
 Bridge::Options Bridge::add(Options o, const char* name, Fn fn)
 {
@@ -156,7 +178,7 @@ Bridge::Options Bridge::addTo(Options o)
             auto* rt = new juce::DynamicObject(); rt->setProperty("in", roundTripIn.getFullPathName()); rt->setProperty("out", roundTripOut.getFullPathName());
             r->setProperty("roundTrip", juce::var(rt));
         }
-        if (testScript != juce::File()) r->setProperty("testScript", testScript.loadFileAsString());
+        if (testScript != juce::File()) { r->setProperty("testScript", testScript.loadFileAsString()); r->setProperty("reopenLast", reopenLastInTests); }
         return juce::var(r);
     });
     // Start-up: the show to reopen (the last one), once per run. {path} or {}.
@@ -334,6 +356,158 @@ Bridge::Options Bridge::addTo(Options o)
         pdfChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles | juce::FileBrowserComponent::warnAboutOverwriting,
                                 [done, write](const juce::FileChooser& fc) { done(write(fc.getResult())); });
     });
+    // ---- the Library (6f): one master bank of songs and setlists, autosaved, replacing Shows ----
+    o = add(o, "libraryOpen", [this](const juce::var& a) { return libraryOpened(lib.open(a["name"].toString())); });
+    o = add(o, "libraryList", [this](const juce::var&) { return lib.list(); });
+    o = add(o, "libraryCreate", [this](const juce::var& a) { return lib.create(a["name"].toString()); });
+    o = add(o, "libraryRename", [this](const juce::var& a) { return libraryOpened(lib.rename(a["name"].toString())); });
+    o = add(o, "libraryWrite", [this](const juce::var& a) { return lib.write(a["files"], a["remove"]); });
+    o = add(o, "libraryBackup", [this](const juce::var& a) { return lib.backup(a["text"].toString(), a["reason"].toString()); });
+    o = add(o, "libraryBackups", [this](const juce::var&) { return lib.backups(); });
+    o = add(o, "libraryReveal", [this](const juce::var&) { if (lib.folder().isDirectory()) lib.folder().revealToUser(); return juce::var(true); });
+    // this computer: the setlist last open in this library, and what to open on launch
+    o = add(o, "libraryState", [this](const juce::var& a) {
+        if (a.isObject() && a.hasProperty("lastSetlist")) lib.setLastSetlist(a["lastSetlist"].toString());
+        if (a.isObject() && a.hasProperty("onLaunch")) { settings.setValue("onLaunch", a["onLaunch"].toString() == "empty" ? "empty" : "last"); settings.saveIfNeeded(); }
+        auto* r = new juce::DynamicObject();
+        r->setProperty("name", lib.name()); r->setProperty("root", lib.folder().getFullPathName());
+        r->setProperty("lastSetlist", lib.lastSetlist()); r->setProperty("onLaunch", settings.getValue("onLaunch", "last"));
+        return juce::var(r);
+    });
+    // Export setlist…: {name, text (the package's setline.json), audio: [refs], to?} -> a .setline zip with the audio and
+    // the rendered cues; progress as "audioProgress" {kind: "export"}; {path} | {cancelled} | {error}
+    o = addAsync(o, "exportSetlist", [this](const juce::var& a, auto done) {
+        if (exporter.joinable()) { done(errorVar("An export is already running.")); return; }
+        auto go = [this, a, done](const juce::File& to) {
+            if (to == juce::File()) { auto* r = new juce::DynamicObject(); r->setProperty("cancelled", true); done(juce::var(r)); return; }
+            std::vector<package::Entry> entries;
+            entries.push_back({ "setline.json", {}, a["text"].toString() });
+            std::set<juce::String> seen;
+            if (auto* refs = a["audio"].getArray())
+                for (auto& r : *refs) {
+                    const auto ref = r.toString(); const auto f = Media::resolve(ref, lib.index());
+                    if (! f.existsAsFile() || ! seen.insert(f.getFileName()).second) continue;
+                    entries.push_back({ "Audio/" + f.getFileName(), f, {} });
+                }
+            for (auto& f : lib.folder().getChildFile("Cues").findChildFiles(juce::File::findFiles, true))
+                if (! f.getFileName().endsWith(".part")) entries.push_back({ "Cues/" + f.getRelativePathFrom(lib.folder().getChildFile("Cues")).replaceCharacter('\\', '/'), f, {} });
+            exportCancel = std::make_shared<std::atomic<bool>>(false);
+            auto cancel = exportCancel; auto alive_ = alive;
+            if (exporter.joinable()) exporter.join();
+            exporter = std::thread([this, to, entries, cancel, alive_, done] {
+                double last = 0;
+                std::function<void(int64_t, int64_t, const juce::String&)> onProgress = [&last, alive_](int64_t d, int64_t tot, const juce::String& file) {
+                    const double now = juce::Time::getMillisecondCounterHiRes();
+                    if (now - last < 80) return;
+                    last = now;
+                    juce::MessageManager::callAsync([alive_, d, tot, file] { if (*alive_) (*alive_)->emit("audioProgress", progressVar(d, tot, file)); });
+                };
+                const juce::String err = package::write(to, entries, *cancel, onProgress);
+                juce::MessageManager::callAsync([alive_, err, to, done] {
+                    if (*alive_ == nullptr) return;
+                    (*alive_)->emit("audioProgress", progressVar(0, 0, juce::String(), true, err == "cancelled" ? juce::String() : err));
+                    auto* r = new juce::DynamicObject();
+                    if (err == "cancelled") r->setProperty("cancelled", true); else if (err.isNotEmpty()) r->setProperty("error", err); else { r->setProperty("path", to.getFullPathName()); applog::line("Exported " + to.getFullPathName()); }
+                    done(juce::var(r));
+                    if ((*alive_)->exporter.joinable()) (*alive_)->exporter.detach();
+                });
+            });
+        };
+        if (a["to"].toString().isNotEmpty()) { go(juce::File(a["to"].toString())); return; }
+        const auto name = juce::File::createLegalFileName(a["name"].toString().isNotEmpty() ? a["name"].toString() : juce::String("Setlist")) + ".setline";
+        packChooser = std::make_unique<juce::FileChooser>("Export setlist", juce::File::getSpecialLocation(juce::File::userDesktopDirectory).getChildFile(name), "*.setline");
+        packChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles | juce::FileBrowserComponent::warnAboutOverwriting,
+                                 [go](const juce::FileChooser& fc) { auto f = fc.getResult(); if (f != juce::File() && ! f.hasFileExtension("setline")) f = f.withFileExtension("setline"); go(f); });
+    });
+    o = add(o, "cancelExport", [this](const juce::var&) { exportCancel->store(true); return juce::var(true); });
+    // Import…: {path?} -> {path, name, text, audio: [names], have: [names already in this library]} | {cancelled} | {error}
+    o = addAsync(o, "readPackage", [this](const juce::var& a, auto done) {
+        auto read = [this, done](const juce::File& f) {
+            auto* r = new juce::DynamicObject(); juce::var rv(r);
+            if (f == juce::File()) { r->setProperty("cancelled", true); done(rv); return; }
+            std::vector<package::ZipItem> items;
+            if (auto e = package::list(f, items); e.isNotEmpty()) { r->setProperty("error", e); done(rv); return; }
+            juce::Array<juce::var> audioNames, have;
+            juce::String text;
+            for (auto& it : items) {
+                if (it.name == "setline.json") text = package::readText(f, it);
+                else if (it.name.startsWith("Audio/")) { const auto n = it.name.fromFirstOccurrenceOf("Audio/", false, false); audioNames.add(n); if (lib.folder().getChildFile("Audio").getChildFile(n).existsAsFile()) have.add(n); }
+            }
+            if (text.isEmpty()) { r->setProperty("error", f.getFileName() + " isn't a set.Line setlist package."); done(rv); return; }
+            r->setProperty("path", f.getFullPathName()); r->setProperty("name", f.getFileNameWithoutExtension()); r->setProperty("text", text);
+            r->setProperty("audio", audioNames); r->setProperty("have", have);
+            done(rv);
+        };
+        if (a["path"].toString().isNotEmpty()) { read(juce::File(a["path"].toString())); return; }
+        packChooser = std::make_unique<juce::FileChooser>("Import a setlist", juce::File::getSpecialLocation(juce::File::userDesktopDirectory), "*.setline");
+        packChooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [read](const juce::FileChooser& fc) { read(fc.getResult()); });
+    });
+    // {path} -> the package's audio this library doesn't have yet into Audio/, its cues into Cues/ -> {copied} | {error}
+    o = addAsync(o, "importPackageAudio", [this](const juce::var& a, auto done) {
+        const juce::File f(a["path"].toString());
+        const auto dir = lib.folder();
+        auto alive_ = alive;
+        std::thread([f, dir, done, alive_] {
+            std::vector<package::ZipItem> items;
+            juce::String err = package::list(f, items);
+            int copied = 0;
+            const auto tmpCues = juce::File::createTempFile("setline-cues");
+            for (auto& it : items) {
+                if (err.isNotEmpty()) break;
+                juce::File to;
+                if (it.name.startsWith("Audio/")) { to = dir.getChildFile("Audio").getChildFile(juce::File::createLegalFileName(it.name.fromFirstOccurrenceOf("Audio/", false, false))); if (to.existsAsFile() && to.getSize() == it.size) continue; }
+                else if (it.name.startsWith("Cues/") && ! it.name.contains("..")) to = tmpCues.getChildFile(it.name.fromFirstOccurrenceOf("Cues/", false, false));
+                else continue;
+                if (! package::extract(f, it, to)) err = "Couldn't copy " + it.name + " out of " + f.getFileName();
+                else if (it.name.startsWith("Audio/")) ++copied;
+            }
+            juce::MessageManager::callAsync([alive_, err, copied, tmpCues, done] {
+                if (*alive_ == nullptr) return;
+                if (tmpCues.isDirectory()) { (*alive_)->cues.mergeStore(tmpCues); }
+                auto* r = new juce::DynamicObject();
+                if (err.isNotEmpty()) r->setProperty("error", err); else r->setProperty("copied", copied);
+                applog::line("Imported a package: " + juce::String(copied) + " audio file(s)" + (err.isNotEmpty() ? ", " + err : juce::String()));
+                done(juce::var(r));
+            });
+        }).detach();
+    });
+    // ---- migration from Shows (6f): read-only; the shows' folders are never changed ----
+    o = add(o, "findShows", [this](const juce::var&) {
+        juce::Array<juce::File> found;
+        auto add1 = [&](const juce::File& f) { if (f.existsAsFile() && f.hasFileExtension("setline") && f.getParentDirectory().getFileName() != "Backups" && ! found.contains(f)) found.add(f); };
+        for (auto dir : { folders::shows(settings), folders::defaultShows() })
+            if (dir.isDirectory()) for (auto& f : dir.findChildFiles(juce::File::findFiles, true, "*.setline")) add1(f);
+        if (auto* rec = session.recent().getArray()) for (auto& r : *rec) add1(juce::File(r["path"].toString()));
+        add1(juce::File(session.lastSession()));
+        juce::Array<juce::var> out;
+        for (auto& f : found) {
+            if (f.isAChildOf(LibraryStore::root())) continue;
+            juce::var v; if (juce::JSON::parse(f.loadFileAsString(), v).failed() || ! v["songs"].isArray()) continue;
+            juce::int64 bytes = 0;
+            for (auto& a : f.getParentDirectory().getChildFile("Audio").findChildFiles(juce::File::findFiles, false)) bytes += a.getSize();
+            auto* o2 = new juce::DynamicObject();
+            o2->setProperty("path", f.getFullPathName()); o2->setProperty("name", f.getFileNameWithoutExtension());
+            o2->setProperty("songs", v["songs"].size()); o2->setProperty("bytes", (double) bytes);
+            out.add(juce::var(o2));
+        }
+        return juce::var(out);
+    });
+    o = add(o, "readShow", [](const juce::var& a) {
+        const juce::File f(a["path"].toString());
+        auto* r = new juce::DynamicObject();
+        if (! f.existsAsFile()) r->setProperty("error", f.getFullPathName() + " isn't there any more.");
+        else { r->setProperty("text", f.loadFileAsString()); r->setProperty("folder", f.getParentDirectory().getFullPathName()); }
+        return juce::var(r);
+    });
+    // a show's stored cues join the library's (copied; the show folder isn't touched)
+    o = add(o, "mergeCues", [this](const juce::var& a) { const juce::File d(a["from"].toString()); if (d.isDirectory()) cues.mergeStore(d); return juce::var(true); });
+    o = add(o, "migrationLog", [this](const juce::var& a) {
+        const auto f = lib.folder().getChildFile("migration-log.txt");
+        f.appendText(juce::Time::getCurrentTime().formatted("%Y-%m-%d %H:%M:%S") + "\n" + a["text"].toString() + "\n\n");
+        settings.setValue("showsMigrated", true); settings.saveIfNeeded();
+        return juce::var(f.getFullPathName());
+    });
+    o = add(o, "migrationAsked", [this](const juce::var& a) { if (a.isObject() && a.hasProperty("set")) { settings.setValue("showsMigrationAsked", (bool) a["set"]); settings.saveIfNeeded(); } return juce::var(settings.getBoolValue("showsMigrationAsked", false)); });
     // A line from the page into the log (e.g. what a show's migration changed).
     o = add(o, "logLine", [](const juce::var& a) { applog::line(a["text"].toString().substring(0, 4000)); return juce::var(true); });
     o = add(o, "getListen", [this](const juce::var&) { return audio.listenState(); });

@@ -1,5 +1,5 @@
-// Shows move between Windows and Mac, step 2, on the other system: open the show made by make.js, find every
-// file, render every song and version offline and compare with what the first system rendered.
+// Setlists move between Windows and Mac, step 2, on the other system: import the package make.js exported into a
+// fresh Library, find every file, render every song and version offline and compare with what the first system rendered.
 const CFG = /*CFG*/null; // {show, made: make.js's result}
 const P = hooks.page();
 const res = { checks: [] };
@@ -13,12 +13,12 @@ const SLx = { call: (name, a) => { res.steps.push(name); return Promise.race([ca
 res.platform = (await SLx.call("getAppInfo")).platform;
 check("made on " + CFG.made.platform + ", opened on " + res.platform, true);
 
-await within("openPath", hooks.openPath(CFG.show));
-for (let i = 0; i < 50 && hooks.docName() === ""; i++) await wait(100);
-check("the show opens", hooks.docName() !== "" && P.songs.length >= 2, { name: hooks.docName(), songs: P.songs.map((s) => s.name) });
-document.querySelectorAll(".cfbox [data-a=no]").forEach((b) => b.click()); // (a "missing audio" box would be a failure below)
+check("a fresh library opens", (await within("openLibrary", hooks.openLibrary(""))) === "");
+const im = await within("importPackage", hooks.importPackage(CFG.show, async () => ({})));
+check("the package imports", im && !im.error && im.added >= 2 && P.songs.length >= 2, { im, songs: P.songs.map((s) => s.name) });
+const lib = (await SLx.call("getSessionFile")).path;
 const refs = [...new Set(hooks.audioFiles().map((x) => x.f.path))];
-const chk = await SLx.call("checkAudio", { session: CFG.show, refs });
+const chk = await SLx.call("checkAudio", { session: lib, refs });
 check("every audio file found", !chk.missing.length, { missing: chk.missing, refs });
 const same = (l) => JSON.stringify(l.map((x) => x.normalize("NFC")).sort()); // (macOS may spell accents decomposed)
 check("the same files as when it was made", same(refs) === same(CFG.made.refs), { now: refs, made: CFG.made.refs });
@@ -46,5 +46,5 @@ for (const e of CFG.made.expect) {
 // the cues came from the show, not from a voice on this system
 const src = await SLx.call("cueSource");
 res.cueSource = src;
-check("the cues came from the show (not made again with a voice on this system)", src.from !== "render", src);
+check("the cues came from the package (not made again with a voice on this system)", src.from !== "render", src);
 return res;

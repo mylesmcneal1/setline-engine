@@ -5,6 +5,7 @@
 #include "../core/Platform.h"
 #include "AudioHost.h"
 #include "Bridge.h"
+#include "LibraryStore.h"
 #include "WebUi.h"
 #include "Ort.h"
 #include "Splash.h"
@@ -175,6 +176,9 @@ public:
             bridge->testOut = juce::File::getCurrentWorkingDirectory().getChildFile(args[ts + 2].unquoted());
         }
         bridge->reopenLastInTests = args.contains("--reopen-last");
+        // Tests never touch the real Libraries: SETLINE_LIBRARIES, else a fresh temporary folder per run.
+        if (bridge->testScript != juce::File() && juce::SystemStats::getEnvironmentVariable("SETLINE_LIBRARIES", {}).isEmpty())
+            LibraryStore::setTestRoot(juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("setline-test-libraries").getNonexistentChildFile("run", ""));
         bridge->onLoadingStep = [this](const juce::var& a) {
             if (! splash) return;
             const auto id = a["id"].toString();
@@ -197,7 +201,7 @@ public:
         // Window title: "<session> — set.Line", with a dot while there are unsaved changes.
         bridge->onDocument = [this](const juce::String& name, bool dirty) {
             static const juce::String dot = juce::CharPointer_UTF8("\xe2\x80\xa2 "), dash = juce::CharPointer_UTF8(" \xe2\x80\x94 set.Line");
-            if (window) window->setName((dirty ? dot : juce::String()) + (name.isEmpty() ? juce::String("Untitled session") : name) + dash);
+            if (window) window->setName((dirty ? dot : juce::String()) + (name.isEmpty() ? juce::String("Library") : name) + dash);
         };
        #if JUCE_MAC
         menu = std::make_unique<MacMenu>(*bridge);
@@ -216,10 +220,9 @@ public:
     {
         applog::line("Start-up: the show couldn't be opened: " + why);
         showError = true;
-        splash->showError("This show couldn't be opened", why + " Try again, open another show, or start a new one.",
+        splash->showError("The library couldn't be opened", why + " Try again, or carry on with an empty setlist.",
             { { "Retry", [this] { showError = false; splash->setStep(Splash::show, Splash::State::running); sendMenu("retryShow"); } },
-              { juce::String::fromUTF8("Open another show\xe2\x80\xa6"), [this] { showError = false; if (! bridge) openMain(startPage); sendMenu("open"); finishLoading(); } },
-              { "Start a new show", [this] { showError = false; if (! bridge) openMain(startPage); sendMenu("new"); finishLoading(); } } });
+              { "Empty setlist", [this] { showError = false; if (! bridge) openMain(startPage); sendMenu("new"); finishLoading(); } } });
     }
     void sendMenu(const char* cmd)
     {
@@ -267,7 +270,7 @@ public:
     void askQuitNative()
     {
         juce::AlertWindow::showOkCancelBox(juce::MessageBoxIconType::WarningIcon, "Quit set.Line?",
-                                           "The session has unsaved changes. Quit without saving?", "Quit", "Cancel", nullptr,
+                                           "The last change hasn't reached the disk yet. Quit anyway?", "Quit", "Cancel", nullptr,
                                            juce::ModalCallbackFunction::create([](int ok) { if (ok) juce::JUCEApplication::quit(); }));
     }
     void anotherInstanceStarted(const juce::String&) override
@@ -290,13 +293,15 @@ private:
                 m.addItem(juce::PopupMenu::Item("Save diagnostics...").setID(22).setAction([this] { send("saveDiagnostics"); }));
                 return m;
             }
-            m.addItem(juce::PopupMenu::Item("New").setID(4).setAction([this] { send("new"); }));
-            m.addItem(juce::PopupMenu::Item("Open...").setID(1).setAction([this] { send("open"); }));
-            m.addItem(juce::PopupMenu::Item("Save").setID(2).setAction([this] { send("save"); }));
-            m.addItem(juce::PopupMenu::Item("Save As...").setID(3).setAction([this] { send("saveAs"); }));
+            // 6f: there is no Open or Save: the Library saves itself
+            m.addItem(juce::PopupMenu::Item("New Setlist").setID(4).setAction([this] { send("new"); }));
+            m.addItem(juce::PopupMenu::Item("Duplicate Setlist").setID(1).setAction([this] { send("dupSetlist"); }));
             m.addSeparator();
-            m.addItem(juce::PopupMenu::Item("Open Backup...").setID(6).setAction([this] { send("openBackup"); }));
-            m.addItem(juce::PopupMenu::Item("Close").setID(5).setAction([this] { send("close"); }));
+            m.addItem(juce::PopupMenu::Item("Export Setlist...").setID(2).setAction([this] { send("export"); }));
+            m.addItem(juce::PopupMenu::Item("Import...").setID(3).setAction([this] { send("import"); }));
+            m.addSeparator();
+            m.addItem(juce::PopupMenu::Item("Backups...").setID(6).setAction([this] { send("openBackup"); }));
+            m.addItem(juce::PopupMenu::Item("Clean Up Unused Audio...").setID(5).setAction([this] { send("cleanUp"); }));
             return m;
         }
         void menuItemSelected(int, int) override {}

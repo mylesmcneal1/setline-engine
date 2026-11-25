@@ -7,6 +7,9 @@
 #include "Media.h"
 #include "Peaks.h"
 #include "Cues.h"
+#include "LibraryStore.h"
+#include <atomic>
+#include <thread>
 
 namespace setline::gui {
 
@@ -65,6 +68,11 @@ private:
     Media media;
     Peaks peaks;
     Cues cues;
+    LibraryStore lib;
+    std::thread exporter;                    // writing a .setline package (one at a time)
+    std::shared_ptr<std::atomic<bool>> exportCancel = std::make_shared<std::atomic<bool>>(false);
+    std::unique_ptr<juce::FileChooser> packChooser;
+    juce::var libraryOpened(const juce::var& r);
     std::map<juce::String, juce::String> cueErrors; // from the last song load: cue text -> why it couldn't be spoken
     void withCues(const juce::var& payload, std::function<void()> then);
     Cues::Choice choiceOf(const juce::var& v, juce::String* missingRecording = nullptr) const;

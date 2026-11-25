@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shows move between Windows and Mac (docs/phase6c.md). CI runs:
+# Setlists move between Windows and Mac as .setline packages (docs/phase6c.md, 6f). CI runs:
 #   run.sh make  <set.Line executable> <setline-spike> <work dir>   -> <work dir>/show/X Show/... + made.json
 #   run.sh check <set.Line executable> <work dir>                   (the other system's show, downloaded there)
 # make builds a show from stems with awkward names (accents, in macOS's decomposed form on a Mac, case, and on a

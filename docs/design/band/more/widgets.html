@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>set.Line — more widgets (mockup)</title>
+<link rel="stylesheet" href="base.css">
+<style>
+body{display:flex;align-items:center;justify-content:center;flex-direction:column;background:#0d0d0e}
+.dev{position:relative;background:#000;border-radius:26px;border:10px solid #2a2a2e;width:1000px;height:731px;box-shadow:0 20px 50px rgba(0,0,0,.6)}
+.w{position:absolute;border-radius:12px;background:#17171a;border:1px solid #26262a;padding:12px 14px;overflow:hidden}
+.lb{font-size:11px;color:#8e8e96;text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+.cap{color:var(--muted);font-size:13px;margin-top:12px}
+.btnw{display:flex;align-items:center;justify-content:center;flex-direction:column;font-weight:700;gap:4px;text-align:center}
+.secb{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;height:calc(100% - 22px);margin-top:8px}
+.secb div{border-radius:9px;display:flex;align-items:center;justify-content:center;font-weight:700;color:#111;font-size:17px}
+.ck{display:flex;align-items:center;gap:12px;font-size:20px;padding:7px 0}
+.ck i{width:26px;height:26px;border-radius:7px;border:2px solid #555;display:flex;align-items:center;justify-content:center;font-style:normal;font-size:16px}
+.ck.on i{background:var(--green);border-color:var(--green);color:#062b10}
+.ck.on span{color:#8e8e96;text-decoration:line-through}
+</style></head>
+<body>
+<div class="dev" id="dev"></div>
+<div class="cap" id="cap"></div>
+<script>
+const CW=980/12,CH=711/9;
+function box(x,y,w,h,inner,style=''){return `<div class="w" style="left:${x*CW+4}px;top:${y*CH+4}px;width:${w*CW-8}px;height:${h*CH-8}px;${style}">${inner}</div>`}
+const V={
+md:{cap:"Music director's laptop: curfew, warnings, section notes, cue feed, patch names, status",html:()=>
+ box(0,0,6,2,`<div class="lb">Now · 3 of 5</div><div style="font-size:42px;font-weight:800;margin-top:4px">Low Tide</div>`)+
+ box(6,0,6,2,`<div class="lb">Curfew 10:45 PM</div><div style="display:flex;align-items:baseline;gap:14px;margin-top:6px"><span class="mono" style="font-size:40px;font-weight:700;color:#30d158">−2:40</span><span style="font-size:15px;color:#c9c9cf">under · set ends ~10:42</span></div><div style="color:#8e8e96;font-size:12px">+ talking after Low Tide (Stop)</div>`)+
+ box(0,2,6,2,`<div class="lb">Coming up</div><div style="font-size:32px;font-weight:800;margin-top:8px;color:#ffd60a">7/8 next bar</div><div style="color:#c9c9cf;font-size:14px">then back to 4/4 in 2 bars</div>`,'border-color:#ffd60a;background:#2a2610')+
+ box(6,2,6,2,`<div class="lb">Next section</div><div style="display:flex;align-items:center;gap:14px;margin-top:8px"><span style="background:var(--s-bridge);color:#111;font-weight:800;font-size:24px;padding:6px 14px;border-radius:8px">Bridge</span><span style="font-size:32px;font-weight:800">in 3</span><span style="color:#8e8e96">bars</span></div>`)+
+ box(0,4,6,2,`<div class="lb">Section notes · Chorus 2</div><div style="font-size:26px;font-weight:700;margin-top:8px">Keys drop out, BGVs double</div>`)+
+ box(6,4,6,2,`<div class="lb">Cue feed</div><div style="margin-top:6px;font-size:16px;line-height:1.7"><div style="color:#8e8e96">0:58 · Verse</div><div style="color:#8e8e96">1:22 · Chorus</div><div style="font-weight:700;font-size:22px">2:31 · “Bridge, 2 3 4”</div></div>`)+
+ box(0,6,4,3,`<div class="lb">Patch · Guitar rig</div><div style="font-size:30px;font-weight:800;margin-top:10px">Prog 12</div><div style="font-size:18px;color:#64d2ff;font-weight:600">Lead</div><div style="color:#8e8e96;font-size:12px;margin-top:6px">USB MIDI · Ch 1</div>`)+
+ box(4,6,5,3,`<div class="lb">Status</div><div style="margin-top:10px;display:flex;flex-direction:column;gap:8px"><div style="background:#3a2d12;border-radius:9px;padding:10px 12px;font-size:20px;font-weight:700;color:#ffd38a">🎸 Tech · Need 30 s</div><div style="background:#16301c;border-radius:9px;padding:10px 12px;font-size:20px;font-weight:700;color:#7ee29a">🥁 Drummer · Ready</div></div>`)+
+ box(9,6,3,3,`<div class="lb">Connection</div><div style="display:flex;align-items:center;gap:10px;margin-top:22px"><span style="width:18px;height:18px;border-radius:50%;background:#30d158;box-shadow:0 0 12px #30d158"></span><span style="font-size:20px;font-weight:700">Host OK</span></div><div style="color:#8e8e96;font-size:12px;margin-top:8px">12 ms · synced</div>`)},
+countin:{cap:"Drummer's iPad: count-in overlay fills the screen while the count-in plays",html:()=>
+ `<div style="position:absolute;inset:0;border-radius:16px;background:radial-gradient(circle at 50% 45%,#2a2010,#000 70%);display:flex;flex-direction:column;align-items:center;justify-content:center">
+ <div style="color:#8e8e96;font-size:18px;letter-spacing:.1em;text-transform:uppercase">Glasshouse · count-in</div>
+ <div style="font-size:300px;font-weight:900;line-height:1;color:#ff9f0a;margin:10px 0">2</div>
+ <div style="display:flex;gap:16px">${[1,2,3,4].map(i=>`<span style="width:90px;height:22px;border-radius:6px;background:${i<=2?'#ff9f0a':'#2a2a2e'}"></span>`).join('')}</div>
+ <div style="color:#c9c9cf;font-size:18px;margin-top:22px">92 BPM · 4/4 · starts with Intro pad</div></div>`},
+tech:{cap:"Guitar tech's tablet: status buttons tell the band, and a checklist resets every song",html:()=>
+ box(0,0,5,3,`<div class="lb">Tuning · next song</div><div style="font-size:54px;font-weight:800;margin-top:10px">Drop C</div><div style="color:#8e8e96;font-size:15px">Satellites · Baritone</div>`)+
+ box(5,0,7,3,`<div class="lb">Until next tuning change</div><div style="display:flex;align-items:baseline;gap:16px;margin-top:10px"><span class="mono" style="font-size:66px;font-weight:700;color:#ffd38a">0:41</span><span style="font-size:30px;font-weight:800">→ Drop C</span></div><div style="position:absolute;left:14px;right:14px;bottom:14px;height:8px;border-radius:4px;background:#2a2a2e;overflow:hidden"><i style="position:absolute;left:0;top:0;bottom:0;width:86%;background:#ffd38a"></i></div>`)+
+ box(0,3,4,2,`Ready`,'display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:800;background:#1e3a26;border-color:#2f6b3f;color:#7ee29a')+
+ box(4,3,4,2,`<div>Need 30 s</div><div style="font-size:13px;font-weight:600;color:#ffd38a">● showing on host + drummer</div>`,'display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:30px;font-weight:800;background:#3a2d12;border:2px solid #ffd38a;color:#ffd38a')+
+ box(8,3,4,2,`Problem`,'display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:800;background:#3a1a1a;border-color:#6b2f2f;color:#ff8a80')+
+ box(0,5,6,4,`<div class="lb">Checklist · Satellites</div><div style="margin-top:8px"><div class="ck on"><i>✓</i><span>Baritone tuned</span></div><div class="ck on"><i>✓</i><span>Capo off</span></div><div class="ck"><i></i><span>Fuzz on, gate off</span></div><div class="ck"><i></i><span>Spare strung guitar ready</span></div></div>`)+
+ box(6,5,6,4,`<div class="lb">Tech notes · Satellites</div><div style="font-size:28px;font-weight:700;margin-top:10px;line-height:1.25">Check B string. Hand over during the segue, no gap.</div>`)},
+sync:{cap:"Drummer's iPad before the show: one big Sync MIDI button fires every device's starting patch at once",html:()=>
+ box(0,0,8,2,`<div class="lb">Up first · 1 of 5</div><div style="font-size:44px;font-weight:800;margin-top:2px">Neon Rivers</div>`)+
+ box(8,0,4,2,`<div class="lb">Set</div><div style="font-size:40px;font-weight:800;margin-top:4px">Fall Tour</div>`)+
+ box(0,2,12,4,`<div style="font-size:64px">⇄ Sync MIDI</div><div style="font-size:20px;font-weight:600;color:#7ee29a;margin-top:6px">✓ Guitar rig · ✓ Keys rig · ✓ Lights — all set to the show's starting patches</div>`,'display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:800;background:#0a3a52;border:2px solid #64d2ff')+
+ box(0,6,4,3,`▶ Play`,'display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:800;background:#1e3a26')+
+ box(4,6,4,3,`<div style="font-size:30px">Soundcheck</div><div style="font-size:13px;color:#8e8e96;font-weight:600">Soundcheck loop</div>`,'display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:800;background:#232326')+
+ box(8,6,4,3,`<div class="lb">Connection</div><div style="display:flex;align-items:center;gap:10px;margin-top:22px"><span style="width:18px;height:18px;border-radius:50%;background:#30d158"></span><span style="font-size:20px;font-weight:700">Host OK</span></div>`)},
+dr:{cap:"Drummer's iPad: section buttons to jump, and Vamp holds the current section",html:()=>
+ box(0,0,8,2,`<div class="lb">Now · 2 of 5</div><div style="font-size:44px;font-weight:800;margin-top:2px">Glasshouse <span style="font-size:18px;color:#7fe0cf;font-weight:600">With intro</span></div>`)+
+ box(8,0,4,2,`<div class="lb">Bars left</div><div style="font-size:54px;font-weight:800;line-height:1;margin-top:4px">∞</div><div style="color:#ffd38a;font-size:13px;font-weight:600">holding Chorus 2</div>`)+
+ box(0,2,12,4,`<div class="lb">Jump to · next bar</div><div class="secb">${[['Intro pad','#bf5af2',0],['Verse 1','var(--s-verse)',0],['Chorus 1','var(--s-chorus)',0],['Verse 2','var(--s-verse)',0],['Chorus 2','var(--s-chorus)',2],['Bridge','var(--s-bridge)',1],['Chorus 3','var(--s-chorus)',0],['Outro','var(--s-outro)',0]].map(s=>`<div style="background:${s[1]};${s[2]==2?'outline:3px solid #fff;outline-offset:-3px':''}${s[2]==1?';box-shadow:0 0 0 3px #64d2ff;animation:none':''};${s[2]==0?'opacity:.55':''}">${s[0]}${s[2]==1?' <span style="font-size:12px;margin-left:6px">queued</span>':''}</div>`).join('')}</div>`)+
+ box(0,6,4,3,`<div style="font-size:30px">Vamp</div><div style="font-size:13px;color:#ffd38a;font-weight:600">● Holding Chorus 2 · tap to release</div>`,'display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:800;background:#3a2d12;border:2px solid #ffd38a')+
+ box(4,6,4,3,`■ Stop`,'display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:800;background:#1e3a26')+
+ box(8,6,4,3,`<div style="font-size:30px">Next song</div><div style="font-size:13px;color:#8e8e96;font-weight:600">Low Tide · asks to confirm</div>`,'display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:800;background:#232326')}
+};
+function view(k){document.getElementById('dev').innerHTML=V[k].html();document.getElementById('cap').textContent=V[k].cap}
+view('md');
+</script>
+</body></html>

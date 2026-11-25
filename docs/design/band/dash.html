@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>set.Line — band dashboards (mockup)</title>
+<link rel="stylesheet" href="base.css">
+<style>
+body{grid-template-rows:52px 1fr}
+.ed{display:grid;grid-template-columns:230px minmax(0,1fr) 290px;min-height:0}
+.scr .song{padding:9px 8px}
+.av{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;color:#111;font-weight:700}
+.canvasArea{position:relative;display:flex;flex-direction:column;align-items:center;padding:16px;min-height:0;background:#0d0d0e}
+.cbar{width:100%;display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.cbar h1{font-size:18px}
+.dev{position:relative;background:#000;border-radius:26px;border:10px solid #2a2a2e;box-shadow:0 20px 50px rgba(0,0,0,.6)}
+.gridbg{position:absolute;inset:0;background-image:linear-gradient(#1a1a1c 1px,transparent 1px),linear-gradient(90deg,#1a1a1c 1px,transparent 1px);border-radius:16px}
+.w{position:absolute;border-radius:12px;background:#17171a;border:1px solid #26262a;padding:10px 12px;overflow:hidden;color:#fff}
+.w .lb{font-size:10px;color:#8e8e96;text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+.w.sel{outline:2px solid var(--blue);outline-offset:1px}
+.w.sel:after{content:"";position:absolute;right:3px;bottom:3px;width:9px;height:9px;border-right:2px solid var(--blue);border-bottom:2px solid var(--blue)}
+.edit .w{cursor:move}
+.btnw{display:flex;align-items:center;justify-content:center;flex-direction:column;font-weight:700;gap:4px}
+.lib h4{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:12px 0 6px}
+.lib .it{display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:7px;color:#d6d6dc;font-size:13px}
+.lib .it i{width:22px;height:22px;border-radius:6px;background:#2a2a2e;display:flex;align-items:center;justify-content:center;font-style:normal;font-size:12px}
+.lib .it.hl{background:#2a2a2e}
+.ghost{position:absolute;z-index:30;border-radius:12px;background:rgba(10,132,255,.25);border:2px dashed var(--blue);display:none}
+/* fields table */
+.tbl{display:none;position:fixed;inset:52px 0 0 0;background:var(--bg);padding:22px 28px;z-index:20}
+body.ft .tbl{display:block}
+table{border-collapse:separate;border-spacing:0;width:100%;font-size:13px;background:var(--s2);border-radius:12px;overflow:hidden}
+th{text-align:left;color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em;padding:10px 14px;border-bottom:1px solid var(--hair);background:#19191b}
+td{padding:9px 14px;border-bottom:1px solid var(--hair)}
+td .cell{background:var(--s3);border-radius:6px;padding:4px 9px;display:inline-block;min-width:110px}
+td .cell.chg{background:#3a2d12;color:#ffd38a}
+/* live device */
+.live{display:none;position:fixed;inset:52px 0 0 0;background:#0d0d0e;z-index:20;align-items:center;justify-content:center}
+body.lv .live{display:flex}
+</style></head>
+<body>
+<div class="top">
+  <div class="logo">set.Line</div>
+  <div class="seg"><span>Show</span><span>Perform</span><span class="on">Band</span></div>
+  <span class="tb">File ▾</span><div class="sp"></div>
+  <div class="tp"><b>⏮</b><b>◀◀</b><b>■</b><b class="play">▶</b><b>▶▶</b><b>↻</b></div>
+  <div class="pos mono"><div><span class="big">41 . 1 . 1</span><small>2:31.0</small></div><div><span class="big">128</span><small>BPM · 4/4</small></div></div>
+  <div class="sp"></div>
+  <div class="pill"><span class="dot"></span>2 screens online</div><div class="gear">⚙</div>
+</div>
+
+<div class="ed edit">
+  <div class="left scr">
+    <div class="lh"><span>Screens</span><span style="color:var(--muted);font-weight:400">＋ Add</span></div>
+    <div class="song" id="s-dr"><span class="av" style="background:#30d158">🥁</span><span class="t">Drummer<br><span class="tr">iPad · online</span></span></div>
+    <div class="song" id="s-gt"><span class="av" style="background:#ff9f0a">🎸</span><span class="t">Guitar tech<br><span class="tr">Tablet · online</span></span></div>
+    <div style="margin:16px 8px 0;padding:12px;background:var(--s2);border-radius:10px;font-size:12px;color:var(--muted);line-height:1.5">
+      <div style="display:flex;gap:10px;align-items:center"><svg width="54" height="54" viewBox="0 0 9 9" style="background:#fff;border-radius:4px;padding:3px"><path d="M0 0h3v3H0zM6 0h3v3H6zM0 6h3v3H0zM4 1h1v1H4zM4 4h1v1H4zM5 5h1v1H5zM7 4h1v1H7zM4 7h2v1H4zM7 7h1v2H7z" fill="#000"/></svg><span>Scan to join<br><b class="mono" style="color:#fff">10.0.0.2</b></span></div>
+      <div style="margin-top:10px">Band network: <b style="color:#fff">setline-band</b> (closed)</div>
+    </div>
+    <div style="margin:12px 8px;font-size:12px;color:var(--muted);line-height:1.5">Song fields: <span style="color:#fff">Tuning, Guitar, Tech notes</span><br><span style="color:#5aa9ff" id="editfields">Edit song fields…</span></div>
+  </div>
+
+  <div class="canvasArea">
+    <div class="cbar"><h1 id="sname">Drummer</h1><span class="chip" id="sdev">iPad · landscape</span><span style="color:var(--muted);font-size:12px">Changes show on the device live</span><div class="sp"></div><span class="btn">Start from preset ▾</span></div>
+    <div class="dev" id="dev" style="width:820px;height:600px"><div class="gridbg"></div><div id="wl"></div></div>
+    <div class="ghost" id="ghost"></div>
+  </div>
+
+  <div class="right" id="right"></div>
+</div>
+
+<div class="tbl">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px"><h1 style="font-size:20px">Song fields</h1><span style="color:var(--muted)">Fall Tour set</span><div class="sp"></div><span class="btn">＋ Field</span><span class="btn acc" id="ftdone">Done</span></div>
+  <p style="color:var(--muted);font-size:12px;margin-bottom:14px">Type straight into the table. Highlighted cells are where the value changes from the song before, which is what "Until next change" counts down to.</p>
+  <table><tr><th style="width:40px">#</th><th>Song</th><th>Version</th><th>Length</th><th>Tuning</th><th>Guitar</th><th>Tech notes</th></tr>
+  <tr><td>1</td><td>Neon Rivers</td><td>Album</td><td class="mono">3:45</td><td><span class="cell">E Standard</span></td><td><span class="cell">Strat</span></td><td><span class="cell">Capo off</span></td></tr>
+  <tr><td>2</td><td>Glasshouse</td><td>With intro ◆</td><td class="mono">3:48</td><td><span class="cell">E Standard</span></td><td><span class="cell chg">Tele</span></td><td><span class="cell">Fresh 9s</span></td></tr>
+  <tr><td>3</td><td>Low Tide</td><td>Album</td><td class="mono">3:18</td><td><span class="cell">E Standard</span></td><td><span class="cell">Tele</span></td><td><span class="cell" style="color:var(--muted)">—</span></td></tr>
+  <tr><td>4</td><td>Satellites</td><td>Album</td><td class="mono">2:46</td><td><span class="cell chg">Drop C</span></td><td><span class="cell chg">Baritone</span></td><td><span class="cell">Check B string</span></td></tr>
+  <tr><td>5</td><td>Copper Sun</td><td>Festival cut</td><td class="mono">2:50</td><td><span class="cell">Drop C</span></td><td><span class="cell">Baritone</span></td><td><span class="cell">Last song, ring out</span></td></tr>
+  </table>
+</div>
+
+<div class="live"><div style="text-align:center"><div class="dev" id="ldev" style="width:1000px;height:731px;margin:0 auto;text-align:left"><div id="lwl"></div></div><div style="color:var(--muted);font-size:12px;margin-top:10px" id="lcap"></div></div></div>
+
+<svg class="cursor" id="cur" viewBox="0 0 18 18"><path d="M2 1 L2 15 L6 11.5 L9 17 L11 16 L8 10.5 L13 10.5 Z" fill="#fff" stroke="#000" stroke-width="1"/></svg>
+<script>
+// grid 12 x 9 on device; cell px computed
+let screen='dr',sel=null,sc=false,playing=true;
+const L={
+ dr:[
+  {id:'song',x:0,y:0,w:7,h:2,k:'song'},
+  {id:'bpm',x:7,y:0,w:2,h:2,k:'bpm'},
+  {id:'next',x:9,y:0,w:3,h:2,k:'next'},
+  {id:'secs',x:0,y:2,w:12,h:2,k:'secs'},
+  {id:'bars',x:0,y:4,w:4,h:3,k:'bars'},
+  {id:'beats',x:4,y:4,w:8,h:1,k:'beats'},
+  {id:'note',x:4,y:5,w:8,h:2,k:'field',f:'Drummer notes',val:'Half-time feel last chorus'},
+  {id:'play',x:0,y:7,w:4,h:2,k:'btn',label:'Play / Stop'},
+  {id:'sc',x:4,y:7,w:4,h:2,k:'btn',label:'Soundcheck',sc:1},
+  {id:'exit',x:8,y:7,w:4,h:2,k:'btn',label:'Exit loop'},
+ ],
+ gt:[
+  {id:'tun',x:0,y:0,w:6,h:3,k:'field',f:'Tuning',val:'E Standard',big:1,which:'Now'},
+  {id:'gtr',x:6,y:0,w:6,h:3,k:'field',f:'Guitar',val:'Tele',big:1,which:'Now'},
+  {id:'until',x:0,y:3,w:12,h:3,k:'until'},
+  {id:'tnote',x:0,y:6,w:6,h:3,k:'field',f:'Tech notes · next song',val:'Check B string'},
+  {id:'list',x:6,y:6,w:6,h:3,k:'list'},
+ ]};
+const SECS=[['Intro','--s-intro',1],['Verse 1','--s-verse',2],['Chorus 1','--s-chorus',2],['Verse 2','--s-verse',2],['Chorus 2','--s-chorus',2],['Bridge','--s-bridge',1.5],['Chorus 3','--s-chorus',2],['Outro','--s-outro',1]];
+function wHTML(w,cw,ch){const big=Math.min(cw*w.w,ch*w.h);let inner='';
+ switch(w.k){
+  case 'song':inner=`<div class="lb">Song 3 of 5</div><div style="font-size:${ch*.75}px;font-weight:700;letter-spacing:-.02em;line-height:1.1;margin-top:4px">Low Tide</div><div style="color:#8e8e96;font-size:13px">Album</div>`;break;
+  case 'bpm':inner=`<div class="lb">BPM</div><div class="mono" style="font-size:${ch*.7}px;font-weight:700;margin-top:4px">128</div><div style="color:#8e8e96;font-size:12px">4/4</div>`;break;
+  case 'next':inner=`<div class="lb">Next</div><div style="font-size:${ch*.38}px;font-weight:700;margin-top:6px">Satellites</div><div style="color:#8e8e96;font-size:12px">↘ Segue</div>`;break;
+  case 'secs':inner=`<div style="display:flex;gap:3px;height:100%">${SECS.map((s,i)=>`<div style="flex:${s[2]};border-radius:7px;background:var(${s[1]});opacity:${i==4?1:.35};display:flex;align-items:center;padding-left:8px;font-weight:700;font-size:${i==4?16:12}px;color:#111">${i==4?s[0]:''}</div>`).join('')}</div>`;break;
+  case 'bars':inner=`<div class="lb">Bars left in Chorus 2</div><div style="font-size:${ch*1.6}px;font-weight:800;line-height:1;margin-top:6px">6</div>`;break;
+  case 'beats':inner=`<div style="display:flex;gap:8px;height:100%;align-items:center">${[1,2,3,4].map(i=>`<div style="flex:1;height:70%;border-radius:8px;background:${i==2?'var(--accent)':'#2a2a2e'}"></div>`).join('')}</div>`;break;
+  case 'field':inner=`<div class="lb">${w.f}${w.which?' · '+w.which:''}</div><div style="font-size:${w.big?ch*.9:ch*.38}px;font-weight:${w.big?800:600};margin-top:${w.big?10:6}px;line-height:1.15;letter-spacing:-.01em">${w.val}</div>${w.big?`<div style="color:#8e8e96;font-size:13px;margin-top:8px">Low Tide</div>`:''}`;break;
+  case 'until':inner=`<div class="lb">Until next tuning change</div><div style="display:flex;align-items:baseline;gap:18px;margin-top:8px"><span class="mono" style="font-size:${ch*1.2}px;font-weight:700;color:#ffd38a">3:02</span><span style="font-size:${ch*.55}px;font-weight:800">→ Drop C</span></div><div style="color:#8e8e96;font-size:14px;margin-top:4px">For Satellites · after Low Tide (segues straight in) · switch to Baritone</div><div style="position:absolute;left:12px;right:12px;bottom:12px;height:8px;border-radius:4px;background:#2a2a2e;overflow:hidden"><i style="position:absolute;left:0;top:0;bottom:0;width:22%;background:#ffd38a"></i></div>`;break;
+  case 'list':inner=`<div class="lb">Setlist · Tuning</div><div style="margin-top:8px;font-size:14px;line-height:1.9">${[['1 Neon Rivers','E Std',0],['2 Glasshouse','E Std',0],['3 Low Tide','E Std',2],['4 Satellites','Drop C',1],['5 Copper Sun','Drop C',0]].map(r=>`<div style="display:flex;justify-content:space-between;${r[2]==2?'color:#fff;font-weight:700':r[2]==1?'color:#ffd38a;font-weight:600':'color:#8e8e96'}"><span>${r[0]}</span><span>${r[1]}</span></div>`).join('')}</div>`;break;
+  case 'btn':{let bg='#232326',lab=w.label,sub='';if(w.label=='Play / Stop'){bg=playing?'#1e3a26':'#232326';lab=playing?'■ Stop':'▶ Play'}
+   if(w.sc){bg=sc?'#3a2a10':'#232326';lab=sc?'Soundcheck':'Soundcheck';sub=sc?'<span style="font-size:12px;color:#ffd38a;font-weight:600">● Looping · tap to stop</span>':'<span style="font-size:12px;color:#8e8e96;font-weight:500">Soundcheck loop</span>'}
+   if(w.label=='Exit loop'){bg='#232326';sub='<span style="font-size:12px;color:#8e8e96;font-weight:500">no loop</span>'}
+   return `<div class="w btnw${sel==w.id?' sel':''}" id="w-${w.id}" style="left:${w.x*cw+4}px;top:${w.y*ch+4}px;width:${w.w*cw-8}px;height:${w.h*ch-8}px;background:${bg};font-size:${ch*.42}px">${lab}${sub}</div>`}
+ }
+ return `<div class="w${sel==w.id?' sel':''}" id="w-${w.id}" style="left:${w.x*cw+4}px;top:${w.y*ch+4}px;width:${w.w*cw-8}px;height:${w.h*ch-8}px">${inner}</div>`}
+function render(){const dev=document.getElementById('dev');const W=800,H=580;const cw=W/12,ch=H/9;
+ document.getElementById('wl').innerHTML=L[screen].map(w=>wHTML(w,cw,ch)).join('');
+ document.getElementById('sname').textContent=screen=='dr'?'Drummer':'Guitar tech';
+ document.getElementById('sdev').textContent=screen=='dr'?'iPad · landscape':'Tablet · landscape';
+ document.getElementById('s-dr').classList.toggle('on',screen=='dr');document.getElementById('s-gt').classList.toggle('on',screen=='gt');
+ renderRight()}
+function renderRight(){const w=L[screen].find(x=>x.id==sel);let h='';
+ if(!w){h=`<div class="lib"><div class="rh" style="margin-bottom:4px"><h2>Widgets</h2><small>drag onto the screen</small></div>
+ <h4>Buttons</h4>${['Play / Stop','Next song','Previous song','Soundcheck','Jump to section','Exit loop','Next version'].map(x=>`<div class="it${x=='Soundcheck'&&window.hl?' hl':''}" id="lib-${x.replace(/\W/g,'')}"><i>▢</i>${x}</div>`).join('')}
+ <h4>Song</h4>${['Song name','BPM & meter','Next song','Section timeline','Bars left','Beat lights','Song time left','Set time left'].map(x=>`<div class="it"><i>≡</i>${x}</div>`).join('')}
+ <h4>Song fields</h4>${['Field (this / next song)','Until next change','Setlist with a field','Text label'].map(x=>`<div class="it${x=='Until next change'&&window.hl2?' hl':''}" id="lib-${x.replace(/\W/g,'')}"><i>Aa</i>${x}</div>`).join('')}</div>`}
+ else{h=`<div class="rh"><h2>${w.k=='btn'?'Button':w.k=='until'?'Until next change':w.k=='field'?'Song field':'Widget'}</h2><small>${w.w}×${w.h}</small></div>`;
+  if(w.k=='btn')h+=`<div class="card"><h3>Button</h3><div class="f"><span>Does</span><span class="sel2">${w.label} <span>▾</span></span></div>${w.sc?`<div class="f"><span>Plays</span><span class="sel2">Soundcheck loop <span>▾</span></span></div><div class="f"><span style="color:var(--muted);font-size:12px">Loops outside the set. Tap again to stop. Your place in the set is kept.</span></div>`:''}<div class="f"><span>Label</span><span class="sel2">${w.label}</span></div><div class="f"><span>Colour</span><div class="sw"><i style="background:#ff9f0a" class="on"></i><i style="background:#30d158"></i><i style="background:#5aa9ff"></i><i style="background:#ff375f"></i></div></div><div class="f"><span>Ask to confirm</span><div class="tog off"></div></div></div>`;
+  if(w.k=='until')h+=`<div class="card"><h3>Counts down to</h3><div class="f"><span>Field</span><span class="sel2">Tuning <span>▾</span></span></div><div class="f"><span>Also show</span><span class="sel2">Guitar <span>▾</span></span></div><div class="f"><span>Bar fills from</span><span class="sel2">Last change <span>▾</span></span></div><div class="f"><span style="color:var(--muted);font-size:12px">Adds up the songs still to play. If a song is set to Stop, it says "after this song" instead of guessing.</span></div></div>`;
+  if(w.k=='field')h+=`<div class="card"><h3>Shows</h3><div class="f"><span>Field</span><span class="sel2">${w.f.split(' ·')[0]} <span>▾</span></span></div><div class="f"><span>Song</span><div class="segm"><span class="on">This</span><span>Next</span></div></div><div class="f"><span>Text size</span><div class="segm"><span>S</span><span>M</span><span class="on">L</span></div></div></div>`;
+  h+=`<div class="danger">Remove widget</div>`}
+ document.getElementById('right').innerHTML=h}
+function S(s){screen=s;sel=null;render()}
+function pick(id){sel=id;render()}
+function cursorTo(id,dx=0,dy=0){const r=document.getElementById(id).getBoundingClientRect(),c=document.getElementById('cur');c.classList.add('show');c.style.left=(r.left+r.width/2+dx)+'px';c.style.top=(r.top+r.height/2+dy)+'px'}
+function cursorXY(x,y){const c=document.getElementById('cur');c.classList.add('show');c.style.left=x+'px';c.style.top=y+'px'}
+function hideCursor(){document.getElementById('cur').classList.remove('show')}
+function ghostAt(x,y,w,h){const g=document.getElementById('ghost');g.style.display=w?'block':'none';if(!w)return;const r=document.getElementById('dev').getBoundingClientRect(),a=document.querySelector('.canvasArea').getBoundingClientRect();g.style.left=(r.left-a.left+10+x)+'px';g.style.top=(r.top-a.top+10+y)+'px';g.style.width=w+'px';g.style.height=h+'px'}
+function fields(on){document.body.classList.toggle('ft',on)}
+function live(s){document.body.classList.toggle('lv',!!s);if(!s)return;const W=980,H=711,cw=W/12,ch=H/9;document.getElementById('lwl').innerHTML=L[s].map(w=>wHTML(w,cw,ch)).join('');document.getElementById('lcap').textContent=s=='dr'?"What the drummer's iPad shows":"What the guitar tech's tablet shows"}
+render();
+</script>
+</body></html>

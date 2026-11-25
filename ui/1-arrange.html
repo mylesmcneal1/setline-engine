@@ -91,6 +91,23 @@
   .tr i{font-style:normal;width:12px;text-align:center}
   .tr.segue i{color:var(--green)} .tr.stop i{color:var(--red)} .tr.auto i{color:var(--blue)}
   .songs.dropzone{background:rgba(245,165,36,.04)}
+  /* 6f: the Library panel, the setlist picker, saved state, export / migration sheets */
+  .libsec{flex:none;display:flex;flex-direction:column;border-top:1px solid var(--line);max-height:46%;min-height:120px}
+  .libh{display:flex;align-items:center;gap:8px;padding:9px 10px 4px;font-size:12px;color:var(--muted)} .libh b{color:var(--text);font-weight:600;font-size:12.5px}
+  .libtools{display:flex;gap:6px;padding:4px 8px 6px} .libtools input{flex:1;min-width:0;height:26px;padding:0 8px;font-size:12px}
+  .libtools select{height:26px;font-size:11.5px;max-width:92px;background:var(--s2);border:1px solid var(--line);border-radius:6px;color:var(--text)}
+  #pool{overflow:auto;padding:0 6px 6px;flex:1}
+  .ps .indot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent,#f5a524);margin-right:6px;vertical-align:1px}
+  .ps .vbadge{display:inline-block;margin-left:6px;padding:0 5px;border-radius:8px;font:10px var(--mono);background:rgba(127,224,207,.14);color:#7fe0cf;vertical-align:1px}
+  .setpick{display:flex;align-items:center;gap:8px;min-width:0;max-width:210px;background:transparent;border:0;color:var(--text);font-weight:600;font-size:13px;padding:2px 4px;border-radius:6px}
+  .setpick:hover{background:var(--s2)} .setpick .cb{width:4px;height:16px;border-radius:2px;flex:none} .setpick span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .xm .it i .cb{display:inline-block;width:4px;height:13px;border-radius:2px;vertical-align:-2px}
+  .savemk{margin-left:8px;font-size:11px;color:var(--faint);white-space:nowrap} .savemk.saving{color:var(--muted)} .savemk.err{color:#ff6b6b}
+  .pset{background:transparent;border:1px solid var(--line);border-radius:7px;color:var(--text);padding:2px 9px;font:inherit;margin-right:6px}
+  .mglist{max-height:260px;overflow:auto;margin:10px 0;border:1px solid var(--line);border-radius:8px}
+  .mglist label{display:flex;gap:10px;align-items:center;padding:7px 10px;font-size:12.5px;border-bottom:1px solid var(--hair,rgba(255,255,255,.05))} .mglist label:last-child{border-bottom:0}
+  .mglist small{margin-left:auto;color:var(--faint);font:11px var(--mono)}
+  .impch{display:flex;gap:6px;margin-top:10px} .impch button{flex:1}
   details.pool{flex:none;border-top:1px solid var(--hair);padding:4px 6px 6px;max-height:40%;overflow:auto}
   details.pool summary{list-style:none;cursor:pointer;padding:8px;color:var(--muted);font-size:12px;display:flex;justify-content:space-between}
   details.pool summary::-webkit-details-marker{display:none}
@@ -954,14 +971,16 @@
       <div class="sp"><button class="ibtn" id="closeL" title="Hide  [">«</button></div>
     </div>
     <div class="songs" id="songs"></div>
-    <details class="pool" open><summary id="poolSum">Not in this set</summary><div id="pool"></div></details>
     <div class="setfoot"><span>Total</span><b id="setLen">—</b></div>
+    <div class="libsec" id="libSec"><div class="libh"><b>Library</b><span id="libCount"></span></div>
+      <div class="libtools"><input id="libQ" type="search" placeholder="Search songs" spellcheck="false"><select id="libSort" title="Sort"><option value="az">A–Z</option><option value="recent">Recently added</option><option value="len">Length</option></select><select id="libFilt" title="Filter by a song field" hidden></select></div>
+      <div id="pool"></div></div>
   </aside>
 
   <!-- EDIT -->
   <section class="edit">
     <div class="etool">
-      <nav class="crumb" id="crumb"><button id="crumbAll">Untitled session</button><span id="crumbSong"></span></nav><span class="dirtymk" id="dirtyMk" hidden title="Changes since the last save. Ctrl+S saves.">● Not saved</span><span class="copymk" id="copyMk" hidden title="Copying the show's audio into its folder. You can keep working; quitting stops it and the next open finishes it."><span id="copyTxt"></span><i><b id="copyBar"></b></i></span><span class="muted" id="sessCount"></span>
+      <nav class="crumb" id="crumb"><button id="crumbAll">Library</button><span id="crumbSong"></span></nav><span class="dirtymk" id="dirtyMk" hidden>● Not saved</span><span class="savemk" id="saveMk" hidden title="Every change is saved to the library as you work">Saved</span><span class="copymk" id="copyMk" hidden title="Copying audio into the library. You can keep working; quitting stops it and the next open finishes it."><span id="copyTxt"></span><i><b id="copyBar"></b></i></span><span class="muted" id="sessCount"></span>
       <div class="igrp"><button class="ib2" id="undoB" title="Undo  ⌘Z">↶</button><button class="ib2" id="redoB" title="Redo  ⇧⌘Z">↷</button></div>
       <div class="igrp gridc" title="Grid: what clips, splits, fades, the playhead and MIDI events snap to"><button class="ib2 on" id="snapB" title="Snap to the grid (on). Hold Alt while dragging to place freely."><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 5h12M2 11h12M5 2v12M11 2v12"/></svg></button><button class="gbtn" id="gridBtn" title="Grid size">Auto ▾</button><select id="gridSel" title="Grid size" style="display:none" aria-hidden="true"></select></div>
       <div class="zoom" title="Zoom  − / =  (or Ctrl + scroll)"><button id="zOut">−</button><input type="range" id="zoom" min="0" max="1000" step="1" value="0"><button id="zIn">+</button></div>
@@ -1048,7 +1067,19 @@ let setOrder=['neon','glass','low','sat','copper'];
 let setlists=[{id:'L1',name:'Full show',order:setOrder},{id:'L2',name:'Festival 30',order:['neon','glass','sat']},{id:'L3',name:'Acoustic',order:['low','paper']}], curSet='L1', setSeq=4;
 const curSetObj=()=>setlists.find(x=>x.id===curSet)||setlists[0];
 function syncSet(){ const c=curSetObj(); if(c) c.order=setOrder; }
-function useSet(id){ syncSet(); curSet=id; setOrder=curSetObj().order; refresh(); }
+function useSet(id){ if(playing&&id!==curSet){ toast('Stop playback first: the setlist can’t change while a song plays'); return false; } syncSet(); curSet=id; setOrder=curSetObj().order; refresh(); if(perfOn) renderPerform(true); return true; }
+const SETCOLS=['#f5a524','#7fe0cf','#bf5af2','#ff6b6b','#5ac8fa','#a3e635','#f472b6','#9aa0aa'];
+const setCol=l=>l.col||SETCOLS[Math.max(0,setlists.indexOf(l))%SETCOLS.length];
+function setlistCmd(cmd){ if(playing&&cmd!=='ren'){ toast('Stop playback first: the setlist can’t change while a song plays'); return; } const c=curSetObj(); syncSet();
+  if(cmd==='new'){ const n={id:'L'+setSeq++,name:'Setlist '+(setlists.length+1),order:[],col:SETCOLS[setlists.length%SETCOLS.length]}; setlists.push(n); curSet=n.id; setOrder=n.order; refresh(); renameSet(); }
+  else if(cmd==='dup'){ const n=JSON.parse(JSON.stringify(c)); n.id='L'+setSeq++; n.name=c.name+' copy'; setlists.push(n); curSet=n.id; setOrder=n.order; refresh(); renameSet(); }
+  else if(cmd==='ren') renameSet();
+  else if(cmd==='del'){ if(setlists.length<2){ toast('A library keeps at least one setlist'); return; } confirmBox(`Delete the setlist “${esc(c.name)}”?`,'The songs stay in the library. Only this running order is removed.','Delete setlist',()=>{ const i=setlists.indexOf(c); setlists.splice(i,1); curSet=setlists[Math.max(0,i-1)].id; setOrder=curSetObj().order; refresh(); toast(`Deleted setlist “${c.name}”`,()=>{ setlists.splice(i,0,c); useSet(c.id); }); }); } }
+function setlistMenu(e){ const c=curSetObj(), r=e.currentTarget?e.currentTarget.getBoundingClientRect():null, at=r?{clientX:r.left,clientY:r.bottom+4}:e;
+  ctxMenu(at,[...setlists.map(l=>({label:l.name+'  ·  '+l.order.length,icon:`<span class="cb" style="background:${setCol(l)}"></span>`,act:()=>useSet(l.id)})),'-',
+    {label:'New setlist',icon:'＋',act:()=>setlistCmd('new')},{label:`Duplicate “${c.name}”`,icon:'⧉',act:()=>setlistCmd('dup')},{label:'Rename…',icon:'✎',act:()=>setlistCmd('ren')},
+    {label:'Colour ▸',icon:'●',act:()=>swatchPop({left:at.clientX+150,right:at.clientX+150,top:at.clientY},setCol(c),col=>{ snap(); c.col=col; refresh(); })},
+    {label:`Delete “${c.name}”…`,icon:'⌫',danger:true,dis:setlists.length<2,act:()=>setlistCmd('del')}]); }
 const ROLE={'Click':'click','Cues':'cues','Drums':'drums','Bass':'bass','Keys':'keys','Guitars':'guitars','BGVs':'bgvs','Synth / Pads':'synth','FX / Risers':'fx','Pads':'synth','Strings':'strings'};
 // ---------- outputs (6d): every track has its own output, set on its header or in the right panel ----------
 // s.outs[track] = [1-based outputs]: one mono output or a stereo pair; [] = none. Tracks on the same output are summed.
@@ -1321,6 +1352,7 @@ const secOfBar=(s,bar)=>s.secPos.find(p=>bar>=p.start&&bar<p.start+p.bars);
 let dragId=null, dragFrom=null;
 const TRANS={segue:['↘','Segue'],stop:['■','Stop, wait for go'],auto:['→','Auto-next after 4 s']};
 function renderSetHead(){ const h=$('setHead'); if(!h) return; const c=curSetObj();
+  h.innerHTML=`<button class="setpick" id="setSel" title="Setlists"><i class="cb" style="background:${setCol(c)}"></i><span>${esc(c.name)}</span>▾</button>`; $('setSel').onclick=setlistMenu; return;
   h.innerHTML=`<select class="setsel" id="setSel" title="Setlist">${setlists.map(x=>`<option value="${x.id}" ${x.id===curSet?'selected':''}>${esc(x.name)}</option>`).join('')}<option disabled>──────</option><option value="__new">＋ New setlist</option><option value="__dup">Duplicate “${esc(c.name)}”</option><option value="__ren">Rename…</option>${setlists.length>1?`<option value="__del">Delete “${esc(c.name)}”…</option>`:''}</select>`;
   $('setSel').onchange=e=>{ const v=e.target.value;
     if(v==='__new'){ syncSet(); const n={id:'L'+setSeq++,name:'Setlist '+(setlists.length+1),order:[]}; setlists.push(n); curSet=n.id; setOrder=n.order; refresh(); renameSet(); }
@@ -1351,12 +1383,12 @@ function songMenu(e,id,where){ if(songSel.size>1&&songSel.has(id)){ const ids=[.
     ...others.map(l=>({label:l.order.includes(id)?`Remove from ${l.name}`:`Add to ${l.name}`,icon:l.order.includes(id)?'−':'＋',act:()=>{ const k=l.order.indexOf(id); k>=0?l.order.splice(k,1):l.order.push(id); refresh(); toast(k>=0?`Removed from ${l.name}`:`Added to ${l.name}`); }})),
     '-',
     {label:'Duplicate song',icon:'⧉',act:()=>dupSong(id)},
-    {label:'Delete from show…',icon:'⌫',danger:true,act:()=>deleteSong(id)}]); }
+    {label:'Delete from library…',icon:'⌫',danger:true,act:()=>deleteSong(id)}]); }
 
 // ---------- several songs at once (6c item 8) ----------
 // Ctrl / Cmd+click adds or removes a song, Shift+click a range, in the setlist, "Not in this set" or the song
 // folders. Delete (or right-click "Delete N songs…") asks once; from the setlist the choice is "Remove from
-// <setlist>" or "Delete from show". Audio files are never deleted with songs (File > Clean up unused audio…).
+// <setlist>" or "Delete from library". Audio files are never deleted with songs (File > Clean up unused audio…).
 let songSel=new Set(), songSelFrom=null, songAnchor=null;
 const folderOrder=()=>[...document.querySelectorAll('.folder')].map(f=>f.dataset.id);
 const poolOrder=()=>[...document.querySelectorAll('#pool .ps')].map(r=>r.dataset.id);
@@ -1377,14 +1409,15 @@ function deleteSongs(ids,from){ ids=ids.filter(id=>songs.some(s=>s.id===id)); if
     if(ids.includes(playId)){ if(NATIVE&&window.SLE) SLE.stop(); playing=false; playId=null; pos=0; $('playBtn').classList.remove('on'); }
     if(ids.includes(selId)){ const nxt=[...songs].sort(byName)[0]; selId=nxt?nxt.id:null; } selSec=null; selClip=null; if(ids.includes(ed.song)) closeMidi();
     songSel.clear(); refresh(); toast('Deleted '+(n>1?n+' songs':'“'+names[0]+'”')+' (the audio files stay)',()=>undo()); };
-  const body='Removes '+list+' with all their versions, sections, MIDI and audio edits from this show, and from every setlist. The audio files on disk aren’t touched (File ▾ › Clean up unused audio… lists the ones nothing uses).';
+  const usedIn=setlists.filter(l=>ids.some(id=>l.order.includes(id))).map(l=>'“'+esc(l.name)+'”');
+  const body='Removes '+list+' with all their versions, sections, MIDI and audio edits from the library'+(usedIn.length?', and from '+(usedIn.length>1?'the setlists ':'the setlist ')+usedIn.join(', ')+' that use'+(n>1?'':'s')+' '+(n>1?'them':'it'):'')+'. The audio files on disk aren’t touched (File ▾ › Clean up unused audio… lists the ones nothing uses).';
   if(from==='set'&&inSet){ // in a setlist: just take them out of it, or delete them from the show
     const bg=document.createElement('div'); bg.className='cfbg';
-    bg.innerHTML='<div class="cfbox"><b>'+(n>1?n+' songs':'“'+esc(names[0])+'”')+'</b><p>Take '+(n>1?'them':'it')+' out of “'+esc(curSetObj().name)+'” (still in the show), or delete '+(n>1?'them':'it')+' from the show?</p><div class="cfa"><button class="btn line" data-a="no">Cancel</button><button class="btn line" data-a="rm">Remove from this setlist</button><button class="btn danger" data-a="del">Delete from show…</button></div></div>';
+    bg.innerHTML='<div class="cfbox"><b>'+(n>1?n+' songs':'“'+esc(names[0])+'”')+'</b><p>Take '+(n>1?'them':'it')+' out of “'+esc(curSetObj().name)+'” (still in the library), or delete '+(n>1?'them':'it')+' from the library?</p><div class="cfa"><button class="btn line" data-a="no">Cancel</button><button class="btn line" data-a="rm">Remove from this setlist</button><button class="btn danger" data-a="del">Delete from library…</button></div></div>';
     document.body.appendChild(bg); const close=()=>{ bg.remove(); document.removeEventListener('keydown',key,true); }; const key=e=>{ if(e.key==='Escape'){ e.stopPropagation(); close(); } };
     document.addEventListener('keydown',key,true); bg.onclick=e=>{ if(e.target===bg) close(); };
     bg.querySelector('[data-a=no]').onclick=close; bg.querySelector('[data-a=rm]').onclick=()=>{ close(); removeFromSet(ids); };
-    bg.querySelector('[data-a=del]').onclick=()=>{ close(); confirmBox('Delete '+(n>1?n+' songs':'“'+esc(names[0])+'”')+' from the show?',body,n>1?'Delete '+n+' songs':'Delete song',del); };
+    bg.querySelector('[data-a=del]').onclick=()=>{ close(); confirmBox('Delete '+(n>1?n+' songs':'“'+esc(names[0])+'”')+' from the library?',body,n>1?'Delete '+n+' songs':'Delete song',del); };
     bg.querySelector('[data-a=rm]').focus(); return; }
   confirmBox('Delete '+(n>1?n+' songs':'“'+esc(names[0])+'”')+'?',body,n>1?'Delete '+n+' songs':'Delete song',del); }
 // New songs get the palette colour after the last song's (6d).
@@ -1427,14 +1460,14 @@ function repeatBox(s,t,r){ const bg=document.createElement('div'); bg.className=
 // Save a show by name (6c item 3): into the Shows folder; "Choose another place…" for anywhere else.
 // done({name}) | done({elsewhere:true}); Cancel / Esc: done(null).
 function nameBox(o,done){ const bg=document.createElement('div'); bg.className='cfbg';
-  bg.innerHTML=`<div class="cfbox"><b>${esc(o.title)}</b><p>Saved in <span class="faint">${esc(o.where)}</span>, in a folder of its own with its audio.</p>
+  bg.innerHTML=`<div class="cfbox"><b>${esc(o.title)}</b><p>${o.where?`Saved in <span class="faint">${esc(o.where)}</span>, in a folder of its own with its audio.`:esc(o.hint||'')}</p>
     <input id="nbName" type="text" value="${esc(o.value)}" spellcheck="false" style="width:100%;margin-top:12px;padding:7px 9px;font-size:13px">
-    <div class="cfa"><button class="btn line" data-a="else" style="margin-right:auto">Choose another place…</button><button class="btn line" data-a="no">Cancel</button><button class="btn pri" data-a="ok">Save</button></div></div>`;
+    <div class="cfa">${o.where?'<button class="btn line" data-a="else" style="margin-right:auto">Choose another place…</button>':''}<button class="btn line" data-a="no">Cancel</button><button class="btn pri" data-a="ok">${o.where?'Save':'OK'}</button></div></div>`;
   document.body.appendChild(bg); let answered=false; const close=v=>{ bg.remove(); document.removeEventListener('keydown',key,true); if(!answered){ answered=true; done(v); } };
   const ok=()=>{ const n=$('nbName').value.trim(); if(!n){ $('nbName').focus(); return; } close({name:n}); };
   const key=e=>{ if(e.key==='Escape'){ e.stopPropagation(); close(null); } if(e.key==='Enter'){ e.stopPropagation(); e.preventDefault(); ok(); } };
   document.addEventListener('keydown',key,true); bg.onclick=e=>{ if(e.target===bg) close(null); };
-  bg.querySelector('[data-a=no]').onclick=()=>close(null); bg.querySelector('[data-a=ok]').onclick=ok; bg.querySelector('[data-a=else]').onclick=()=>close({elsewhere:true});
+  bg.querySelector('[data-a=no]').onclick=()=>close(null); bg.querySelector('[data-a=ok]').onclick=ok; const el2=bg.querySelector('[data-a=else]'); if(el2) el2.onclick=()=>close({elsewhere:true});
   const i=$('nbName'); i.focus(); i.select(); }
 // Preferences: where shows are saved, the Library, the logs. act("shows" | "showsDefault" | "library" | "logs")
 function prefsBox(f,act){ const bg=document.createElement('div'); bg.className='cfbg';
@@ -1488,9 +1521,11 @@ function renderSetlist(){
     row.onwheel=e=>{ e.preventDefault(); const now=performance.now(); if(now-(row._w||0)<220) return; row._w=now; flipVer(s,e.deltaY>0||e.deltaX>0?1:-1); }; });
   if(!setOrder.length) el.innerHTML='<div class="blank sm" style="padding:28px 10px"><div class="bs">'+(songs.length?'Drag songs here from below to build the set.':'Songs you add will show up below. Drag them here to build the set.')+'</div></div>';
   $('setLen').textContent=fmt(setOrder.reduce((a,id)=>{ const s=songs.find(x=>x.id===id); return a+verLen(s,entryVer(s)); },0));
-  const pool=songs.filter(s=>!setOrder.includes(s.id)).sort(byName);
-  $('poolSum').innerHTML=`<span>Not in this set · ${pool.length}</span>`;
-  $('pool').innerHTML=pool.map(s=>`<div class="ps" draggable="true" data-id="${s.id}" title="Drag into the set, or double-click"><span class="sbar" style="background:${s.col||'#5a5a62'}"></span><span>${esc(s.name)}</span><span>${fmt(s.audio)}</span><button class="addx" data-id="${s.id}" title="Add to the end of this setlist">＋</button></div>`).join('')||'<div class="faint" style="font-size:11.5px;padding:4px 8px 8px">Every song is in this setlist.</div>';
+  const pool=libSongs();
+  $('libCount').textContent=songs.length+' song'+(songs.length===1?'':'s');
+  renderLibFilter();
+  $('pool').innerHTML=pool.map(s=>{ const inSet=setOrder.includes(s.id), nv=versOf(s).length; return `<div class="ps ${inSet?'inset':''}" draggable="true" data-id="${s.id}" title="${inSet?'In this setlist':'Drag into the set, or double-click'}"><span class="sbar" style="background:${s.col||'#5a5a62'}"></span><span>${inSet?'<i class="indot"></i>':''}${esc(s.name)}${nv>1?`<em class="vbadge" title="${nv} versions">${nv}</em>`:''}</span><span>${fmt(s.audio)}</span>${inSet?'':`<button class="addx" data-id="${s.id}" title="Add to the end of this setlist">＋</button>`}</div>`; }).join('')
+    ||`<div class="faint" style="font-size:11.5px;padding:4px 8px 8px">${songs.length?'No song matches.':'No songs yet: ＋ Song, or drop audio files here.'}</div>`;
   el.querySelectorAll('.rmx').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const id=b.dataset.id, i=setOrder.indexOf(id); setOrder.splice(i,1); refresh(); toast(`Removed “${songs.find(x=>x.id===id).name}” from ${curSetObj().name}`,()=>{ setOrder.splice(i,0,id); refresh(); }); });
   $('pool').querySelectorAll('.addx').forEach(b=>b.onclick=e=>{ e.stopPropagation(); setOrder.push(b.dataset.id); refresh(); });
   $('pool').querySelectorAll('.ps').forEach(r=>r.oncontextmenu=e=>{ e.preventDefault(); songMenu(e,r.dataset.id,'pool'); });
@@ -1506,13 +1541,29 @@ function renderSetlist(){
     row.ondrop=e=>{e.preventDefault(); e.stopPropagation(); const to=setOrder.indexOf(row.dataset.id); setOrder=setOrder.filter(x=>x!==dragId); setOrder.splice(to,0,dragId); refresh();};
   });
   el.querySelectorAll('.tr').forEach(tr=>tr.onclick=e=>{ const s=songs.find(x=>x.id===tr.dataset.id); afterMenu(e,s); });
-  document.querySelectorAll('#pool .ps').forEach(p=>{ p.ondragstart=()=>{dragId=p.dataset.id; dragFrom='pool';}; p.ondblclick=()=>{setOrder.push(p.dataset.id); refresh();}; });
+  document.querySelectorAll('#pool .ps').forEach(p=>{ p.ondragstart=()=>{dragId=p.dataset.id; dragFrom='pool';}; p.ondblclick=()=>{ if(!setOrder.includes(p.dataset.id)){ setOrder.push(p.dataset.id); refresh(); } }; });
 }
 $('songs').ondragover=e=>{e.preventDefault(); $('songs').classList.add('dropzone');};
 $('songs').ondragleave=()=>$('songs').classList.remove('dropzone');
 $('songs').ondrop=e=>{e.preventDefault(); $('songs').classList.remove('dropzone'); if(dragId&&!setOrder.includes(dragId)){ setOrder.push(dragId); refresh(); }};
-document.querySelector('.pool').ondragover=e=>e.preventDefault();
-document.querySelector('.pool').ondrop=e=>{e.preventDefault(); if(dragFrom==='set'){ setOrder=setOrder.filter(x=>x!==dragId); refresh(); }};
+$('libSec').ondragover=e=>e.preventDefault();
+$('libSec').ondrop=e=>{e.preventDefault(); if(dragFrom==='set'){ setOrder=setOrder.filter(x=>x!==dragId); refresh(); }};
+// The Library list: search (name, key), sort (A–Z, recently added, length), filter by a song field value (6g fields)
+let LIBQ='', LIBSORT='az', LIBFILT='';
+let FIELDS=[]; // song field definitions (6g): [{id, name, type, options}]; values in song.fields
+function libSongs(){ const q=LIBQ.trim().toLowerCase(); let l=songs.filter(s=>!q||s.name.toLowerCase().includes(q)||String(s.key||'').toLowerCase()===q);
+  if(LIBFILT){ const [fid,val]=LIBFILT.split('\u0001'); l=l.filter(s=>String((s.fields||{})[fid]??'')===val); }
+  const idx=new Map(songs.map((s,i)=>[s.id,i]));
+  if(LIBSORT==='recent') l.sort((a,b)=>(b.added||0)-(a.added||0)||idx.get(b.id)-idx.get(a.id)); else if(LIBSORT==='len') l.sort((a,b)=>b.audio-a.audio); else l.sort(byName);
+  return l; }
+function renderLibFilter(){ const sel=$('libFilt'); if(!sel) return; const opts=[];
+  FIELDS.forEach(f=>{ const vals=[...new Set(songs.map(s=>(s.fields||{})[f.id]).filter(v=>v!==undefined&&v!==''&&v!==null).map(String))].sort(); vals.forEach(v=>opts.push([f.id+'\u0001'+v,f.name+' = '+v])); });
+  sel.hidden=!opts.length; if(!opts.length){ LIBFILT=''; return; }
+  if(LIBFILT&&!opts.some(o=>o[0]===LIBFILT)) LIBFILT='';
+  sel.innerHTML='<option value="">All songs</option>'+opts.map(([v,l])=>`<option value="${esc(v)}" ${v===LIBFILT?'selected':''}>${esc(l)}</option>`).join(''); }
+$('libQ').oninput=e=>{ LIBQ=e.target.value; renderSetlist(); };
+$('libSort').onchange=e=>{ LIBSORT=e.target.value; renderSetlist(); };
+$('libFilt').onchange=e=>{ LIBFILT=e.target.value; renderSetlist(); };
 
 // ======================= FOLDERS =======================
 let selId='glass'; const open=new Set(['glass']); let focusId=null; let newBar=null;
@@ -1665,7 +1716,7 @@ function wordsPanel(s){ const rows=[...(s.cueWords||[]).map(w=>[w,true]),...CUEW
   return `<div class="kicker" style="margin-top:14px">CUE WORDS</div>
     <p class="faint" style="font-size:11px;line-height:1.5;margin:4px 0 6px">Your own recordings. A cue that says exactly this word plays the recording instead of the voice. They’re copied into the show.</p>
     ${rows.map(([w,own])=>`<div class="kv"><label><input class="cwW" data-id="${w.id}" value="${esc(w.word)}" style="width:100%"></label><div style="display:flex;gap:6px;align-items:center;min-width:0"><span class="faint" style="font-size:11px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(w.path)}">${esc(w.name)}${own?' · this song':''}</span><button class="ibtn cwP" data-id="${w.id}" title="Preview">▶</button><button class="ibtn cwX" data-id="${w.id}" title="Remove">✕</button></div></div>`).join('')}
-    <div class="acts" style="margin-top:6px"><button class="btn line" id="cwAdd">＋ Recorded word…</button><button class="btn line" id="cwAddSong" title="Only in ${esc(s.name)}; wins over the show's word">＋ Only in this song…</button></div>`; }
+    <div class="acts" style="margin-top:6px"><button class="btn line" id="cwAdd">＋ Recorded word…</button><button class="btn line" id="cwAddSong" title="Only in ${esc(s.name)}; wins over the library's word">＋ Only in this song…</button></div>`; }
 function wireWords(s){ const find=id=>allWords().find(w=>w.id===id), listOf=w=>CUEWORDS.includes(w)?CUEWORDS:songs.find(x=>(x.cueWords||[]).includes(w)).cueWords;
   document.querySelectorAll('.cwW').forEach(i=>i.onchange=()=>{ const w=find(i.dataset.id); if(!w||!i.value.trim()) return; snap(); w.word=i.value.trim(); redrawSong(s); renderInsp(); });
   document.querySelectorAll('.cwX').forEach(b=>b.onclick=()=>{ const w=find(b.dataset.id); if(!w) return; snap(); const L=listOf(w); L.splice(L.indexOf(w),1); redrawSong(s); renderInsp(); });
@@ -2488,7 +2539,9 @@ function drawRuler(cv){ const s=songs.find(x=>x.id===cv.dataset.song), H=cv.heig
 let undoS=[], redoS=[];
 function ser(){ return JSON.stringify({songs,setlists,curSet},function(k,v){ return this&&this.tmap&&(k==='bars'||k==='secPos'||k==='_yy')?undefined:v; }); }
 function snap(){ undoS.push(ser()); if(undoS.length>80) undoS.shift(); redoS=[]; }
-function restore(str){ const o=JSON.parse(str); songs.length=0; o.songs.forEach(x=>songs.push(x)); setlists=o.setlists; curSet=o.curSet; setOrder=curSetObj().order;
+function restore(str){ const o=JSON.parse(str); songs.length=0; o.songs.forEach(x=>songs.push(x)); setlists=o.setlists;
+  // a setlist never points at a song that isn't there (a damaged song file, an older backup)
+  const have=new Set(songs.map(x=>x.id)); setlists.forEach(l=>{ l.order=(l.order||[]).filter(id=>have.has(id)); }); if(!setlists.some(l=>l.id===o.curSet)) o.curSet=setlists[0]&&setlists[0].id; curSet=o.curSet; setOrder=curSetObj().order;
   songs.forEach(x=>{ Object.keys(x.malts||{}).forEach(t=>{ const a=x.malts[t].find(y=>y.id===x.muse[t])||x.malts[t][0]; x.midi[t]=a.events; }); buildBars(x); });
   selClip=null; selSec=null; pick=null; tsel=null; if(!songs.find(x=>x.id===selId)) selId=songs[0]&&songs[0].id; if(playId&&!songs.find(x=>x.id===playId)){ playId=null; playing=false; } refresh(); }
 function undo(){ if(!undoS.length){ toast('Nothing to undo'); return; } redoS.push(ser()); restore(undoS.pop()); toast('Undone'); }
@@ -2922,9 +2975,104 @@ $('mAdd').onclick=()=>{ const name=$('mName').value.trim(); if(!name){ $('mName'
     return; }
   const sig=tmap[0].sig, bpm=tmap[0].bpm, audio=pickedLen||210, id='s'+Date.now();
   const tracks=[...new Set(picked.filter(p=>p.role!=='__skip').map(p=>p.role))];
-  const so={id,name,key:$('mKey').value.trim()||'—',col:nextSongCol(),trans:'stop',tmap,secs:[],tracks,audio};
+  const so={id,name,key:$('mKey').value.trim()||'—',col:nextSongCol(),trans:'stop',tmap,secs:[],tracks,audio,added:Date.now()};
   snap(); normSecs(so); buildBars(so); seedMidi(so); songs.push(so); if($('mToSet').checked){ setOrder.push(id); syncSet(); }
   closeNewSong(); open.add(id); selId=id; resetModal(); refresh(); document.querySelector(`.folder[data-id="${id}"]`)?.scrollIntoView({block:'start'}); };
+
+// ======================= LIBRARY (6f): import, migration =======================
+let LIBMODE=false; // a library is open (the page autosaves into it)
+const audioSet=s=>Object.values(s.files||{}).map(f=>f&&f.path?String(f.path).split(/[\\/]/).pop():'').filter(Boolean).sort().join('|');
+// what makes two songs the same: everything but their id, name, colour and when they were added (versions included)
+const songSig=s=>JSON.stringify(s,(k,v)=>['id','col','added','bars','secPos','_yy','ver'].includes(k)?undefined:v);
+const freshSongId=()=>{ let id; do{ id='s'+Date.now().toString(36)+Math.floor(Math.random()*1e4).toString(36); }while(songs.some(x=>x.id===id)); return id; };
+const uniqSetName=n=>{ if(!setlists.some(l=>l.name===n)) return n; let k=2; while(setlists.some(l=>l.name===n+' '+k)) k++; return n+' '+k; };
+// a package's (or an old show's) songs: brought up to date like an opened show
+function migratePkgSongs(songsIn,version){ const o={version:version||2,songs:JSON.parse(JSON.stringify(songsIn||[]))}; migrateRouting(o); migrateMidi(o); migrateVersions(o); return o.songs; }
+function matchSong(x){ return songs.find(s=>s.id===x.id) || (audioSet(x)&&songs.find(s=>audioSet(s)===audioSet(x))); }
+function importPlan(pkg){ const list=migratePkgSongs(pkg.songs,2), differ=[]; let same=0, added=0;
+  list.forEach(x=>{ const m=matchSong(x); if(!m) added++; else if(songSig({...m,name:''})===songSig({...x,name:''})&&m.name===x.name) same++; else differ.push({id:x.id,name:x.name,mine:m.name}); });
+  return {differ,same,added}; }
+// Asked once per import: what to do with songs that are here already but differ.
+function importBox(name,plan,note){ return new Promise(res=>{ const bg=document.createElement('div'); bg.className='cfbg';
+  const d=plan.differ;
+  bg.innerHTML=`<div class="cfbox" style="width:min(520px,92vw)"><b>Import “${esc(name)}”</b><p>${plan.added} new song${plan.added===1?'':'s'}, ${plan.same} already in the library${d.length?`, <b>${d.length}</b> here already but different`:''} · ${esc(note)}.</p>
+    ${d.length?`<div class="mglist">${d.slice(0,30).map(x=>`<label>${esc(x.name)}${x.mine!==x.name?` <span class="faint">(yours: ${esc(x.mine)})</span>`:''}</label>`).join('')}</div><p class="faint" style="font-size:11.5px">For these songs:</p>
+    <div class="impch"><button class="btn line" data-a="mine">Keep mine</button><button class="btn line" data-a="theirs">Use imported</button><button class="btn line" data-a="both">Keep both</button></div>`:''}
+    <div class="cfa"><button class="btn line" data-a="no">Cancel</button>${d.length?'':'<button class="btn pri" data-a="ok">Import</button>'}</div></div>`;
+  document.body.appendChild(bg); let done=false; const close=v=>{ if(done) return; done=true; bg.remove(); document.removeEventListener('keydown',key,true); res(v); };
+  const key=e=>{ if(e.key==='Escape'){ e.stopPropagation(); close(null); } };
+  document.addEventListener('keydown',key,true); bg.onclick=e=>{ if(e.target===bg) close(null); };
+  bg.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{ const a=b.dataset.a; if(a==='no') close(null); else if(a==='ok') close({}); else { const r={}; d.forEach(x=>r[x.id]=a); close(r); } }); }); }
+// Merges a package into the library: songs (by id, then by their audio), the setlist (its name made unique), and the
+// presets, cue words, patch name lists and song fields it brings that aren't here yet.
+function importMerge(pkg,dec){ snap(); syncSet();
+  const list=migratePkgSongs(pkg.songs,2), idMap={}, verMap={}; let added=0, same=0, replaced=0, both=0;
+  list.forEach(x=>{ const m=matchSong(x), orig=x.id, c=(dec||{})[orig];
+    if(!m){ if(songs.some(s=>s.id===x.id)) x.id=freshSongId(); x.added=x.added||Date.now(); songs.push(x); idMap[orig]=x.id; added++; return; }
+    if(!c||c==='mine'){ idMap[orig]=m.id; if(!c) same++; return; }
+    if(c==='theirs'){ const i=songs.indexOf(m); x.id=m.id; x.added=m.added||x.added; songs[i]=x; idMap[orig]=m.id; replaced++; return; }
+    const nid=freshSongId(); idMap[orig]=nid; x.id=nid; x.name=x.name+' (imported)'; x.added=Date.now(); songs.push(x); both++; });
+  // the setlist, pointing at the library's songs
+  const L=JSON.parse(JSON.stringify(pkg.setlist||{name:'Imported',order:[]}));
+  L.id='L'+setSeq++; L.name=uniqSetName(L.name||'Imported'); L.order=(L.order||[]).map(id=>idMap[id]||id).filter(id=>songs.some(s=>s.id===id));
+  const remap=o=>{ const r={}; Object.entries(o||{}).forEach(([k,v])=>{ if(idMap[k]) r[idMap[k]]=v; }); return r; };
+  L.vers=remap(L.vers); L.after=remap(L.after);
+  Object.entries(L.vers).forEach(([sid,vid])=>{ const s=songs.find(q=>q.id===sid); if(!s||!versOf(s).some(v=>v.id===vid)) delete L.vers[sid]; });
+  setlists.push(L); curSet=L.id; setOrder=L.order;
+  const addById=(dst,src,key='id')=>{ (src||[]).forEach(x=>{ if(x&&!dst.some(y=>y[key]===x[key])) dst.push(x); }); };
+  addById(presets,(pkg.presets||[]).filter(p=>!p.built)); addById(CUEWORDS,pkg.cueWords||[]); addById(USER_LISTS,pkg.patchLists||[]); saveLists(); addById(FIELDS,pkg.fields||[]);
+  if(Array.isArray(pkg.phrases)&&PHRASES) pkg.phrases.forEach(p=>{ if(p&&p.t&&!PHRASES.list.some(q=>q.t.toLowerCase()===p.t.toLowerCase())) PHRASES.list.push({t:p.t,n:0}); });
+  restore(ser()); renderPerform(true);
+  return {setlist:L.name,added,same,replaced,both}; }
+// Migration (6f): one old show into the library. refMap: the show's audio references -> the library's. Songs that are
+// the same (name, audio and everything else) merge; a song with the same name and audio but other edits is kept as
+// "<name> (<show>)". Each setlist of the show becomes one (named after the show; "<show> – <setlist>" if it had several).
+function mergeShow(o,name,refMap){ snap(); syncSet();
+  const list=migratePkgSongs(o.songs,o.version||1), idMap={}, vMap={}, notes=[]; let added=0, merged=0;
+  const mapRef=p=>refMap[p]||p;
+  list.forEach(x=>{ Object.values(x.files||{}).forEach(f=>{ if(f&&f.path) f.path=mapRef(f.path); }); (x.cueWords||[]).forEach(w=>{ if(w&&w.path) w.path=mapRef(w.path); });
+    const oldId=x.id, m=songs.find(s=>s.name.trim().toLowerCase()===x.name.trim().toLowerCase()&&audioSet(s)===audioSet(x));
+    if(m&&songSig({...m,name:''})===songSig({...x,name:''})){ idMap[oldId]=m.id; const mv=versOf(m), xv=x.versions||[]; vMap[m.id]={}; xv.forEach((v,i)=>{ if(mv[i]) vMap[m.id][v.id]=mv[i].id; }); merged++; return; }
+    if(m){ x.name=x.name+' ('+name+')'; notes.push(`“${m.name}” differs from the library's (kept as “${x.name}”)`); }
+    if(songs.some(s=>s.id===x.id)) x.id=freshSongId();
+    x.added=x.added||Date.now(); songs.push(x); idMap[oldId]=x.id; added++; });
+  const sets=(o.setlists||[]).filter(l=>l&&Array.isArray(l.order)), made=[];
+  const use=sets.filter(l=>l.order.length).length?sets.filter(l=>l.order.length):sets.slice(0,1);
+  (use.length?use:[{name,order:list.map(x=>x.id)}]).forEach(l0=>{ const L=JSON.parse(JSON.stringify(l0)); L.id='L'+setSeq++; L.name=uniqSetName(use.length>1?name+' – '+(l0.name||'Setlist'):name);
+    L.order=L.order.map(id=>idMap[id]).filter(Boolean); const remap=m=>{ const r={}; Object.entries(m||{}).forEach(([k,v])=>{ if(idMap[k]) r[idMap[k]]=v; }); return r; }; L.vers=remap(L.vers); L.after=remap(L.after);
+    Object.keys(L.vers).forEach(sid=>{ if(vMap[sid]&&vMap[sid][L.vers[sid]]) L.vers[sid]=vMap[sid][L.vers[sid]]; });
+    Object.entries(L.vers).forEach(([sid,vid])=>{ const s=songs.find(q=>q.id===sid); if(!s||!versOf(s).some(v=>v.id===vid)) delete L.vers[sid]; });
+    setlists.push(L); made.push(L.name); });
+  // per-show settings: the library takes the first show's click, cue voice and pronunciations; later shows that differ are noted
+  const firstShow=!LIBMIGRATED; LIBMIGRATED=true;
+  if(firstShow&&!songs.some(s=>!list.includes(s))){ if(o.click) CLICK={...CLICK,...o.click}; if(o.clickT) CLICKT={...o.clickT}; if(o.cueVoice) CUEV={...CUEV,...o.cueVoice}; if(o.pron) PRON={...PRON,...o.pron}; }
+  else { if(o.cueVoice&&JSON.stringify(o.cueVoice)!==JSON.stringify(CUEV)) notes.push('its cue voice differs from the library’s (the library’s is used)'); if(o.click&&JSON.stringify({...CLICK,...o.click})!==JSON.stringify(CLICK)) notes.push('its click sound differs from the library’s (the library’s is used)'); if(o.pron) PRON={...o.pron,...PRON}; }
+  (o.presets||[]).filter(p=>!p.built&&!presets.some(q=>q.id===p.id)).forEach(p=>presets.push(p));
+  (o.cueWords||[]).forEach(w=>{ if(w&&w.path) w.path=mapRef(w.path); if(w&&!CUEWORDS.some(q=>String(q.word||'').toLowerCase()===String(w.word||'').toLowerCase())) CUEWORDS.push(w); });
+  // a library that had only its first empty setlist: that one goes
+  if(setlists.length>made.length&&setlists[0].order.length===0&&setlists[0].name==='Setlist 1'&&!made.includes(setlists[0].name)) setlists.splice(0,1);
+  curSet=setlists.find(l=>l.name===made[0])?.id||curSet; setOrder=curSetObj().order;
+  restore(ser());
+  return {setlists:made,added,merged,notes}; }
+let LIBMIGRATED=false;
+// "Bring your shows into the Library": every show found, all ticked. -> the paths picked, or null.
+function migrationBox(shows){ return new Promise(res=>{ const bg=document.createElement('div'); bg.className='cfbg';
+  const mb=n=>n>=1073741824?(n/1073741824).toFixed(1)+' GB':(n/1048576).toFixed(0)+' MB';
+  bg.innerHTML=`<div class="cfbox" style="width:min(560px,94vw)"><b>Bring your shows into the Library</b><p>set.Line now keeps every song and setlist in one library that saves itself. Each show becomes a setlist; songs that are the same in several shows become one song. Your show folders aren’t changed.</p>
+    <div class="mglist">${shows.map((s,i)=>`<label><input type="checkbox" data-i="${i}" checked> <span>${esc(s.name)} <span class="faint">· ${s.songs} song${s.songs===1?'':'s'}</span></span><small>${mb(s.bytes)}</small></label>`).join('')}</div>
+    <div class="cfa"><button class="btn line" data-a="no">Not now</button><button class="btn pri" data-a="ok">Bring them in</button></div></div>`;
+  document.body.appendChild(bg); let done=false; const close=v=>{ if(done) return; done=true; bg.remove(); document.removeEventListener('keydown',key,true); res(v); };
+  const key=e=>{ if(e.key==='Escape'){ e.stopPropagation(); close(null); } };
+  document.addEventListener('keydown',key,true);
+  bg.querySelector('[data-a=no]').onclick=()=>close(null);
+  bg.querySelector('[data-a=ok]').onclick=()=>close([...bg.querySelectorAll('input[data-i]')].filter(c=>c.checked).map(c=>shows[+c.dataset.i].path)); }); }
+// Export progress: a sheet with a bar and Cancel.
+let exportEl=null;
+function exportProgress(p){ if(p.finished){ exportEl?.remove(); exportEl=null; if(p.error) toast('The export stopped: '+p.error); return; }
+  if(!exportEl){ exportEl=document.createElement('div'); exportEl.className='cfbg';
+    exportEl.innerHTML='<div class="cfbox" style="min-width:360px"><b>Exporting the setlist…</b><p class="pf" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></p><div style="height:6px;border-radius:3px;background:rgba(255,255,255,.1);overflow:hidden;margin:4px 0 6px"><div class="pb" style="height:100%;width:0;background:var(--amber,#f5a524)"></div></div><div class="cfa"><span class="pn faint" style="margin-right:auto;font-size:12px"></span><button class="btn line" data-a="cancel">Cancel</button></div></div>';
+    document.body.appendChild(exportEl); exportEl.querySelector('[data-a=cancel]').onclick=()=>{ if(window.SLE&&SLE.call) SLE.call('cancelExport').catch(()=>{}); }; }
+  exportEl.querySelector('.pf').textContent=p.file||''; exportEl.querySelector('.pb').style.width=(p.total>0?100*p.done/p.total:0)+'%'; exportEl.querySelector('.pn').textContent=`${(p.done/1048576).toFixed(0)} of ${(p.total/1048576).toFixed(0)} MB`; }
 
 // ======================= PLAYBACK =======================
 let playing=false, pos=0, last=0, playId=null;
@@ -2935,8 +3083,10 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
   setPos(t){ pos=t; }, setPlayId(id){ playId=id; document.querySelectorAll('.folder').forEach(f=>f.classList.toggle('playing',f.dataset.id===playId)); }, setPlaying(b){ playing=b; $('playBtn').classList.toggle('on',b); last=performance.now(); requestAnimationFrame(tick); },
   redraw(){ lcd(); },
   // Everything a .setline session holds.
-  sessionData(){ const o=JSON.parse(ser()); o.presets=presets.filter(p=>!p.built); o.click=CLICK; if(Object.keys(CLICKT).length) o.clickT=CLICKT; o.cueVoice=CUEV; if(Object.keys(PRON).length) o.pron=PRON; if(CUEWORDS.length) o.cueWords=CUEWORDS; return o; },
-  loadSession(o){ ROUTE_LOG=[]; migrateRouting(o); migrateMidi(o); migrateVersions(o); if(Array.isArray(o.presets)){ presets=[...o.presets]; } if(o.click) CLICK={...CLICK,...o.click}; CLICKT={...(o.clickT||{})}; CUEV={voice:'',name:'',speed:1,...(o.cueVoice||{})}; cuevFresh=false; PRON={...(o.pron||{})}; UNKNOWN=[]; CUEWORDS=Array.isArray(o.cueWords)?o.cueWords:[]; cwSeq=1+Math.max(0,...allWords().map(w=>+String(w.id).slice(1)||0));
+  sessionData(){ const o=JSON.parse(ser()); o.presets=presets.filter(p=>!p.built); o.click=CLICK; if(Object.keys(CLICKT).length) o.clickT=CLICKT; o.cueVoice=CUEV; if(Object.keys(PRON).length) o.pron=PRON; if(CUEWORDS.length) o.cueWords=CUEWORDS;
+    if(LIBMODE){ if(PHRASES) o.phrases=PHRASES.list; if(USER_LISTS.length) o.patchLists=USER_LISTS; } if(FIELDS.length) o.fields=FIELDS; return o; },
+  loadSession(o){ ROUTE_LOG=[]; migrateRouting(o); migrateMidi(o); migrateVersions(o);
+    if(Array.isArray(o.phrases)) PHRASES={list:o.phrases.filter(x=>x&&typeof x.t==='string')}; if(Array.isArray(o.patchLists)){ USER_LISTS=o.patchLists; saveLists(); } FIELDS=Array.isArray(o.fields)?o.fields:[]; if(Array.isArray(o.presets)){ presets=[...o.presets]; } if(o.click) CLICK={...CLICK,...o.click}; CLICKT={...(o.clickT||{})}; CUEV={voice:'',name:'',speed:1,...(o.cueVoice||{})}; cuevFresh=false; PRON={...(o.pron||{})}; UNKNOWN=[]; CUEWORDS=Array.isArray(o.cueWords)?o.cueWords:[]; cwSeq=1+Math.max(0,...allWords().map(w=>+String(w.id).slice(1)||0));
     restore(JSON.stringify({songs:o.songs||[],setlists:o.setlists&&o.setlists.length?o.setlists:[{id:'L1',name:'Setlist 1',order:[]}],curSet:o.curSet||'L1'}));
     // ids made from now on must not collide with the loaded ones
     let num=0; const pre={}; const walk=v=>{ if(Array.isArray(v)) v.forEach(walk); else if(v&&typeof v==='object'){ if(typeof v.id==='number') num=Math.max(num,v.id); else if(typeof v.id==='string'){ const m=v.id.match(/^([a-zA-Z])(\d+)$/); if(m) pre[m[1]]=Math.max(pre[m[1]]||0,+m[2]); } Object.values(v).forEach(walk); } };
@@ -2944,7 +3094,7 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
     songs.forEach(x=>{ if(x.showVer){ const w=x.showVer; delete x.showVer; showVer(x,w,true); } });
     regSeq=Math.max(regSeq,(pre.r||0)+1,(pre.c||0)+1); setSeq=Math.max(setSeq,(pre.L||0)+1); pid=Math.max(pid,(pre.u||0)+1);
     undoS=[]; redoS=[]; if(!songs.find(x=>x.id===selId)) selId=songs[0]&&songs[0].id; open.clear(); if(selId) open.add(selId); refresh(); },
-  setSessionName(n){ $('crumbAll').textContent=n||'Untitled session'; },
+  setSessionName(n){ $('crumbAll').textContent=n||'Library'; },
   routeLog:()=>ROUTE_LOG,
   // 6e: versions and the setlist flow (src/pages/arrange.ts)
   ver:{ play:s=>playVer(s), cur:s=>curVer(s), payload:(s,v)=>verPayload(s,v), map:(s,v)=>verMap(s,v), fields:(s,v)=>verFields(s,v), inVer:(s,t,v)=>trackInVer(s,t,v), nextOf:s=>nextInSet(s), after:s=>afterOf(s) },
@@ -2963,7 +3113,13 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
   openSettings:tab=>openSettings(tab), settingsChanged:()=>{ if(settingsOpen()&&['audio','out','midi','voices'].includes(SET_TAB)) renderSettings(); },
   // The interface's outputs (from the app): its name, how many, their names. Renames are kept per device.
   setOutputs(device,names){ OUTS.device=device||''; OUTS.names=names||[]; OUTS.count=(names||[]).length; },
-  setDirty(d){ const m=$('dirtyMk'); if(m) m.hidden=!d; },
+  setDirty(d){ const m=$('dirtyMk'); if(m) m.hidden=!d||LIBMODE; },
+  // 6f: the Library
+  setlistCmd:cmd=>setlistCmd(cmd), curSetId:()=>curSet,
+  setSaveState(st,why){ LIBMODE=true; const m=$('saveMk'), d=$('dirtyMk'); if(d) d.hidden=true; if(!m) return; m.hidden=false; m.className='savemk'+(st==='saving'?' saving':st==='error'?' err':''); m.textContent=st==='saving'?'Saving…':st==='error'?'Not saved: '+(why||'error'):'Saved'; m.title=st==='error'?(why||''):'Every change is saved to the library as you work'; },
+  exportProgress:p=>exportProgress(p),
+  importPlan:pkg=>importPlan(pkg), importBox:(name,plan,note)=>importBox(name,plan,note), importMerge:(pkg,dec)=>importMerge(pkg,dec),
+  mergeShow:(o,name,map)=>mergeShow(o,name,map), migrationBox:list=>migrationBox(list),
   // "Listen on this computer": the switch and the orange banner
   setListen(st,what){ LISTEN=st||{}; $('listenSeg').querySelectorAll('button').forEach(b=>b.classList.toggle('on',(b.dataset.v==='pc')===!!LISTEN.on)); $('listenBar').hidden=!LISTEN.on;
     $('listenDev').textContent=LISTEN.current||LISTEN.device||'this computer'; $('listenWhat').textContent=LISTEN.on?' · '+(what||'everything')+(LISTEN.click===false?' · no click':'')+(LISTEN.cues===false?' · no cues':'')+(LISTEN.midi===false?' · MIDI held back':''):''; },
@@ -3107,7 +3263,7 @@ function setPerform(on){ perfOn=on; document.body.classList.toggle('pf',on); doc
 function perfSong(){ return songs.find(x=>x.id===(playId||selId))||null; }
 function perfParts(s,v){ if(!v||v.custom||isFullVer(s,v)) return s.secPos.map(p=>({secId:p.id,name:p.name,type:p.type,bars:p.bars,sb:p.start})); let vb=1; return verMap(s,v).map(p=>({secId:p.secId,name:p.name,type:p.extra?'x':p.type,bars:p.bars,sb:p.sb,extra:p.extra,vb:p.vb})); }
 function renderPerform(full){ const el=$('perf'); if(!el||!perfOn) return; const s=perfSong();
-  if(!s){ el.innerHTML='<div class="now"><h1>No song</h1><p class="psub">Add songs to a setlist on the Show page.</p></div>'; return; }
+  if(!s){ el.innerHTML=`<div class="now"><div class="pmeta"><button class="pset" id="pfSet">${esc(curSetObj().name)} ▾</button></div><h1>No song</h1><p class="psub">Add songs to this setlist on the Show page.</p></div>`; el.dataset.song=''; const b=$('pfSet'); if(b) b.onclick=setlistMenu; return; }
   const v=s.id===playId&&playing&&window.SLE?playVer(s):playVer(s), parts=perfParts(s,v), i=setOrder.indexOf(s.id), n=nextInSet(s), lp=loopSecAt(s), loopingNow=looping();
   const tot=parts.reduce((a,p)=>a+p.bars,0), bar=barAtTime(s,s.id===playId?pos:0), curPart=parts.find(p=>!p.extra&&bar>=p.sb&&bar<p.sb+p.bars), done=curPart?parts.slice(0,parts.indexOf(curPart)).reduce((a,p)=>a+p.bars,0)+(bar-curPart.sb):0;
   const left=Math.max(0,tot-done), prog=tot?Math.min(1,done/tot):0;
@@ -3115,7 +3271,7 @@ function renderPerform(full){ const el=$('perf'); if(!el||!perfOn) return; const
     el.dataset.song=s.id+'|'+(v&&v.id)+'|'+(n?n.song.id+'|'+n.ver.id:'')+'|'+jumpQueuedSec+'|'+setOrder.join(',');
     const nv=n?versOf(n.song):[], ni=n?nv.indexOf(n.ver):0, nx=n&&!n.ver.custom&&verParts(n.song,n.ver).some(p=>p.extra), af=afterOf(s);
     const then=setOrder.slice(i+2,i+6).map((id,k)=>{ const x=songs.find(q=>q.id===id); return x?`<div class="pthen">${i+3+k} · ${esc(x.name)}</div>`:''; }).join('');
-    el.innerHTML=`<div class="now"><div class="pmeta">${i>=0?`${i+1} of ${setOrder.length} · `:''}<span id="pfState">${playing&&s.id===playId?'Now playing':'Ready'}</span></div>
+    el.innerHTML=`<div class="now"><div class="pmeta"><button class="pset" id="pfSet" title="Setlists"><i style="display:inline-block;width:4px;height:12px;border-radius:2px;margin-right:7px;background:${setCol(curSetObj())}"></i>${esc(curSetObj().name)} ▾</button>${i>=0?`${i+1} of ${setOrder.length} · `:''}<span id="pfState">${playing&&s.id===playId?'Now playing':'Ready'}</span></div>
         <h1>${esc(s.name)}</h1><div class="psub">${+bpmAt(s,1).toFixed(2)} BPM · ${s.tmap[0].sig.join('/')} · ${esc(s.key)}${versOf(s).length>1?` · <span style="color:#7fe0cf">${esc(v.name)}</span>`:''}</div>
         <div class="pprog"><i id="pfProg" style="width:${(prog*100).toFixed(2)}%;background:${s.col}"></i></div>
         <div class="psecs" id="pfSecs">${parts.map(p=>`<button class="psec ${p===curPart?'on':''} ${jumpQueuedSec!==null&&p.secId===jumpQueuedSec?'queued':''} ${p.extra?'px':''}" data-sec="${p.secId??''}" style="flex:${p.bars};--sc:${p.extra?VX_COL:SEC_C[p.type]||'#7d8696'}" title="${esc(p.name)}${p.extra?'':' · tap to jump here'}" ${p.extra?'disabled':''}><span>${esc(p.name)}</span></button>`).join('')}</div>
@@ -3128,7 +3284,7 @@ function renderPerform(full){ const el=$('perf'); if(!el||!perfOn) return; const
           <div class="pload" id="pfLoad">${autoLeft>0?`Next in ${autoLeft}…`:nextLoadText(n)}</div><div class="pafter">${af.mode==='stop'?'Stops after this song':esc(afterLabel(af))}</div>`:'<div class="pload">Last song in the set</div>'}</div>
         ${then?`<div class="nextc"><h3>Then</h3>${then}</div>`:''}</div>`;
     el.querySelectorAll('.psec[data-sec]').forEach(b=>{ if(b.dataset.sec!=='') b.onclick=()=>queueJumpTo(+b.dataset.sec); });
-    if($('pfExit')) $('pfExit').onclick=()=>exitLoop();
+    if($('pfExit')) $('pfExit').onclick=()=>exitLoop(); if($('pfSet')) $('pfSet').onclick=setlistMenu;
     if($('pfCancel')) $('pfCancel').onclick=()=>cancelQueuedJump();
     $('pfWhen').querySelectorAll('button').forEach(b=>b.onclick=()=>{ JUMP_WHEN=b.dataset.v; renderPerform(true); });
     if($('pfPrevV')) $('pfPrevV').onclick=()=>{ flipVer(n.song,-1); renderPerform(true); };
@@ -3144,7 +3300,7 @@ function nextLoadText(n){ if(!NATIVE) return 'Loaded and ready'; const m=NEXTST;
 // ======================= SETTINGS (6d) =======================
 // One sheet: ⚙ in the top bar, File › Preferences…, Ctrl/⌘+,. These belong to this computer (the rig), not the show,
 // except where a row says so. The app module (window.SLE) answers the native calls; a plain browser shows the layout.
-const SET_TABS=[['audio','Audio'],['out','Outputs'],['midi','MIDI'],['voices','Voices'],['folders','Folders'],['look','Appearance'],['diag','Diagnostics']];
+const SET_TABS=[['audio','Audio'],['out','Outputs'],['midi','MIDI'],['voices','Voices'],['general','General'],['look','Appearance'],['diag','Diagnostics']];
 let SET_TAB='audio', setRenderSeq=0, LDEV={list:[],rate:0,busy:false};
 const ncall=(n,a)=>NATIVE&&window.SLE&&SLE.call?SLE.call(n,a):Promise.resolve(null);
 function openSettings(tab){ if(tab) SET_TAB=tab; let bg=$('setSheet');
@@ -3203,10 +3359,10 @@ async function settingsHTML(tab){
       ${sgrp([sf('Natural voices (Kokoro, '+KOKORO_MB()+' MB, offline)',`<span style="display:flex;gap:8px;align-items:center"><span style="color:var(--muted);font-size:12px" id="stKstate">${state}</span>${m.state==='ready'?'':m.state==='downloading'?'<button class="sel2" style="min-width:0" id="stKcancel">Cancel</button>':'<button class="sel2" style="min-width:0" id="stKget">Download</button>'}</span>`),
         sf('Cue voice for this show',`<select id="stVoice"><option value="">Default voice</option>${list.map(v=>`<option value="${esc(v.id)}" ${(c.voice===v.id||(!c.voice&&c.name&&c.name===v.name))?'selected':''}>${esc(v.name)}${v.engine==='kokoro'?' · Kokoro':v.lang?' · '+esc(v.lang):''}</option>`).join('')}</select>`)])}
       <p class="d">A song can use its own voice: select its Cues track and turn off “Same voice for every song”.</p>`; }
-  if(tab==='folders'){ const f=(await ncall('folders'))||{shows:'Documents/set.Line/Shows',defaultShows:'',library:'Documents/set.Line/Library'};
-    return `<h3>Folders</h3><p class="d">Where new shows are saved, and the Library (cue words, cue phrases, MIDI presets, click sounds) that every show can use.</p>
-      ${sgrp([sf('New shows',`<span style="display:flex;gap:6px;align-items:center;min-width:0"><span class="rval" title="${esc(f.shows)}">${esc(f.shows)}</span><button class="sel2" style="min-width:0" id="stShows">Change…</button>${f.defaultShows&&f.shows!==f.defaultShows?'<button class="sel2" style="min-width:0" id="stShowsDef">Use Documents</button>':''}</span>`),
-        sf('Library',`<span style="display:flex;gap:6px;align-items:center;min-width:0"><span class="rval" title="${esc(f.library)}">${esc(f.library)}</span><button class="sel2" style="min-width:0" id="stLib">Open</button></span>`),
+  if(tab==='general'){ const st=(await ncall('libraryState'))||{name:'My Library',root:'Documents/set.Line/Libraries/My Library',onLaunch:'last'};
+    return `<h3>General</h3><p class="d">The library is every song and setlist, saved as you work. This computer remembers which setlist was open.</p>
+      ${sgrp([sf('On launch',segm('stLaunch',[['last','Last setlist'],['empty','Empty setlist']],st.onLaunch||'last')),
+        sf('Library',`<span style="display:flex;gap:6px;align-items:center;min-width:0"><span class="rval" title="${esc(st.root||'')}">${esc(st.root||'')}</span><button class="sel2" style="min-width:0" id="stLib">Show in folder</button></span>`),
         sf('Logs',`<button class="sel2" style="min-width:0" id="stLogs">Open logs folder</button>`)])}`; }
   if(tab==='look'){ const ap=window.SLAppearance?SLAppearance.get():'dark';
     return `<h3>Appearance</h3><p class="d">For this computer. Darker suits dark stages.</p>${sgrp([sf('Theme',segm('stLook',[['dark','Dark'],['darker','Darker']],ap))])}`; }
@@ -3231,8 +3387,8 @@ function wireSettings(tab){ const q=id=>$(id), re=()=>renderSettings();
     q('stNewList').onclick=()=>patchListBox(null); }
   if(tab==='voices'){ if(q('stKget')) q('stKget').onclick=()=>{ if(window.SLC) SLC.downloadVoices(); setTimeout(re,300); }; if(q('stKcancel')) q('stKcancel').onclick=()=>{ if(window.SLC) SLC.cancelVoiceDownload(); setTimeout(re,300); };
     q('stVoice').onchange=e=>{ snap(); const v=voiceList().find(x=>x.id===e.target.value); CUEV={...CUEV,voice:v?v.id:'',name:v?v.name:''}; cuevFresh=false; refresh(); }; }
-  if(tab==='folders'){ const act=async a=>{ if(a==='shows') await ncall('chooseShowsFolder'); else if(a==='showsDefault') await ncall('resetShowsFolder'); else await ncall('revealFolder',{which:a}); re(); };
-    q('stShows').onclick=()=>act('shows'); if(q('stShowsDef')) q('stShowsDef').onclick=()=>act('showsDefault'); q('stLib').onclick=()=>act('library'); q('stLogs').onclick=()=>act('logs'); }
+  if(tab==='general'){ q('stLaunch').querySelectorAll('button').forEach(b=>b.onclick=async()=>{ await ncall('libraryState',{onLaunch:b.dataset.v}); re(); });
+    q('stLib').onclick=()=>ncall('libraryReveal'); q('stLogs').onclick=()=>ncall('revealFolder',{which:'logs'}); }
   if(tab==='look') q('stLook').querySelectorAll('button').forEach(b=>b.onclick=()=>{ if(window.SLAppearance) SLAppearance.set(b.dataset.v); re(); });
   if(tab==='diag'){ q('stDcopy').onclick=()=>{ if(window.SLE) SLE.diagnostics('copy'); else toast('In the app this copies the diagnostics'); }; q('stDsave').onclick=()=>{ if(window.SLE) SLE.diagnostics('save'); }; } }
 // Patch name list editor: one "number = name" per line ("1:0:12 = Lead" for a program in bank MSB 1, LSB 0).

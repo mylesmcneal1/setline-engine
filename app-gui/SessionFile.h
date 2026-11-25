@@ -44,6 +44,8 @@ public:
     juce::var openPath(const juce::File& f);
     // Close / New: no current file (the next Save asks where).
     void close() { current = juce::File(); }
+    // 6f: the open Library's index file stands in for the show file (relative audio, Cues/, Backups/ resolve against it)
+    void setCurrent(const juce::File& f) { current = f; }
 
     juce::String name() const { return current.existsAsFile() ? current.getFileNameWithoutExtension() : juce::String(); }
     juce::File file() const { return current; }

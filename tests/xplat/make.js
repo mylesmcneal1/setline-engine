@@ -1,7 +1,8 @@
-// Shows move between Windows and Mac (docs/phase6c.md), step 1, on one system: build a show with stems (odd file
-// names), audio clips, a click, cues, MIDI and two versions; save it (audio and cues copied into the show); render
-// every song and version offline. tests/xplat/run.sh puts CFG in and stores the result next to the show.
-const CFG = /*CFG*/null; // {src: [wav paths], show: ".../X Show/X Show.setline"}
+// Setlists move between Windows and Mac (docs/phase6c.md, 6f), step 1, on one system: in a fresh Library, build a
+// setlist with stems (odd file names), audio clips, a click, cues, MIDI and two versions; export it as a .setline
+// package (audio and rendered cues inside); render every song and version offline. tests/xplat/run.sh puts CFG in
+// and stores the result next to the package.
+const CFG = /*CFG*/null; // {src: [wav paths], show: ".../X Show/X Show.setline" (the package to write)}
 const P = hooks.page();
 const res = { checks: [], expect: [] };
 const check = (name, ok, detail) => res.checks.push((ok ? "ok   " : "FAIL ") + name + (detail !== undefined ? "  " + JSON.stringify(detail) : ""));
@@ -13,6 +14,7 @@ const within = (name, p) => { res.steps.push(name); return Promise.race([p, wait
 const SLx = { call: (name, a) => { res.steps.push(name); return Promise.race([call0(name, a), wait(60000).then(() => { throw new Error("no answer from " + name + " in 60 s"); })]); } };
 const $ = (id) => document.getElementById(id);
 res.platform = (await SLx.call("getAppInfo")).platform;
+check("a fresh library opens", (await within("openLibrary", hooks.openLibrary(""))) === "");
 
 async function addSong(name, paths) {
   await within("onFileDrag", hooks.onFileDrag({ state: "drop", x: 5, y: 5, paths }));
@@ -60,21 +62,18 @@ hooks.SLR.setOverride(s2, Object.keys(s2.files)[0], [1]);
 P.rerender();
 hooks.remember();
 
-// Save: audio and cues copied into the show
-const ok = await within("saveTo", hooks.saveTo(CFG.show));
-check("saved", ok === true, ok);
+// both songs in the setlist; the library saves itself
+[s, s2].forEach((x) => { if (!setOrder.includes(x.id)) setOrder.push(x.id); });
+P.rerender(); hooks.remember();
+await within("libSave", hooks.libSave());
+const lib = (await SLx.call("getSessionFile")).path;
 const refs = () => [...new Set(hooks.audioFiles().map((x) => x.f.path))];
-let missing = null;
-for (let i = 0; i < 300; i++) {
-  const r = refs();
-  if (r.every((x) => !/^([A-Za-z]:[\\/]|\/)/.test(x))) { missing = (await SLx.call("checkAudio", { session: CFG.show, refs: r })).missing; if (!missing.length) break; }
-  await wait(200);
-}
+const missing = (await SLx.call("checkAudio", { session: lib, refs: refs() })).missing;
 res.refs = refs();
-check("every stem copied into the show (relative paths)", missing && !missing.length && res.refs.every((x) => x.startsWith("Audio/")), { refs: res.refs, missing });
+check("every stem copied into the library by content (relative paths)", !missing.length && res.refs.every((x) => /^Audio\/[0-9a-f]{16}\./.test(x)), { refs: res.refs, missing });
 const stored = await SLx.call("storeCues", { cues: hooks.cueList() });
 res.cuesStored = stored;
-check("cues stored in the show", stored.stored + 0 >= 0 && stored.error === undefined, stored);
+check("cues stored in the library", stored.stored + 0 >= 0 && stored.error === undefined, stored);
 
 // Render every song and version (6 bars at 120 bpm is 12 s; 14 s covers it)
 async function render(song) {
@@ -91,6 +90,8 @@ check("renders: something on every stem output, the click and the cues",
   res.expect[0].render.outs.slice(0, stems.length + 2).every((o) => o.peak > 0.001), res.expect[0].render.outs.map((o) => o.peak));
 check("MIDI in the render", Array.isArray(res.expect[0].render.midi) && res.expect[0].render.midi.length >= 5, res.expect[0].render.midi && res.expect[0].render.midi.length);
 check("two versions rendered differently", vers.length < 2 || JSON.stringify(res.expect[0].render.samples) !== JSON.stringify(res.expect[1].render.samples));
-// saved again so the show file holds exactly what was rendered (version 1 current)
-await within("saveTo", hooks.saveTo(CFG.show));
+// exported with version 1 current, exactly what was rendered
+hooks.remember(); await within("libSave", hooks.libSave());
+const ex = await within("exportSetlist", hooks.exportSetlist(P.curSetId(), CFG.show));
+check("exported as a .setline package", !!ex.path && !ex.error, ex);
 return res;
