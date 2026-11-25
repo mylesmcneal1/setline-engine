@@ -376,6 +376,7 @@ Cues::Audio Cues::renderNow(const juce::String& text, const juce::String& voiceI
     const auto skey = storeKeyOf(text, c, rate, &base);
     juce::File dir;
     Audio known;
+    const int gen = showGen.load(); // the show this render is for
     {
         std::lock_guard<std::mutex> g(dataLock);
         if (showDir != juce::File()) dir = showDir.getChildFile("Cues");
@@ -397,7 +398,9 @@ Cues::Audio Cues::renderNow(const juce::String& text, const juce::String& voiceI
     if (a && ! fellBack) { // the real voice (or the recording): keep it, and store it in the show
         if (dir != juce::File()) saveStored(dir, skey, base, a, rate, text, c, voiceId);
         std::lock_guard<std::mutex> g(dataLock);
-        memo[skey] = a;
+        // another show opened while this rendered (e.g. the start-up show's cues on a slow computer): don't let
+        // this computer's voice stand in for that show's own stored cue
+        if (gen == showGen.load()) memo[skey] = a;
     }
     return a;
 }
