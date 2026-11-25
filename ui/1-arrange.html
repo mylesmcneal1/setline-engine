@@ -1009,6 +1009,12 @@
   .abd{margin:6px 0 4px 52px;font-size:12px} .abd table{border-collapse:collapse;width:100%} .abd td{padding:2px 8px 2px 0;color:#c9c9cf} .abd td:first-child{color:var(--muted);width:44px} .abd .abo{color:var(--muted)} .abd p{margin:4px 0 0}
   .abmiss{display:flex;align-items:center;gap:10px;margin-top:10px;font-size:12px} .abign{margin-top:8px;font-size:12px;color:var(--muted)} .abign p{margin-top:4px}
   .abset{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12.5px} .ablebox .cfa{display:flex;align-items:center;gap:8px;margin-top:14px;justify-content:flex-end} .ablebox .abs{margin-right:auto;color:var(--muted);font-size:12px}
+  /* ---- 7c: controls ---- */
+  .mididot{width:8px;height:8px;border-radius:50%;background:#3a3a40;margin:0 6px;flex:none;transition:background .15s} .mididot.on{background:#ffd60a} .mididot.on.mapped{background:#0a84ff}
+  .ctlact{display:flex;align-items:center;gap:8px;background:#1f1f22;border:1px solid #26262a;border-radius:10px;padding:8px 12px;margin-bottom:12px;font:12px var(--code,monospace);color:#c9c9cf}
+  .ctlact .dotm{width:8px;height:8px;border-radius:50%;background:#30d158}
+  .ctlrow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end} .ctlkey{font:11px var(--code,monospace);color:var(--muted);min-width:40px;text-align:right}
+  .ctlmap{font-size:11px;background:#0a84ff22;color:#9ccaff;border-radius:6px;padding:3px 8px} .ctlmap:hover{background:#0a84ff44}
   .pftoast{position:fixed;left:50%;top:84px;transform:translateX(-50%);background:#0a84ff;color:#fff;font-weight:700;font-size:clamp(18px,1.5vw,30px);padding:10px 22px;border-radius:12px;z-index:950;box-shadow:0 10px 30px rgba(0,0,0,.5);pointer-events:none}
   /* ---- 6d: Settings sheet, status pill, gear ---- */
   .scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:900;display:flex;align-items:center;justify-content:center}
@@ -1063,7 +1069,7 @@
   </div>
   <div class="listenc" title="Where you hear the show: its own outputs (normal), or this computer's speakers / headphones"><div class="seg" id="listenSeg"><button data-v="show" class="on">Show outputs</button><button data-v="pc">This computer</button></div></div>
   <div class="listenbar" id="listenBar" hidden><span id="listenPre">Listening on </span><span id="listenDev"></span><span id="listenWhat" style="font-weight:500"></span><button id="listenOffB">Back to show outputs</button></div>
-  <span class="bandstat" id="bandStat" hidden></span><button class="btn line syncb" id="syncBtn" hidden title="Send this setlist’s MIDI sync point to every device">Sync MIDI</button><button class="btn line pfonly" id="pfSetBtn" title="Setlists">Setlist ▾</button><button class="btn line pfonly lockb" id="lockBtn" title="Lock Perform: clicks and taps do nothing until you hold this (keys and pedals still work)">Lock</button>
+  <span class="mididot" id="midiDot" hidden title="MIDI in: flashes when a pedal or controller sends something (blue: it triggered an action)"></span><span class="bandstat" id="bandStat" hidden></span><button class="btn line syncb" id="syncBtn" hidden title="Send this setlist’s MIDI sync point to every device">Sync MIDI</button><button class="btn line pfonly" id="pfSetBtn" title="Setlists">Setlist ▾</button><button class="btn line pfonly lockb" id="lockBtn" title="Lock Perform: clicks and taps do nothing until you hold this (keys and pedals still work)">Lock</button>
   <button class="status" id="statusChip" title="Audio settings"><span class="dot" id="statusDot"></span><span id="statusTxt">No audio device</span></button><button class="ibtn gear" id="gearBtn" title="Settings  ⌘,">⚙</button>
 </header>
 
@@ -3518,6 +3524,7 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
     soundcheck:(id,v)=>soundcheck(id,v), endSoundcheck:()=>endSoundcheck(), vamp:()=>vamp(), jump:id=>queueJumpTo(id), cancelJump:()=>cancelQueuedJump(), syncMidi:()=>syncMidi(), fillSync:()=>fillSyncFromFirst(), syncLines:(t,c)=>syncLines(t,c),
     view:on=>setBand(on), addWidget:(sc,type,x,y)=>addWidget(sc,type,x,y), select:(id,ori)=>{ BSEL=id; if(ori) BORI=ori; renderBand(); }, fields:()=>FIELDS, setFields:f=>{ FIELDS=f; refresh(); }, fieldVal:(s,f,v)=>fieldVal(s,f,v), setFieldVal:(s,f,val,v)=>setFieldVal(s,f,val,v), newField:n=>newField(n), table:()=>fieldsTable(), finishBy:v=>{ const L=curSetObj(); if(v) L.finishBy=v; else delete L.finishBy; } },
   midiReconnected(names){ /* 7a: Sync MIDI is one button only; nothing goes out by itself */ },
+  selectSong:id=>{ select(id,false); refresh(); }, midiAction:m=>onMidiAction(m), midiIn:m=>onMidiIn(m), midiLearned:m=>{ if(window.SLLearn) SLLearn(m); }, setMidiMap:(l,ins)=>{ MIDI_MAP=Array.isArray(l)?l:[]; MIDI_INS=ins||[]; if(settingsOpen()&&SET_TAB==='controls') renderSettings(); }, midiMap:()=>MIDI_MAP,
   setlistOpened(){},
   // 6f: the Library
   setlistCmd:cmd=>setlistCmd(cmd), curSetId:()=>curSet,
@@ -3653,18 +3660,87 @@ async function queueJumpTo(secId){ const s=songs.find(x=>x.id===(playing?playId:
   if(NATIVE&&window.SLE&&SLE.queueJump){ await SLE.queueJump(s,secId,JUMP_WHEN); }
   else { jumpQueuedSec=secId; renderPerform(); } }
 function cancelQueuedJump(){ if(jumpQueuedSec===null) return false; if(NATIVE&&window.SLE&&SLE.cancelJump) SLE.cancelJump(); else { jumpQueuedSec=null; renderPerform(); } return true; }
-// ---- the action list: every live action in one place (keys now; MIDI-learn / footswitches can map them later) ----
+// ---- the action list: every live action in one place: keys, footswitches / MIDI controllers (7c, Settings ›
+// Controls), band screens. Nothing here changes outputs, levels, the audio device, or deletes anything (never mappable).
+// run(arg, press): press false = a momentary pedal released (only Vamp uses it). ico: shown when a pedal triggers it.
+const perfPartsNow=()=>{ const s=songs.find(x=>x.id===(playing?playId:(playId||selId))); if(!s) return null; const st=perfState(s); return {s,st,src:st.parts.filter(p=>!p.extra)}; };
+function jumpSection(d){ const x=perfPartsNow(); if(!x) return toast('No song'); const {st,src}=x, i=st.cur?src.indexOf(st.cur):-1, t=src[Math.max(0,Math.min(src.length-1,(i<0?0:i)+d))]; if(t&&t!==st.cur) queueJumpTo(t.secId); }
+function jumpNth(n){ const x=perfPartsNow(); if(!x) return toast('No song'); const t=x.src[n-1]; if(!t) return toast(`“${x.s.name}” has ${x.src.length} section${x.src.length===1?'':'s'}`); queueJumpTo(t.secId); }
+const nextVer=d=>{ const cur=songs.find(x=>x.id===(playId||selId)), n=cur&&nextInSet(cur); if(n) flipVer(n.song,d); else toast('No next song in this setlist'); };
 const ACTIONS=[
-  {id:'playStop',name:'Play / Stop',key:'Space',run:()=>toggle()},
-  {id:'nextSong',name:'Next song',key:'N',run:()=>stepSong(1)},
-  {id:'prevSong',name:'Previous song',key:'P',run:()=>stepSong(-1)},
-  {id:'nextVersion',name:'Next version of the next song',key:'V',run:()=>{ const cur=songs.find(x=>x.id===(playId||selId)), n=cur&&nextInSet(cur); if(n) flipVer(n.song,1); else toast('No next song in this setlist'); }},
-  {id:'exitLoop',name:'Exit loop',key:'L',run:()=>{ if(!exitLoop()) toast('Not in a loop'); }},
-  {id:'cancelJump',name:'Cancel queued jump',key:'Esc',run:()=>cancelQueuedJump()},
-  {id:'syncMidi',name:'Sync MIDI (send the setlist’s sync point)',key:'M',run:()=>syncMidi()},
-  {id:'vamp',name:'Vamp (loop the section playing)',key:'',run:()=>vamp()},
+  {id:'playStop',name:'Play / Stop',key:'Space',ico:'⏯',run:()=>toggle()},
+  {id:'play',name:'Play',key:'',ico:'▶',run:()=>{ if(!playing) toggle(); }},
+  {id:'stop',name:'Stop',key:'',ico:'■',run:()=>{ if(playing) toggle(); }},
+  {id:'nextSong',name:'Next song',key:'N',ico:'⏭',run:()=>stepSong(1)},
+  {id:'prevSong',name:'Previous song',key:'P',ico:'⏮',run:()=>stepSong(-1)},
+  {id:'nextVersion',name:'Next version of the next song',key:'V',ico:'›',run:()=>nextVer(1)},
+  {id:'prevVersion',name:'Previous version of the next song',key:'',ico:'‹',run:()=>nextVer(-1)},
+  {id:'nextSection',name:'Jump to the next section',key:'',ico:'⤼',run:()=>jumpSection(1)},
+  {id:'prevSection',name:'Jump to the previous section',key:'',ico:'⤺',run:()=>jumpSection(-1)},
+  ...Array.from({length:16},(_,k)=>({id:'jump'+(k+1),name:`Jump to section ${k+1}`,key:'',ico:'⤳',run:()=>jumpNth(k+1)})),
+  {id:'cancelJump',name:'Cancel queued jump',key:'Esc',ico:'✕',run:()=>cancelQueuedJump()},
+  {id:'vamp',name:'Vamp (loop the section playing)',key:'',ico:'↻',momentary:true,run:(arg,press)=>{ if(press===false){ if(VAMP) vamp(); return; } vamp(); }},
+  {id:'exitLoop',name:'Exit loop',key:'L',ico:'⇥',run:()=>{ if(!exitLoop()) toast('Not in a loop'); }},
+  {id:'syncMidi',name:'Sync MIDI (send the setlist’s sync point)',key:'M',ico:'⇄',run:()=>syncMidi()},
+  {id:'soundcheck',name:'Soundcheck (on / off)',key:'',ico:'◎',run:()=>{ if(SOUNDCHECK){ endSoundcheck(); return; } const s=songs.find(x=>x.id===(playId||selId)); if(s) soundcheck(s.id); else toast('Pick a song first'); }},
+  {id:'lock',name:'Lock / Unlock Perform',key:'',ico:'🔒',run:()=>{ setLock(!LOCKED); toast(LOCKED?'Perform locked':'Unlocked'); }},
+  {id:'statusReady',name:'Status: Ready',key:'',ico:'✓',run:()=>bandStatus('Pedal','Ready',true)},
+  {id:'status30',name:'Status: Need 30 s',key:'',ico:'⏱',run:()=>bandStatus('Pedal','Need 30 s',true)},
+  {id:'statusProblem',name:'Status: Problem',key:'',ico:'⚠',run:()=>bandStatus('Pedal','Problem',true)},
 ];
-window.SLActions={ list:()=>ACTIONS.map(({id,name,key})=>({id,name,key})), run:(id,arg)=>{ const a=ACTIONS.find(x=>x.id===id); if(a){ a.run(arg); return true; } return false; } };
+window.SLActions={ list:()=>ACTIONS.map(({id,name,key})=>({id,name,key})), run:(id,arg,press)=>{ const a=ACTIONS.find(x=>x.id===id); if(a){ a.run(arg,press); return true; } return false; } };
+// ---- 7c: a mapped pedal / controller message (MidiControl.h): run the action, light the MIDI-in dot, say it on Perform
+let MIDI_MAP=[], MIDI_INS=[], MIDI_LAST='';
+function onMidiAction(m){ const a=ACTIONS.find(x=>x.id===m.action); if(!a) return; if(m.press===false&&!a.momentary) return;
+  a.run(undefined,m.press!==false); midiLight(true);
+  if(m.press!==false) perfFlash(`${a.ico||''} ${a.name.replace(/ \(.*\)$/,'')} (pedal)`.trim());
+  if(window.SLE&&SLE.call) SLE.call('midiActed',{t0:m.t0,action:m.action}).catch(()=>{});
+  setTimeout(midiFeedback,30); }
+function midiLight(mapped){ const d=$('midiDot'); if(!d) return; d.hidden=false; d.classList.toggle('mapped',!!mapped); d.classList.add('on'); clearTimeout(d._t); d._t=setTimeout(()=>d.classList.remove('on'),180); }
+function onMidiIn(m){ MIDI_LAST=`${m.port}: ${m.text}`; if(!m.mapped) midiLight(false); const a=$('ctlAct'); if(a) a.textContent=MIDI_LAST; }
+// Feedback out (per mapping, off by default): the controller's LED shows the action's state (to the output port with
+// the mapping's port name)
+const ACT_STATE={playStop:()=>playing,play:()=>playing,vamp:()=>!!VAMP,exitLoop:()=>looping(),lock:()=>LOCKED,syncMidi:()=>!!(SYNCED&&SYNCED.set===curSet),soundcheck:()=>!!SOUNDCHECK};
+let FB_SENT={};
+function midiFeedback(){ MIDI_MAP.filter(m=>m.feedback&&m.port&&ACT_STATE[m.action]).forEach(m=>{ const on=!!ACT_STATE[m.action](); if(FB_SENT[m.id]===on) return; FB_SENT[m.id]=on;
+  const ch=Math.max(0,(m.ch||1)-1), msg=m.type==='note'?[on?0x90|ch:0x80|ch,m.num,on?127:0]:m.type==='cc'?[0xB0|ch,m.num,on?127:0]:null; if(msg&&window.SLE&&SLE.call) SLE.call('sendMidiNow',{port:m.port,msgs:[msg]}).catch(()=>{}); }); }
+setInterval(()=>{ if(MIDI_MAP.some(m=>m.feedback)) midiFeedback(); },250);
+// ---- 7c: Settings › Controls: every action, its key (read-only) and its MIDI mappings; ＋ Learn; per mapping: port,
+// trigger, debounce, LED feedback. Mappings belong to this computer (the app keeps them); Export / Import as JSON.
+const mapLabel=m=>`${m.type==='note'?'Note '+m.num:m.type==='cc'?'CC '+m.num:'PC '+m.num}${m.ch?' · ch '+m.ch:''}${m.port?' · '+m.port:''}${m.type==='cc'&&m.mode==='momentary'?' · hold':m.type==='cc'&&m.mode==='any'?' · any value':''}${m.feedback?' · LED':''}`;
+function controlsHTML(){
+  return `<h3>Controls</h3><p class="d">Footswitches and MIDI controllers can trigger any of these. Press <b>＋ Learn</b>, then the pedal or button. Mappings belong to this computer (the controllers are plugged into it).</p>
+    <div class="ctlact"><span class="dotm" id="ctlDot"></span><span id="ctlAct">${esc(MIDI_LAST||'Nothing received yet. Press a pedal to check it’s connected.')}</span><span class="faint" style="margin-left:auto;font-size:11px">${MIDI_INS.length?'Inputs: '+esc(MIDI_INS.join(', ')):'No MIDI inputs found'}</span></div>
+    ${sgrp(ACTIONS.map(a=>{ const ms=MIDI_MAP.filter(m=>m.action===a.id);
+      return sf(esc(a.name),`<span class="ctlrow"><span class="ctlkey">${a.key?esc(a.key):''}</span>${ms.map(m=>`<button class="ctlmap" data-map="${esc(m.id)}" title="Options">${esc(mapLabel(m))}</button>`).join('')}<button class="sel2 ctllearn" data-learn="${a.id}">＋ Learn</button></span>`); }))}
+    <div class="racts"><button class="btn line" id="ctlExport">Export mappings…</button><button class="btn line" id="ctlImport">Import mappings…</button></div>
+    <p class="d">Outputs, levels, the audio device and anything that deletes can’t be mapped, on purpose.</p>`; }
+async function saveMidiMap(){ await ncall('setMidiMappings',{list:MIDI_MAP}); FB_SENT={}; }
+function learnFor(action){ const bg=document.createElement('div'); bg.className='cfbg'; bg.id='learnBox'; const a=ACTIONS.find(x=>x.id===action);
+  bg.innerHTML=`<div class="cfbox"><b>Press a pedal or button…</b><p>For “${esc(a.name)}”. Esc cancels.</p><div class="cfa"><button class="btn line" id="lrnX">Cancel</button></div></div>`; document.body.appendChild(bg);
+  const done=()=>{ bg.remove(); document.removeEventListener('keydown',esc_,true); ncall('midiLearn',{on:false}); window.SLLearn=null; };
+  const esc_=e=>{ if(e.key==='Escape'){ e.preventDefault(); e.stopPropagation(); done(); } };
+  document.addEventListener('keydown',esc_,true); $('lrnX').onclick=done;
+  window.SLLearn=m=>{ done(); const nm={id:'m'+Date.now().toString(36),action,port:'',type:m.type,ch:m.ch,num:m.num,mode:'cross',debounce:150,feedback:false};
+    const other=MIDI_MAP.find(x=>x.type===nm.type&&x.num===nm.num&&(!x.ch||!nm.ch||x.ch===nm.ch)&&(!x.port||x.port===m.port));
+    const add=()=>{ if(other) MIDI_MAP=MIDI_MAP.filter(x=>x!==other); MIDI_MAP.push(nm); saveMidiMap().then(()=>{ if(settingsOpen()&&SET_TAB==='controls') renderSettings(); }); toast(`${mapLabel(nm)} → ${a.name}`); };
+    if(other&&other.action!==action){ const oa=ACTIONS.find(x=>x.id===other.action); confirmBox('Already mapped',`${esc(mapLabel(other))} triggers “${esc(oa?oa.name:other.action)}”. Move it to “${esc(a.name)}”?`,'Move it',add); }
+    else if(other) toast('Already mapped to this action');
+    else add(); };
+  ncall('midiLearn',{on:true}); }
+function mapOptions(e,id){ const m=MIDI_MAP.find(x=>x.id===id); if(!m) return; const ch=()=>{ saveMidiMap().then(()=>renderSettings()); };
+  ctxMenu(e,[{cap:mapLabel(m)},
+    {label:'Any port',icon:m.port?'':'✓',act:()=>{ m.port=''; ch(); }},...MIDI_INS.map(p=>({label:'Only '+p,icon:m.port===p?'✓':'',act:()=>{ m.port=p; ch(); }})),'-',
+    ...(m.type==='cc'?[['cross','Trigger when it crosses 64'],['any','Trigger on any value change'],['momentary','Momentary: press and release']].map(([k,l])=>({label:l,icon:(m.mode||'cross')===k?'✓':'',act:()=>{ m.mode=k; ch(); }})):[]),
+    ...(m.type==='note'?[{label:'Momentary: release on Note Off',icon:m.mode==='momentary'?'✓':'',act:()=>{ m.mode=m.mode==='momentary'?'cross':'momentary'; ch(); }}]:[]),
+    ...[0,50,150,300,500].map(v=>({label:`Ignore repeats within ${v} ms`,icon:(m.debounce??150)===v?'✓':'',act:()=>{ m.debounce=v; ch(); }})),'-',
+    {label:'LED feedback (needs one port)',icon:m.feedback?'✓':'',dis:!m.port||!ACT_STATE[m.action],act:()=>{ m.feedback=!m.feedback; ch(); }},
+    {label:'Remove',icon:'✕',danger:true,act:()=>{ MIDI_MAP=MIDI_MAP.filter(x=>x!==m); ch(); }}]); }
+function wireControls(){ document.querySelectorAll('#sbody [data-learn]').forEach(b=>b.onclick=()=>learnFor(b.dataset.learn));
+  document.querySelectorAll('#sbody [data-map]').forEach(b=>b.onclick=e=>mapOptions(e,b.dataset.map));
+  $('ctlExport').onclick=async()=>{ const r=await ncall('exportMappings',{text:JSON.stringify({format:'setline-controls',version:1,mappings:MIDI_MAP},null,1)}); if(r&&r.path) toast('Saved '+r.path); };
+  $('ctlImport').onclick=async()=>{ const r=await ncall('importMappings'); if(!r||!r.text) return; try{ const o=JSON.parse(r.text), l=Array.isArray(o)?o:o.mappings; if(!Array.isArray(l)) throw 0;
+    MIDI_MAP=l.filter(x=>x&&ACTIONS.some(a=>a.id===x.action)); await saveMidiMap(); renderSettings(); toast(`Imported ${MIDI_MAP.length} mapping${MIDI_MAP.length===1?'':'s'}`); }catch(e){ toast('That isn’t a set.Line mappings file'); } }; }
 $('syncBtn').onclick=()=>syncMidi();
 // ---- Perform (7a): a fixed layout for playing live (docs/design/perform). Now playing (song, version, time left, BPM /
 // meter / key / Then, the section timeline: tap a section to queue a jump), the current section (bars left, beat lights),
@@ -3760,7 +3836,7 @@ function nextLoadText(n){ if(!NATIVE) return 'Loaded and ready'; const m=NEXTST;
 // ======================= SETTINGS (6d) =======================
 // One sheet: ⚙ in the top bar, File › Preferences…, Ctrl/⌘+,. These belong to this computer (the rig), not the show,
 // except where a row says so. The app module (window.SLE) answers the native calls; a plain browser shows the layout.
-const SET_TABS=[['audio','Audio'],['out','Outputs'],['midi','MIDI'],['voices','Voices'],['band','Band'],['general','General'],['look','Appearance'],['diag','Diagnostics']];
+const SET_TABS=[['audio','Audio'],['out','Outputs'],['midi','MIDI'],['controls','Controls'],['voices','Voices'],['band','Band'],['general','General'],['look','Appearance'],['diag','Diagnostics']];
 let SET_TAB='audio', setRenderSeq=0, LDEV={list:[],rate:0,busy:false};
 const ncall=(n,a)=>NATIVE&&window.SLE&&SLE.call?SLE.call(n,a):Promise.resolve(null);
 function openSettings(tab){ if(tab) SET_TAB=tab; let bg=$('setSheet');
@@ -3819,6 +3895,7 @@ async function settingsHTML(tab){
       <h3 style="margin-top:6px">Patch name lists</h3><p class="d">Optional. A list names program numbers so MIDI clips read “Prog 12 · Lead”. Pick one per MIDI track (none: numbers).</p>
       ${sgrp(patchLists().map(l=>sf(esc(l.name),`<span style="display:flex;gap:6px;align-items:center"><span style="color:var(--muted);font-size:12px">${Object.keys(l.names||{}).length} names${l.built?' · built in':''}</span><button class="sel2" style="min-width:0" data-plist="${esc(l.id)}">${l.built?'View…':'Edit…'}</button></span>`)))}
       <div class="racts"><button class="btn line" id="stNewList">＋ New list</button></div>`; }
+  if(tab==='controls') return controlsHTML();
   if(tab==='voices'){ const m=VMODEL, pct=m.total?Math.floor(100*m.done/m.total):0, list=voiceList(), c=CUEV;
     const state=m.state==='ready'?'Downloaded':m.state==='downloading'?`Downloading… ${pct}%`:m.state==='failed'?'The download didn’t finish: '+esc(m.error):'Not downloaded';
     return `<h3>Voices</h3><p class="d">The voices that speak your cues. Cues are recorded ahead of time and play exactly on their beat.</p>
@@ -3847,6 +3924,7 @@ async function settingsHTML(tab){
       ${sgrp([sf('Copy diagnostics to paste into a message',`<button class="sel2" style="min-width:0" id="stDcopy">Copy</button>`),sf('Save diagnostics as a text file',`<button class="sel2" style="min-width:0" id="stDsave">Save…</button>`)])}`; }
   return ''; }
 function wireSettings(tab){ const q=id=>$(id), re=()=>renderSettings();
+  if(tab==='controls') wireControls();
   if(tab==='audio'){ const set=async req=>{ $('sbody').style.opacity='.6'; await ncall('setAudioSetup',req); $('sbody').style.opacity=''; re(); };
     if(q('stDrv')) q('stDrv').onchange=e=>set({driver:e.target.value});
     if(q('stDev')) q('stDev').onchange=e=>set({driver:q('stDrv').value,device:e.target.value});

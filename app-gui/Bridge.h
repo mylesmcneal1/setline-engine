@@ -9,6 +9,7 @@
 #include "Cues.h"
 #include "LibraryStore.h"
 #include "BandServer.h"
+#include "MidiControl.h"
 #include <atomic>
 #include <thread>
 
@@ -71,6 +72,8 @@ private:
     Cues cues;
     LibraryStore lib;
     BandServer band; // 6g: the band screens
+    MidiControl midiControl { settings }; // 7c: footswitches / controllers
+    double midiActMax = 0; int midiActCount = 0;
     std::thread exporter;                    // writing a .setline package (one at a time)
     std::shared_ptr<std::atomic<bool>> exportCancel = std::make_shared<std::atomic<bool>>(false);
     std::unique_ptr<juce::FileChooser> packChooser;

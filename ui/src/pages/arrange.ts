@@ -1397,6 +1397,11 @@ async function main() {
   bandHost = startBandHost(SL, page);
   (window as any).SLBandHost = bandHost;
   SL.on("midiReconnected", (m: { reconnected: string[] }) => page().midiReconnected(m.reconnected || []));
+  // 7c: footswitches / controllers (MidiControl.h)
+  SL.on("midiAction", (m: any) => (page() as any).midiAction(m));
+  SL.on("midiIn", (m: any) => (page() as any).midiIn(m));
+  SL.on("midiLearned", (m: any) => (page() as any).midiLearned(m));
+  SL.call<{ list: any[]; inputs: string[] }>("midiMappings").then((r) => (page() as any).setMidiMap(r.list, r.inputs)).catch(() => {});
   if (!info.testScript) SL.call<{ error?: string }>("bandStart", {}).then((r) => { if (r && r.error) SL.call("logLine", { text: "Band server: " + r.error }); page().band.info(r); }).catch(() => {});
   await reportLoading(showProblem, !!info.testScript);
   if (!info.testScript && lib) offerMigration().catch((e) => console.warn("set.Line: migration", e));

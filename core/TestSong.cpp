@@ -4,6 +4,7 @@
 #include "TempoMap.h"
 #include "Versions.h"
 #include "Wav.h"
+#include "MidiMap.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -1112,6 +1113,37 @@ bool runSelfTest(bool verbose)
         r.load(s, sr, 2, 128); r.start(0); r.step();
         check(! r.e.updateClicks(u), "click edits while playing: a new click track asks for a reload instead");
         r.e.stop();
+    }
+    // ---- Phase 7c: footswitch / controller mappings ----
+    std::printf("Phase 7c MIDI mappings\n");
+    {
+        auto msg = [](const char* port, int a, int b, int c, double t, int len = 3) { MidiIn m; m.port = port; m.b[0] = (uint8_t) a; m.b[1] = (uint8_t) b; m.b[2] = (uint8_t) c; m.len = len; m.timeMs = t; return m; };
+        auto map = [](const char* action, MidiMapping::Type type, int num, int ch = 0, const char* port = "", MidiMapping::Mode mode = MidiMapping::Cross, double deb = 150) {
+            MidiMapping x; x.id = action; x.action = action; x.type = type; x.num = num; x.ch = ch; x.port = port; x.mode = mode; x.debounceMs = deb; return x; };
+        MidiMapper mm;
+        mm.set({ map("nextSong", MidiMapping::Note, 60), map("playStop", MidiMapping::CC, 64), map("vamp", MidiMapping::CC, 80, 0, "", MidiMapping::Momentary),
+                 map("jump3", MidiMapping::PC, 2, 5), map("syncMidi", MidiMapping::Note, 61, 0, "FCB1010"), map("exitLoop", MidiMapping::CC, 20, 0, "", MidiMapping::Any, 0) });
+        std::vector<MidiMapper::Fire> f; f.reserve(8);
+        auto fires = [&](const MidiIn& m) { mm.feed(m, f); std::string s; for (auto& x : f) s += mm.mappings()[(size_t) x.mapping].action + (x.press ? "+" : "-") + " "; return s; };
+        check(fires(msg("Pedal", 0x90, 60, 100, 0)) == "nextSong+ " && fires(msg("Pedal", 0x90, 60, 0, 50)).empty() && fires(msg("Pedal", 0x80, 60, 0, 60)).empty(),
+              "mappings: Note On (velocity > 0) triggers; velocity 0 / Note Off don't (not momentary)");
+        check(fires(msg("Pedal", 0xB0, 64, 0, 1000)).empty() && fires(msg("Pedal", 0xB0, 64, 127, 1010)) == "playStop+ " && fires(msg("Pedal", 0xB0, 64, 100, 1020)).empty()
+                  && fires(msg("Pedal", 0xB0, 64, 10, 1200)).empty() && fires(msg("Pedal", 0xB0, 64, 90, 1400)) == "playStop+ ",
+              "mappings: a CC triggers when it crosses up through 64 (not while it stays up, not on the way down)");
+        check(fires(msg("Pedal", 0xB0, 80, 127, 2000)) == "vamp+ " && fires(msg("Pedal", 0xB0, 80, 0, 2500)) == "vamp- ", "mappings: momentary CC: press on the way up, release on the way down");
+        check(fires(msg("Pedal", 0xB0, 20, 5, 3000)) == "exitLoop+ " && fires(msg("Pedal", 0xB0, 20, 6, 3001)) == "exitLoop+ " && fires(msg("Pedal", 0xB0, 20, 6, 3002)).empty(), "mappings: “any value change” fires on every new value");
+        check(fires(msg("Pedal", 0xC4, 2, 0, 4000, 2)) == "jump3+ " && fires(msg("Pedal", 0xC0, 2, 0, 4500, 2)).empty() && fires(msg("Pedal", 0xC4, 3, 0, 5000, 2)).empty(),
+              "mappings: Program Change on its number and channel (ch 5) only");
+        check(fires(msg("Pedal", 0x90, 60, 100, 6000)) == "nextSong+ " && fires(msg("Pedal", 0x90, 60, 100, 6100)).empty() && fires(msg("Pedal", 0x90, 60, 100, 6200)) == "nextSong+ ",
+              "mappings: debounce: a repeat inside 150 ms is ignored");
+        check(fires(msg("Pedal", 0x90, 61, 100, 7000)).empty() && fires(msg("FCB1010", 0x90, 61, 100, 7000)) == "syncMidi+ ", "mappings: a mapping on one port ignores the others");
+        check(fires(msg("Pedal", 0xF8, 0, 0, 8000, 1)).empty() && fires(msg("Pedal", 0xFE, 0, 0, 8001, 1)).empty() && fires(msg("Pedal", 0xFA, 0, 0, 8002, 1)).empty(),
+              "mappings: clock, active sensing and Start never trigger anything");
+        check(mm.conflict(map("x", MidiMapping::Note, 60, 1)) == 0 && mm.conflict(map("x", MidiMapping::Note, 61, 1, "Other")) == -1 && mm.conflict(map("x", MidiMapping::PC, 2, 5)) == 3,
+              "mappings: Learn finds a message already mapped to another action (to ask before moving it)");
+        EchoGuard eg; const uint8_t pc[2] = { 0xC0, 7 };
+        eg.sent(pc, 2, 100);
+        check(eg.isEcho(pc, 2, 120) && ! eg.isEcho(pc, 2, 200), "mappings: set.Line's own messages looping back (within 40 ms) are ignored");
     }
     std::printf(ok ? "ALL CHECKS PASSED\n" : "SOME CHECKS FAILED\n");
     return ok;

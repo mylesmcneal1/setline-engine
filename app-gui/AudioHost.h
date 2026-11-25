@@ -3,6 +3,7 @@
 #pragma once
 #include <mutex>
 #include <juce_audio_devices/juce_audio_devices.h>
+#include "../core/MidiMap.h"
 #include <juce_data_structures/juce_data_structures.h>
 #include "../core/Engine.h"
 #include "SongMapper.h"
@@ -69,6 +70,7 @@ public:
     juce::var sendMidiNow(const juce::String& port, const juce::var& msgs);
     // A MIDI output that came back (unplugged and plugged in again): names, reported to the page.
     std::function<void(const juce::StringArray&)> onMidiReconnected;
+    void setEchoGuard(EchoGuard* e) { midiOuts.echo.store(e); } // 7c
 
     // ---- songs and transport ----
     // payload: see SongMapper.h. Returns {ok, warnings, seconds, epoch} or {error}.
@@ -120,6 +122,7 @@ private:
         std::array<juce::String, Max> names;
         std::atomic<int> count { 0 };
         std::atomic<bool>* enabled = nullptr; // "Listen on this computer" can hold MIDI back
+        std::atomic<EchoGuard*> echo { nullptr }; // 7c: what we send, so an input that echoes it back is ignored
         std::array<std::mutex, Max> locks;    // a port reopened after a reconnect is swapped under its lock
         void sendNow(int port, const uint8_t* d, int len) override
         {
@@ -127,6 +130,7 @@ private:
             if (port < 0 || port >= count.load(std::memory_order_acquire)) return;
             std::lock_guard<std::mutex> g(locks[(size_t) port]);
             if (outs[(size_t) port]) outs[(size_t) port]->sendMessageNow(juce::MidiMessage(d, len));
+            if (auto* e = echo.load(std::memory_order_relaxed)) e->sent(d, len, juce::Time::getMillisecondCounterHiRes());
         }
         int resolve(const juce::String& want, std::vector<std::string>& warnings);
     };

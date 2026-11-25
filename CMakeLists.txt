@@ -179,6 +179,7 @@ if(SETLINE_WITH_JUCE)
       app-gui/WinIcon.cpp
       app-gui/LibraryStore.cpp
       app-gui/AbletonImport.cpp
+      app-gui/MidiControl.cpp
       app-gui/AbletonTest.cpp
       app-gui/Package.cpp
       app-gui/BandServer.cpp)

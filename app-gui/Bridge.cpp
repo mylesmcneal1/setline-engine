@@ -38,6 +38,8 @@ Bridge::Bridge(AudioHost& host, juce::PropertiesFile& settings) : audio(host), s
 {
     audio.onSetupChanged = [this] { emit("audioSetupChanged", audio.getSetup()); };
     audio.emit = [this](const juce::Identifier& id, const juce::var& v) { emit(id, v); };
+    midiControl.emit = [this](const juce::String& id, const juce::var& v) { emit(juce::Identifier(id), v); };
+    audio.setEchoGuard(&midiControl.echo);
     band.serveFile = [](const juce::String& path, juce::MemoryBlock& out, juce::String& mime) {
         auto r = WebUi::serve(path);
         if (! r) return false;
@@ -127,6 +129,7 @@ juce::String Bridge::diagnostics()
           + ", underruns " + st["underruns"].toString() + ", worst callback " + num(st["callbackMaxMs"], 2) + " ms of " + num(st["budgetMs"], 2) + " ms, CPU " + num((double) st["cpu"] * 100.0, 1) + "%"
           + ", MIDI sent " + st["midiSent"].toString() + ", dropped " + st["midiDropped"].toString() + ", latest " + num(st["midiLateMaxMs"], 2) + " ms");
     t.add("Startup: " + applog::startupSummary());
+    t.add("MIDI in: " + (midiControl.inputs().isEmpty() ? juce::String("no inputs") : midiControl.inputs().joinIntoString(", ")) + ", " + juce::String(midiControl.mappings().size()) + " mappings" + (midiActCount ? ", " + juce::String(midiActCount) + " pedal actions, slowest " + juce::String(midiActMax, 1) + " ms" : juce::String()));
     t.add("Kokoro voices: " + kokoro::stateName(kokoro::status().state) + "; voice picker: " + cues.voiceListInfo());
     t.add("");
     t.add("Log (last 200 lines of " + applog::current().getFullPathName() + "):");
@@ -145,7 +148,7 @@ void Bridge::syncShow() { cues.setShowFolder(session.file() == juce::File() ? ju
 
 Bridge::~Bridge() {
     exportCancel->store(true);
-    if (exporter.joinable()) exporter.join(); band.stop(); kokoro::setListener(nullptr); *alive = nullptr; audio.onSetupChanged = nullptr; audio.emit = nullptr; audio.cueAudio = nullptr; media.emit = nullptr; }
+    if (exporter.joinable()) exporter.join(); band.stop(); midiControl.emit = nullptr; audio.setEchoGuard(nullptr); kokoro::setListener(nullptr); *alive = nullptr; audio.onSetupChanged = nullptr; audio.emit = nullptr; audio.cueAudio = nullptr; media.emit = nullptr; }
 
 Bridge::Options Bridge::add(Options o, const char* name, Fn fn)
 {
@@ -530,6 +533,32 @@ Bridge::Options Bridge::addTo(Options o)
                 if (tmpCues.isDirectory()) (*alive_)->cues.mergeStore(tmpCues, finish); else finish();
             });
         }).detach();
+    });
+    // ---- 7c: footswitches / MIDI controllers (MidiControl.h) ----
+    o = add(o, "midiMappings", [this](const juce::var&) { juce::Array<juce::var> ins; for (auto& n : midiControl.inputs()) ins.add(n); auto* r = new juce::DynamicObject(); r->setProperty("list", midiControl.mappings()); r->setProperty("inputs", ins); return juce::var(r); });
+    o = add(o, "setMidiMappings", [this](const juce::var& a) { midiControl.setMappings(a["list"]); auto* r = new juce::DynamicObject(); r->setProperty("ok", true); return juce::var(r); });
+    o = add(o, "midiLearn", [this](const juce::var& a) { midiControl.learn((bool) a["on"]); return juce::var(true); });
+    o = add(o, "midiInject", [this](const juce::var& a) { midiControl.inject(a["port"].toString(), a["bytes"]); return juce::var(true); }); // tests: as if a pedal sent it
+    // the page ran a pedal's action: how long since the message arrived (logged; Copy diagnostics shows the worst)
+    o = add(o, "midiActed", [this](const juce::var& a) {
+        const double ms = juce::Time::getMillisecondCounterHiRes() - (double) a["t0"];
+        midiActMax = juce::jmax(midiActMax, ms); ++midiActCount;
+        if (midiActCount <= 20 || ms > 20) applog::line("MIDI in -> " + a["action"].toString() + " in " + juce::String(ms, 2) + " ms");
+        return juce::var(ms);
+    });
+    o = addAsync(o, "exportMappings", [this](const juce::var& a, auto done) {
+        const auto text = a["text"].toString();
+        packChooser = std::make_unique<juce::FileChooser>("Export MIDI mappings", juce::File::getSpecialLocation(juce::File::userDesktopDirectory).getChildFile("set.Line controls.json"), "*.json");
+        packChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting, [text, done](const juce::FileChooser& fc) {
+            auto* r = new juce::DynamicObject(); const auto f = fc.getResult();
+            if (f == juce::File()) r->setProperty("cancelled", true); else if (f.replaceWithText(text)) r->setProperty("path", f.getFullPathName()); else r->setProperty("error", "Couldn't save " + f.getFileName());
+            done(juce::var(r)); });
+    });
+    o = addAsync(o, "importMappings", [this](const juce::var& a, auto done) {
+        auto read = [done](const juce::File& f) { auto* r = new juce::DynamicObject(); if (f == juce::File()) r->setProperty("cancelled", true); else r->setProperty("text", f.loadFileAsString()); done(juce::var(r)); };
+        if (a["path"].toString().isNotEmpty()) { read(juce::File(a["path"].toString())); return; }
+        packChooser = std::make_unique<juce::FileChooser>("Import MIDI mappings", juce::File::getSpecialLocation(juce::File::userDesktopDirectory), "*.json");
+        packChooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [read](const juce::FileChooser& fc) { read(fc.getResult()); });
     });
     // ---- 7b: Ableton Live projects (read only; the project and its files are never changed) ----
     // {path ('' = choose), mode, ports} -> the songs found (AbletonImport.h) | {cancelled} | {error}
