@@ -233,7 +233,7 @@ struct Clip {
     std::vector<std::pair<double, double>> warp; // (beatTime, secTime)
     double gain = 1, fadeIn = 0, fadeOut = 0;
     int pitch = 0;
-    juce::File file; juce::String fileName;
+    juce::File file; juce::String fileName, name;
     // MIDI
     struct Note { double t, d; int key, vel; };
     std::vector<Note> notes;
@@ -257,7 +257,10 @@ struct Track {
     juce::String name, kind; int id = -1, group = -1, color = -1;
     double gainDb = 0; bool mute = false;
     std::vector<Clip> clips;
-    juce::String midiOut; int midiCh = 1;
+    juce::String midiOut; int midiCh = 1; bool noOut = false;
+    juce::String audioOut;          // Live's audio output target ("AudioOut/None" = Sends Only, "AudioOut/Track.103/TrackIn"...)
+    std::vector<double> sends;      // send levels (linear, 1 = 0 dB), one per return track in order
+    bool hasNotes = false;
     std::map<int, int> ccTarget; // automation target id -> CC number
     juce::StringArray devices;
 };
@@ -267,7 +270,10 @@ struct Project {
     TempoCurve tempo; std::vector<Meter> meters;
     struct Loc { double beat; juce::String name; };
     std::vector<Loc> locators;
+    std::vector<Loc> sectionClips; juce::String sectionsTrack; // AbleSet's Sections track (ableset.com/docs/sections-track)
     std::vector<Track> tracks;
+    juce::StringArray returns;      // return track names, in send order
+    std::set<int> recordTargets;    // tracks other tracks route into ("Track In"): resampling / practice-mix recordings
     juce::StringArray ignored, warnings, missing;
     double endBeat = 0;
 };
@@ -290,6 +296,7 @@ juce::StringArray deviceNames(const Xml* chain)
 
 void readClipCommon(const Xml* c, Clip& k)
 {
+    k.name = val(c, { "Name" });
     k.start = num(c, { "CurrentStart" }, c->getDoubleAttribute("Time"));
     k.end = num(c, { "CurrentEnd" }, k.start);
     k.loopStart = num(c, { "Loop", "LoopStart" });
@@ -341,7 +348,11 @@ Project readProject(const Xml& root, const juce::File& als, const Options& opts)
             T.gainDb = vol > 1e-6 ? 20.0 * std::log10(vol) : -96.0;
             T.mute = ! flag(t, { "DeviceChain", "Mixer", "Speaker", "Manual" }, true);
             for (auto& d : deviceNames(kid(t, "DeviceChain"))) T.devices.addIfNotAlreadyThere(d);
-            if (tag == "ReturnTrack") { for (auto& d : T.devices) P.ignored.addIfNotAlreadyThere(d + " (return " + T.name + ")"); P.ignored.addIfNotAlreadyThere("Return track " + T.name); continue; }
+            T.audioOut = val(t, { "DeviceChain", "AudioOutputRouting", "Target" });
+            if (T.audioOut.startsWith("AudioOut/Track.") && T.audioOut.endsWith("/TrackIn"))
+                P.recordTargets.insert(T.audioOut.fromFirstOccurrenceOf("Track.", false, false).upToFirstOccurrenceOf("/", false, false).getIntValue());
+            each(path(t, { "DeviceChain", "Mixer", "Sends" }), "TrackSendHolder", [&](const Xml* h) { T.sends.push_back(num(h, { "Send", "Manual" }, 0)); });
+            if (tag == "ReturnTrack") { P.returns.add(T.name); for (auto& d : T.devices) P.ignored.addIfNotAlreadyThere(d + " (return " + T.name + ")"); P.ignored.addIfNotAlreadyThere("Return track " + T.name); continue; }
             if (tag == "GroupTrack") { T.kind = "group"; P.tracks.push_back(T); continue; }
             if (tag == "AudioTrack") {
                 T.kind = "audio";
@@ -359,6 +370,20 @@ Project readProject(const Xml& root, const juce::File& als, const Options& opts)
                 });
             } else if (tag == "MidiTrack") {
                 T.kind = "midi";
+                // AbleSet's Sections track: a MIDI track named "Sections" (or flagged +SECTIONS; the first one counts),
+                // an empty clip where each section starts. Also "Section". It isn't imported as a track.
+                {
+                    juce::StringArray tf; const auto bare = stripLocator(T.name, &tf).trim();
+                    if (P.sectionsTrack.isEmpty() && (tf.contains("SECTIONS") || bare.equalsIgnoreCase("Sections") || bare.equalsIgnoreCase("Section"))) {
+                        each(path(t, { "DeviceChain", "MainSequencer", "ClipTimeable", "ArrangerAutomation", "Events" }), "MidiClip", [&](const Xml* c) {
+                            Clip k; readClipCommon(c, k);
+                            if (! k.disabled) P.sectionClips.push_back({ k.start, k.name });
+                        });
+                        std::stable_sort(P.sectionClips.begin(), P.sectionClips.end(), [](auto& a, auto& b) { return a.beat < b.beat; });
+                        P.sectionsTrack = T.name;
+                        continue;
+                    }
+                }
                 // CC automation targets: MidiControllers/ControllerTargets.N (N: 0 pitch bend, 1 pressure, 2.. = CC 0..)
                 if (auto* mc = path(t, { "DeviceChain", "MainSequencer", "MidiControllers" }))
                     for (auto* x : mc->getChildIterator())
@@ -369,6 +394,7 @@ Project readProject(const Xml& root, const juce::File& als, const Options& opts)
                 auto* rt = path(t, { "DeviceChain", "MidiOutputRouting" });
                 const auto target = val(rt, { "Target" }), upper = val(rt, { "UpperDisplayString" }), lower = val(rt, { "LowerDisplayString" });
                 if (! target.containsIgnoreCase("None") && upper.isNotEmpty() && ! upper.equalsIgnoreCase("No Output")) T.midiOut = upper;
+                T.noOut = target.containsIgnoreCase("None") || upper.equalsIgnoreCase("None") || upper.equalsIgnoreCase("No Output");
                 if (lower.containsIgnoreCase("Ch.")) T.midiCh = juce::jlimit(1, 16, lower.fromFirstOccurrenceOf("Ch.", false, true).trim().getIntValue());
                 each(path(t, { "DeviceChain", "MainSequencer", "ClipTimeable", "ArrangerAutomation", "Events" }), "MidiClip", [&](const Xml* c) {
                     Clip k; readClipCommon(c, k); k.warped = true;
@@ -388,8 +414,11 @@ Project readProject(const Xml& root, const juce::File& als, const Options& opts)
                         each(path(env, { "Automation", "Events" }), "FloatEvent", [&](const Xml* e) { cc.pts.push_back({ e->getDoubleAttribute("Time"), e->getDoubleAttribute("Value") }); });
                         if (! cc.pts.empty()) k.ccs.push_back(cc);
                     });
+                    T.hasNotes = T.hasNotes || ! k.notes.empty();
                     T.clips.push_back(k);
                 });
+                if (T.noOut && ! T.devices.isEmpty() && T.hasNotes)
+                    P.warnings.addIfNotAlreadyThere("MIDI track \"" + T.name + "\" plays " + T.devices.joinIntoString(", ") + " inside Live, not a MIDI port: not imported (set.Line makes its own click and cues; bounce it to audio if you need it).");
             } else continue;
             for (auto& k : T.clips) P.endBeat = std::max(P.endBeat, k.end);
             for (auto& d : T.devices) P.ignored.addIfNotAlreadyThere(d + " (" + T.name + ")");
@@ -414,7 +443,7 @@ Grid gridFor(const Project& P, double b0, double b1, juce::StringArray& warn)
     Grid g;
     double cur = b0;
     auto meterAt = [&](double b) { Meter m = P.meters.empty() ? Meter { 0, 4, 4 } : P.meters[0]; for (auto& x : P.meters) if (x.beat <= b + 1e-9) m = x; return m; };
-    for (int guard = 0; cur < b1 - 1e-9 && guard < 20000; ++guard) {
+    for (int guard = 0; cur < b1 - 1e-3 && guard < 20000; ++guard) { // (an end a hair past a bar line ends on it)
         const auto m = meterAt(cur);
         double q = m.num * 4.0 / m.den;
         int num = m.num, den = m.den;
@@ -483,6 +512,22 @@ juce::var makeSong(const Project& P, const SongSpec& sp, const Options& opts)
         if (t.kind == "group") continue;
         double gain = t.gainDb; bool mute = t.mute;
         const auto name = prefix(t, gain, mute);
+        juce::String bus, busNote;
+        if (t.kind == "audio" && t.audioOut == "AudioOut/None") { // "Sends Only": it reaches the outputs through a return track
+            gain = t.gainDb; mute = t.mute;                       // (its group's fader and mute don't apply)
+            const double off = 0.001; // Live stores a send at -inf as 0.000316 (-70 dB)
+            int best = -1; for (int i = 0; i < (int) t.sends.size(); ++i) if (t.sends[(size_t) i] > off && (best < 0 || t.sends[(size_t) i] > t.sends[(size_t) best])) best = i;
+            if (best >= 0) {
+                gain += 20.0 * std::log10(t.sends[(size_t) best]);
+                bus = best < P.returns.size() ? P.returns[best] : "Return " + juce::String(best + 1);
+                int n = 0; for (auto v : t.sends) n += v > off;
+                if (n > 1) busNote = ("\"" + name + "\" goes to several return tracks in Live; set.Line uses the loudest (" + bus + ").");
+            } else mute = true;
+        }
+        if (t.kind == "audio" && P.recordTargets.count(t.id)) {
+            mute = true;
+            busNote = ("\"" + name + "\" records other tracks in Live (they route into it); imported muted so it doesn't double them.");
+        }
         if (t.kind == "audio") {
             // clips by file (a set.Line track plays one file): "Vox", "Vox (2)" when a track uses several
             std::vector<juce::String> order; std::map<juce::String, juce::Array<juce::var>> byFile; std::map<juce::String, const Clip*> firstOf;
@@ -527,8 +572,9 @@ juce::var makeSong(const Project& P, const SongSpec& sp, const Options& opts)
                     s.b = std::min(s.b, sp.b1);
                     if (s.b <= s.a + 1e-9) continue;
                     const double st = secOf(s.a), en = secOf(s.b);
-                    const double fi = i == 0 && s.a == std::max(k.start, sp.b0) ? std::max(0.0, secOf(s.a + k.fadeIn) - st) : 0.0;
-                    const double fo = i + 1 == segs.size() ? std::max(0.0, en - secOf(s.b - k.fadeOut)) : 0.0;
+                    // fade lengths are in clip time, like everything else in a clip: beats if warped, seconds if not
+                    const double fi = i == 0 && s.a == std::max(k.start, sp.b0) ? (k.warped ? std::max(0.0, secOf(s.a + k.fadeIn) - st) : k.fadeIn) : 0.0;
+                    const double fo = i + 1 == segs.size() ? (k.warped ? std::max(0.0, en - secOf(s.b - k.fadeOut)) : k.fadeOut) : 0.0;
                     auto c = obj({ { "start", st }, { "end", en }, { "off", std::max(0.0, k.sampleSec(ct)) }, { "gain", k.gain > 1e-6 ? 20.0 * std::log10(k.gain) : -96.0 }, { "fi", fi }, { "fo", fo } });
                     if (k.disabled) c.getDynamicObject()->setProperty("mute", true);
                     byFile[key].add(c);
@@ -539,7 +585,8 @@ juce::var makeSong(const Project& P, const SongSpec& sp, const Options& opts)
                 const bool found = k->file.existsAsFile();
                 auto tr = obj({ { "name", uniq(i == 0 ? name : name + " (" + juce::String((int) i + 1) + ")") }, { "kind", "audio" }, { "col", colourFor(t.color) }, { "gainDb", gain }, { "mute", mute },
                                 { "file", obj({ { "path", found ? k->file.getFullPathName() : juce::String() }, { "name", k->fileName }, { "found", found }, { "bytes", found ? (double) k->file.getSize() : 0.0 } }) },
-                                { "clips", byFile[key] }, { "stretched", stretched[key] }, { "source", t.name } });
+                                { "clips", byFile[key] }, { "stretched", stretched[key] }, { "source", t.name }, { "bus", bus } });
+                if (busNote.isNotEmpty()) warn.addIfNotAlreadyThere(busNote);
                 if (stretched[key]) warn.addIfNotAlreadyThere("\"" + name + "\": a clip was time-stretched in Ableton. Bounce/export it at the song's tempo and replace the file.");
                 if (! found) warn.addIfNotAlreadyThere("\"" + name + "\": " + k->fileName + " is missing.");
                 tracks.add(tr); ++nAudio;
@@ -583,7 +630,8 @@ juce::var makeSong(const Project& P, const SongSpec& sp, const Options& opts)
                     }
                 }
             }
-            if (! any) continue;
+            if (! any || evs.isEmpty()) continue; // empty clips only (markers, e.g. a SONG track): nothing to send
+            if (t.noOut && ! t.devices.isEmpty()) continue; // notes for an instrument inside Live (a project-level note says so)
             juce::String port;
             if (t.midiOut.isNotEmpty())
                 for (auto& p : opts.midiPorts) if (p.containsIgnoreCase(t.midiOut) || t.midiOut.containsIgnoreCase(p) || p.removeCharacters(" ()").containsIgnoreCase(t.midiOut.removeCharacters(" ()"))) { port = p; break; }
@@ -603,6 +651,7 @@ std::vector<SongSpec> splitSongs(const Project& P, juce::String mode, juce::Stri
     std::vector<SongSpec> out;
     const double end = std::max(P.endBeat, 1.0);
     auto isAbleSet = [&] {
+        if (P.sectionsTrack.isNotEmpty()) return true;
         for (auto& l : P.locators) {
             const auto n = l.name.trim(), u = stripLocator(n).toUpperCase();
             if (n.startsWithChar('>') || u == "STOP" || u == "AUTOSTOP" || u == "SONG END") return true;
@@ -641,7 +690,8 @@ std::vector<SongSpec> splitSongs(const Project& P, juce::String mode, juce::Stri
     bool open = false;
     for (auto& l : P.locators) {
         const auto raw = l.name.trim();
-        if (raw.isEmpty() || raw.startsWithChar('*') || raw.startsWithChar('[')) continue;
+        if (raw.isEmpty()) { if (open) { out.back().b1 = l.beat; open = false; } continue; } // an unnamed locator: the end of a song
+        if (raw.startsWithChar('*') || raw.startsWithChar('[')) continue;
         juce::StringArray f; bool nosong = false;
         if (raw.startsWithChar('>')) {
             if (! open) continue;
@@ -656,6 +706,16 @@ std::vector<SongSpec> splitSongs(const Project& P, juce::String mode, juce::Stri
         if (nosong || n.isEmpty()) { open = false; continue; }
         out.push_back({ n, l.beat, end, {} }); open = true;
     }
+    // sections from the Sections track's clips, in the song they start in; a locator at the same place wins
+    for (auto& c : P.sectionClips)
+        for (auto& s : out)
+            if (c.beat >= s.b0 - 1e-6 && c.beat < s.b1 - 1e-6) {
+                bool taken = false; for (auto& x : s.secs) taken |= std::abs(x.beat - c.beat) < 1e-3;
+                juce::StringArray f; const auto n = stripLocator(c.name.trim(), &f);
+                if (! taken) s.secs.push_back({ c.beat, n.isNotEmpty() ? n : juce::String("Section"), f.contains("LOOP") || f.contains("LOOPFULL") });
+                break;
+            }
+    for (auto& s : out) std::stable_sort(s.secs.begin(), s.secs.end(), [](auto& a, auto& b) { return a.beat < b.beat; });
     return out;
 }
 

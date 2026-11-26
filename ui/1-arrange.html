@@ -3117,6 +3117,7 @@ $('mAdd').onclick=()=>{ const name=$('mName').value.trim(); if(!name){ $('mName'
 // The app reads the .als (AbletonImport.h): songs with their tempo maps, sections, audio tracks (clips by file) and
 // MIDI tracks. Here: the songs as set.Line songs (outputs by the 6d rule), the preview dialog, adding them.
 const ABLE_MODES=[['auto','Automatic'],['ableset','AbleSet locators'],['single','One song'],['each','Every locator is a song'],['plus','Song locators start with +']];
+const ABLE_BUS={}; // Live return track name -> the set.Line output its tracks got
 function ableSong(src){ const id=freshSongId(), so={id,name:src.name,key:'—',col:nextSongCol(),trans:'stop',tmap:src.tmap.map(x=>({bar:x.bar,bpm:x.bpm,sig:[...x.sig]})),
     secs:(src.secs||[]).map(x=>({id:sid++,name:x.name,type:x.type,start:x.start,bars:x.bars,end:x.end||'continue',say:'',notes:{},tile:true})),tracks:[],audio:Math.max(1,src.seconds),added:Date.now(),files:{},clips:{},gain:{},mute:{},tcol:{},midiCfg:{},midi:{},from:'ableton'};
   const rows=[];
@@ -3126,8 +3127,12 @@ function ableSong(src){ const id=freshSongId(), so={id,name:src.name,key:'—',c
       if(Math.abs(t.gainDb||0)>0.01) so.gain[name]=Math.max(-60,+(+t.gainDb).toFixed(2)); }
     else { so.midiCfg[name]={port:t.midi.port||'',ch:t.midi.ch||1,early:'0'}; so.midi[name]=(t.midi.events||[]).map(e=>({id:evId++,...e})); }
     rows.push({t,name}); });
-  normSecs(so); buildBars(so); ensureOuts(so);
-  return {so,rows:rows.map(({t,name})=>({name,kind:t.kind,out:t.kind==='audio'?outLabel(so.outs[name]):(t.midi.port?`${t.midi.port} · Ch ${t.midi.ch}`:'No MIDI port'),stretched:!!t.stretched,missing:t.kind==='audio'&&!(t.file&&t.file.found),file:t.file}))}; }
+  normSecs(so); buildBars(so);
+  // tracks that reach Live's outputs through the same return track (bus) share an output, across the whole import
+  so.outs={}; rows.forEach(({t,name})=>{ if(t.kind!=='audio'||!t.bus) return;
+    if(ABLE_BUS[t.bus]) so.outs[name]=[...ABLE_BUS[t.bus]]; else { so.outs[name]=defaultOuts(so,name); ABLE_BUS[t.bus]=[...so.outs[name]]; } });
+  ensureOuts(so);
+  return {so,rows:rows.map(({t,name})=>({name,kind:t.kind,out:t.kind==='audio'?outLabel(so.outs[name])+(t.bus?` · Live: ${t.bus}`:''):(t.midi.port?`${t.midi.port} · Ch ${t.midi.ch}`:'No MIDI port'),stretched:!!t.stretched,missing:t.kind==='audio'&&!(t.file&&t.file.found),file:t.file}))}; }
 function ableDups(src,hashes){ const hs=(src.tracks||[]).filter(t=>t.file&&t.file.found&&hashes[t.file.path]).map(t=>hashes[t.file.path]);
   return songs.find(s=>s.name.trim().toLowerCase()===String(src.name).trim().toLowerCase()&&Object.values(s.files||{}).some(f=>f&&f.path&&hs.some(h=>String(f.path).includes(h))))||null; }
 // The preview: songs found (tick to import), each expandable (tracks, outputs, warnings), duplicates, missing samples

@@ -19,22 +19,25 @@ songs), `ui/src/pages/arrange.ts` (`importAbleton`). Test: `set.Line --ableton-t
 | Group tracks | Flattened: "Vox / BGV 1". The group's volume and mute carry down. |
 | Warped clips | Imported when they play at their own speed (the warp markers match the arrangement tempo). One that would need stretching (or transposing) still comes in, flagged: *"This clip was time-stretched in Ableton. Bounce/export it at the song's tempo and replace the file."* |
 | MIDI tracks, arrangement clips | Notes (with length and velocity), the clip's Bank (MSB / LSB) + Program Change at the clip's start, CC envelopes in clips (each point, and 16ths along a ramp). |
-| A MIDI track's output | The set.Line MIDI port with the same name; none: unassigned, with a note. |
+| A MIDI track's output | The set.Line MIDI port with the same name; none: unassigned, with a note. A MIDI track whose output is *None* and that plays an instrument inside Live (a Simpler click or cue samples) isn't imported, with a note; a MIDI track with only empty clips (a SONG marker track) isn't either. |
 | Samples | Copied into the Library by content (the same file twice is stored once). Found at their path, relative to the project, or by name in the project folder, its parents (2 levels) and the folders beside it; still missing: **Locate…** searches a folder you pick. |
 
 **Not imported** (listed in the preview): devices, plug-ins, return and master effects, automation other than tempo,
 meter and clip CCs, Session View clips, video. set.Line is playback only.
 
-Assumptions to check with a real project: Live stores clip fade lengths in beats (read as beats); a MIDI clip's
-Program / Bank values are stored 0-based (sent as stored); MIDI controller envelopes map `ControllerTargets.N` to CC
-N − 2 (0 is pitch bend, 1 channel pressure).
+Clip fade lengths are in the clip's own time, like its start and loop points: beats for a warped clip, seconds for an
+unwarped one (checked against a real Live 12.4 project: Live's 4 ms clip-edge fade is stored as 0.004 on unwarped
+clips at every tempo).
+
+Still to check with a real project that uses them: a MIDI clip's Program / Bank values are stored 0-based (sent as
+stored); MIDI controller envelopes map `ControllerTargets.N` to CC N − 2 (0 is pitch bend, 1 channel pressure).
 
 ## Songs from a project
 
 **Songs from** in the preview:
 
-- **Automatic**: AbleSet's notation when the project uses it (any `>` section locator or a `STOP` / `SONG END`),
-  otherwise one song.
+- **Automatic**: AbleSet's notation when the project uses it (any `>` section locator, a `STOP` / `SONG END`, or a
+  Sections track), otherwise one song.
 - **AbleSet locators** (below).
 - **One song**: the project's name is the song's name; every locator is a section.
 - **Every locator is a song**.
@@ -62,8 +65,12 @@ From AbleSet's documentation, [Locator notation](https://ableset.com/docs/locato
 - Not part of the name: `{descriptions}`, `#tags`, `[3:20]`-style attributes and `+FLAGS`. `+LOOP` / `+LOOPFULL` on
   a section makes it a **Loop until released** section in set.Line. Other flags (`+PAUSE`, `+SKIP`, `+END`, `+JUMP`,
   `+STAY`) have no set.Line equivalent and are dropped.
-- Sections defined on a "Sections track" (MIDI clips, AbleSet's `+SECTIONS` track flag) are not read yet; use
-  section locators.
+- An unnamed locator ends the song before it (set.Line's choice: AbleSet doesn't document it; band sets use them to
+  mark where a song stops before the gap to the next one).
+- [Sections track](https://ableset.com/docs/sections-track): a MIDI track named `Sections` (set.Line also takes
+  `Section`) or with the `+SECTIONS` flag in its name; the first one counts. Each clip on it starts a section named
+  after the clip (locator notation and flags such as `+LOOP` work); its length doesn't matter. A section locator at
+  the same place wins over the clip. The track itself isn't imported.
 
 ## Duplicates
 

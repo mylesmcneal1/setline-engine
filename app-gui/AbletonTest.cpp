@@ -126,7 +126,7 @@ juce::StringArray selfTest(const juce::File& dir)
         juce::String t;
         t += "<GroupTrack Id=\"50\">" + V("TrackGroupId", "-1") + "<Name>" + V("EffectiveName", "Vox") + V("UserName", "Vox") + "</Name>" + V("Color", "8") + "<DeviceChain><Mixer><Volume>" + V("Manual", 1.0) + "</Volume><Speaker>" + V("Manual", "true") + "</Speaker></Mixer></DeviceChain></GroupTrack>";
         t += audioTrack(1, "Drums", 0, 0.5, { { 4, 20, 0.5, 0, 0, false, false, {}, 0.5, 1, 2, "Samples/Imported/drums.wav", "C:/nowhere/drums.wav", "drums" } });
-        t += audioTrack(2, "Pad", 6, 1.0, { { 0, 8, 0, 0, 0, false, true, { { 0, 0 }, { 8, 4 } }, 1, 0, 0, "Samples/Imported/pad.wav", "", "pad" } });
+        t += audioTrack(2, "Pad", 6, 1.0, { { 0, 8, 0, 0, 0, false, true, { { 0, 0 }, { 8, 4 } }, 1, 1, 0.5, "Samples/Imported/pad.wav", "", "pad" } });
         t += audioTrack(3, "Stretchy", 6, 1.0, { { 0, 8, 0, 0, 0, false, true, { { 0, 0 }, { 8, 5 } }, 1, 0, 0, "Samples/Recorded/stretchy.wav", "", "stretchy" } });
         t += audioTrack(4, "Lead", 12, 1.0, { { 16, 24, 0, 0, 0, false, false, {}, 1, 0, 0, "Samples/Imported/vox.wav", "", "vox" } });
         t += audioTrack(8, "Bass", 1, 1.0, { { 0, 78, 0, 0, 0, false, false, {}, 1, 0, 0, "Samples/Imported/drums.wav", "", "bass" } });
@@ -168,8 +168,10 @@ juce::StringArray selfTest(const juce::File& dir)
           "A: locators -> sections (Intro 1+4, Verse 1 5+4, Chorus 9+8, Weird Part (Other) 17+2, Outro 19+2): " + juce::JSON::toString(secs, true).substring(0, 300));
     const auto dr = findTrack(a, "Drums"), dc = dr["clips"][0];
     check(dr.isObject() && dr["file"]["found"] && near((double) dc["start"], 2.0) && near((double) dc["end"], 8.0 + 4 * 0.6) && near((double) dc["off"], 0.5) && near((double) dc["gain"], 20 * std::log10(0.5), 1e-4)
-              && near((double) dc["fi"], 0.5) && near((double) dc["fo"], 1.2) && near((double) dr["gainDb"], 20 * std::log10(0.5), 1e-4),
-          "A: audio clip with an offset, gain and fades (2.0-10.4 s, from 0.5 s in, -6 dB, fades 0.5 / 1.2 s); the track volume as a trim: " + juce::JSON::toString(dc, true));
+              && near((double) dc["fi"], 1.0) && near((double) dc["fo"], 2.0) && near((double) dr["gainDb"], 20 * std::log10(0.5), 1e-4),
+          "A: audio clip with an offset, gain and fades (2.0-10.4 s, from 0.5 s in, -6 dB; unwarped, so its fades are seconds: 1 / 2 s); the track volume as a trim: " + juce::JSON::toString(dc, true));
+    const auto pdc = findTrack(a, "Pad")["clips"][0];
+    check(near((double) pdc["fi"], 0.5) && near((double) pdc["fo"], 0.25), "A: a warped clip's fades are beats (1 / 0.5 beat at 120 = 0.5 / 0.25 s): " + juce::JSON::toString(pdc, true));
     check(! (bool) findTrack(a, "Pad")["stretched"] && (bool) findTrack(a, "Stretchy")["stretched"], "A: a warped clip at ratio 1 comes in; one that would need stretching is flagged");
     bool flagged = false; if (auto* w = a["warnings"].getArray()) for (auto& x : *w) flagged |= x.toString().contains("Stretchy") && x.toString().contains("Bounce/export");
     check(flagged, "A: the stretched clip is in the warnings: \"Bounce/export it at the song's tempo and replace the file\"");
@@ -213,6 +215,60 @@ juce::StringArray selfTest(const juce::File& dir)
           "B: Song Three in 6/8 at 150 from its own bar 1, ends at SONG END");
     const auto ck = findTrack(bs[1], "Click")["clips"][0];
     check(near((double) ck["start"], 0) && near((double) ck["off"], 8.0) && near((double) ck["end"], 8.0), "B: each song's audio from its own start (Song Two's click from 8 s into the file)");
+
+    // ---- C: a whole set laid out with a SONG marker track, a SECTION track (AbleSet's Sections track), unnamed
+    // locators where songs end, and click / cue samples played by Simpler inside Live
+    const auto projC = dir.getChildFile("Clip Set Project");
+    wav(projC.getChildFile("Samples/Imported/bt.wav"), 40);
+    {
+        auto markerClip = [](int id, double a, double b, const juce::String& name) {
+            return "<MidiClip Id=\"" + juce::String(id) + "\" Time=\"" + juce::String(a) + "\">" + V("CurrentStart", a) + V("CurrentEnd", b)
+                   + "<Loop>" + V("LoopStart", 0.0) + V("LoopEnd", b - a) + V("StartRelative", 0.0) + V("LoopOn", "false") + "</Loop>" + V("Name", name) + V("Disabled", "false")
+                   + "<Notes><KeyTracks /></Notes>" + V("BankSelectCoarse", "-1") + V("BankSelectFine", "-1") + V("ProgramChange", "-1") + "</MidiClip>";
+        };
+        auto midiTrack = [](int id, const juce::String& name, const juce::String& clips, const juce::String& devices) {
+            return "<MidiTrack Id=\"" + juce::String(id) + "\">" + V("TrackGroupId", "-1") + "<Name>" + V("EffectiveName", name) + V("UserName", name) + "</Name>" + V("Color", "2")
+                   + "<DeviceChain><Mixer><Volume>" + V("Manual", 1.0) + "</Volume><Speaker>" + V("Manual", "true") + "</Speaker></Mixer>"
+                   + "<MidiOutputRouting>" + V("Target", "MidiOut/None") + V("UpperDisplayString", "None") + V("LowerDisplayString", "") + "</MidiOutputRouting>"
+                   + "<MainSequencer><ClipTimeable><ArrangerAutomation><Events>" + clips + "</Events></ArrangerAutomation></ClipTimeable></MainSequencer>"
+                   + "<DeviceChain><Devices>" + devices + "</Devices></DeviceChain></DeviceChain></MidiTrack>";
+        };
+        const juce::String clickClip = "<MidiClip Id=\"0\" Time=\"0\">" + V("CurrentStart", 0.0) + V("CurrentEnd", 4.0) + "<Loop>" + V("LoopStart", 0.0) + V("LoopEnd", 4.0) + V("StartRelative", 0.0) + V("LoopOn", "false") + "</Loop>" + V("Name", "click") + V("Disabled", "false")
+                   + "<Notes><KeyTracks><KeyTrack Id=\"0\"><Notes><MidiNoteEvent Time=\"0\" Duration=\"0.25\" Velocity=\"100\" OffVelocity=\"64\" IsEnabled=\"true\" /></Notes>" + V("MidiKey", "60") + "</KeyTrack></KeyTracks></Notes>"
+                   + V("BankSelectCoarse", "-1") + V("BankSelectFine", "-1") + V("ProgramChange", "-1") + "</MidiClip>";
+        juce::String t;
+        t += midiTrack(1, "SONG", markerClip(0, 0, 16, "Alpha") + markerClip(1, 20, 36, "Beta"), "");
+        t += midiTrack(2, "SECTION", markerClip(0, 0, 8, "INTRO") + markerClip(1, 8, 16, "CHORUS +LOOP") + markerClip(2, 20, 28, "VERSE 1") + markerClip(3, 28, 36, "OUTRO"), "");
+        t += midiTrack(3, "CLICK", clickClip, "<OriginalSimpler Id=\"0\" />");
+        // Backtrack: "Sends Only", sent to return A at 0.5 (-6 dB); PRACTICE records the return (it routes into its Track In)
+        t += audioTrack(4, "Backtrack", 5, 1.0, { { 0, 36, 0, 0, 0, false, false, {}, 1, 0.004, 0.004, "Samples/Imported/bt.wav", "", "bt" } })
+                 .replace("<Mixer>", "<AudioOutputRouting>" + V("Target", "AudioOut/None") + "</AudioOutputRouting><Mixer><Sends><TrackSendHolder Id=\"0\"><Send>" + V("Manual", 0.5) + "</Send></TrackSendHolder><TrackSendHolder Id=\"1\"><Send>" + V("Manual", 0.0003162277571) + "</Send></TrackSendHolder></Sends>");
+        t += audioTrack(5, "PRACTICE", 5, 1.0, { { 0, 36, 0, 0, 0, false, false, {}, 1, 0, 0, "Samples/Imported/bt.wav", "", "rec" } });
+        t += "<ReturnTrack Id=\"9\"><Name>" + V("EffectiveName", "A-TRAX") + V("UserName", "TRAX") + "</Name><DeviceChain>" + "<AudioOutputRouting>" + V("Target", "AudioOut/Track.5/TrackIn") + "</AudioOutputRouting>" + "<DeviceChain><Devices /></DeviceChain></DeviceChain></ReturnTrack>";
+        const auto set = "<Tracks>" + t + "</Tracks>" + master(120, {}, { { 0, 4, 4 } })
+                         + locators({ { 0, "Alpha" }, { 16, "" }, { 20, "Beta" }, { 36, "" } });
+        als(projC.getChildFile("Clip Set.als"), set, "Ableton Live 12.4.3");
+    }
+    const auto C = read(projC.getChildFile("Clip Set.als"), {}, err);
+    const auto cs = C["songs"];
+    check(C["mode"].toString() == "ableset" && cs.size() == 2 && cs[0]["name"] == "Alpha" && cs[1]["name"] == "Beta",
+          "C: a SECTION track makes it an AbleSet-style set: 2 songs from the named locators: " + juce::String(cs.size()) + " songs, mode " + C["mode"].toString());
+    check(near((double) cs[0]["seconds"], 8.0) && near((double) cs[1]["seconds"], 8.0), "C: an unnamed locator ends a song (Alpha 16 beats = 8 s, not up to Beta)");
+    auto secNames = [](const juce::var& song) { juce::StringArray n; if (auto* a = song["secs"].getArray()) for (auto& x : *a) n.add(x["name"].toString() + "@" + x["start"].toString() + (x["end"] == "loop" ? "L" : "")); return n.joinIntoString(","); };
+    check(secNames(cs[0]) == "INTRO@1,CHORUS@3L" && secNames(cs[1]) == "VERSE 1@1,OUTRO@3", "C: sections from the SECTION track's clips, flags read (+LOOP): " + secNames(cs[0]) + " | " + secNames(cs[1]));
+    check(! findTrack(cs[0], "SONG").isObject() && ! findTrack(cs[0], "SECTION").isObject() && (int) cs[0]["midiTracks"] == 0,
+          "C: the SONG / SECTION marker tracks and the Simpler click track aren't imported as MIDI tracks");
+    bool simpler = false; if (auto* w = C["warnings"].getArray()) for (auto& x : *w) simpler |= x.toString().contains("CLICK") && x.toString().contains("inside Live");
+    check(simpler, "C: the Simpler click track is named in the warnings (it plays inside Live, not to a MIDI port)");
+    const auto bt = findTrack(cs[0], "Backtrack");
+    check(bt["bus"].toString() == "TRAX" && near((double) bt["gainDb"], 20 * std::log10(0.5), 1e-4) && ! (bool) bt["mute"],
+          "C: a Sends Only track: its return track is its bus (TRAX; a send at -inf doesn't count) and the send level is in its gain (-6 dB): " + bt["bus"].toString() + " " + bt["gainDb"].toString());
+    bool recNote = false; if (auto* w = cs[0]["warnings"].getArray()) for (auto& x : *w) recNote |= x.toString().contains("PRACTICE") && x.toString().contains("records");
+    bool several = false; if (auto* w = cs[0]["warnings"].getArray()) for (auto& x : *w) several |= x.toString().contains("several return");
+    check(! several, "C: no \"several return tracks\" note for a send at -inf");
+    check((bool) findTrack(cs[0], "PRACTICE")["mute"] && recNote, "C: a track the returns record into (a practice mix) comes in muted, with a note");
+    const auto bc = findTrack(cs[1], "Backtrack")["clips"][0];
+    check(near((double) bc["fi"], 0.004) && near((double) bc["off"], 10.0), "C: Live's 4 ms clip-edge fade on an unwarped clip stays 4 ms; Beta's audio from 10 s into the file");
     out.add(ok ? "ABLETON OK" : "ABLETON FAILED");
     return out;
 }
