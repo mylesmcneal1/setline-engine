@@ -13,6 +13,9 @@ struct Options {
     // a song, other locators are sections)
     juce::String mode = "auto";
     juce::StringArray midiPorts; // set.Line's MIDI outputs, to match each MIDI track's output by name
+    // 9a: Sort markers: what each locator becomes, by its key ("<beat>|<name>"; Sections track clips "sec|<beat>"):
+    // "song" | "section" | "marker" | "break" | "ignore". Locators not in it get set.Line's guess.
+    juce::var choices;
 };
 
 // The project as songs: {project, live, mode, songs: [...], ignored: [...], missing: [...], warnings: [...]}.

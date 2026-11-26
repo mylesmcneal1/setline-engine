@@ -458,29 +458,39 @@ void Media::import(const juce::var& arg, Done done)
         for (auto& p : *files) {
             const juce::File src(p.toString());
             juce::String ref = src.getFullPathName();
+            juce::String fresh; // 9a: where a file copied by this import lands (Cancel removes it again)
             if ((bool) arg["hashed"] && folder != juce::File()) {
                 // the Library (6f): stored by content, so the same file imported twice is stored once
                 const auto dst = folder.getChildFile(copyFolder(arg)).getChildFile(contentHash(src) + src.getFileExtension().toLowerCase());
                 const bool there = dst.existsAsFile() && dst.getSize() == src.getSize();
-                if (! there && src != dst) { bool dup = false; for (auto& c : job->copies) dup |= c.dst == dst; if (! dup) job->copies.push_back({ src, dst }); }
+                if (! there && src != dst) { bool dup = false; for (auto& c : job->copies) dup |= c.dst == dst; if (! dup) { job->copies.push_back({ src, dst }); fresh = dst.getFullPathName(); } }
                 ref = makeRef(dst, session);
             } else if (copy && folder != juce::File() && ! src.isAChildOf(folder)) {
                 bool there = false;
                 auto dst = destinationFor(folder.getChildFile(copyFolder(arg)), src, there);
                 // Two picked files can't both claim the same free name.
                 for (auto& c : job->copies) if (c.dst == dst) { there = false; dst = dst.getSiblingFile(dst.getFileNameWithoutExtension() + " (" + juce::String(job->copies.size() + 1) + ")" + dst.getFileExtension()); }
-                if (! there) job->copies.push_back({ src, dst });
+                if (! there) { job->copies.push_back({ src, dst }); fresh = dst.getFullPathName(); }
                 ref = makeRef(dst, session);
             } else if (folder != juce::File()) {
                 ref = makeRef(src, session);
             }
-            results.add(obj({ { "path", src.getFullPathName() }, { "ref", ref } }));
+            results.add(fresh.isNotEmpty() ? obj({ { "path", src.getFullPathName() }, { "ref", ref }, { "copied", fresh } }) : obj({ { "path", src.getFullPathName() }, { "ref", ref } }));
         }
     job->finish = [done, results](const juce::String& error) {
         if (error.isNotEmpty()) done(obj({ { "error", error } }));
         else done(obj({ { "files", results } }));
     };
     runJob(std::move(job));
+}
+
+int Media::removeCopies(const juce::File& session, const juce::StringArray& paths)
+{
+    const auto folder = sessionFolder(session);
+    int n = 0;
+    if (folder == juce::File()) return 0;
+    for (auto& x : paths) { const juce::File f(x); if (f.isAChildOf(folder) && f.existsAsFile() && f.deleteFile()) ++n; }
+    return n;
 }
 
 void Media::collect(const juce::var& arg, Done done)

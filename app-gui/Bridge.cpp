@@ -667,6 +667,7 @@ Bridge::Options Bridge::addTo(Options o)
         ableton::Options opts;
         opts.mode = a["mode"].toString().isNotEmpty() ? a["mode"].toString() : juce::String("auto");
         if (auto* p = a["ports"].getArray()) for (auto& x : *p) opts.midiPorts.add(x.toString());
+        opts.choices = a["choices"]; // 9a: Sort markers
         auto alive_ = alive;
         auto read = [opts, done, alive_](const juce::File& f) {
             if (f == juce::File()) { auto* r = new juce::DynamicObject(); r->setProperty("cancelled", true); done(juce::var(r)); return; }
@@ -1027,6 +1028,10 @@ Bridge::Options Bridge::addRest(Options o)
             preparePeaks(refs, sessionFile);
             done(r);
         });
+    });
+    o = add(o, "removeImported", [this](const juce::var& a) { // 9a: an import cancelled: its fresh copies go again
+        juce::StringArray paths; if (auto* l = a["paths"].getArray()) for (auto& x : *l) paths.add(x.toString());
+        return juce::var(media.removeCopies(juce::File(a["session"].toString()), paths));
     });
     o = addAsync(o, "collectAudio", [this](const juce::var& a, auto done) { media.collect(a, done); });
     o = add(o, "checkAudio", [this](const juce::var& a) {

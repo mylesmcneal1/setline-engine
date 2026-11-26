@@ -40,13 +40,13 @@ void als(const juce::File& f, const juce::String& liveSet, const juce::String& c
 juce::String master(double bpm0, std::vector<std::pair<double, double>> tempo, std::vector<std::tuple<double, int, int>> meters)
 {
     auto ts = [](int n, int d) { int k = 0; while ((1 << k) < d) ++k; return (n - 1) + 99 * k; };
-    juce::String te = "<FloatEvent Id=\"1\" Time=\"-63072000\" Value=\"" + juce::String(bpm0) + "\" />";
+    juce::String te = "<FloatEvent Id=\"1\" Time=\"-63072000\" Value=\"" + juce::String(bpm0, 14) + "\" />";
     int id = 2;
-    for (auto& [b, v] : tempo) te += "<FloatEvent Id=\"" + juce::String(id++) + "\" Time=\"" + juce::String(b) + "\" Value=\"" + juce::String(v, 6) + "\" />";
+    for (auto& [b, v] : tempo) te += "<FloatEvent Id=\"" + juce::String(id++) + "\" Time=\"" + juce::String(b) + "\" Value=\"" + juce::String(v, 14) + "\" />";
     juce::String me;
     for (auto& [b, n, d] : meters) me += "<EnumEvent Id=\"" + juce::String(id++) + "\" Time=\"" + juce::String(b > 0 ? b : -63072000.0) + "\" Value=\"" + juce::String(ts(n, d)) + "\" />";
     return "<MasterTrack><DeviceChain><Mixer>"
-           "<Tempo><Manual Value=\"" + juce::String(bpm0) + "\" /><AutomationTarget Id=\"8\" /></Tempo>"
+           "<Tempo><Manual Value=\"" + juce::String(bpm0, 14) + "\" /><AutomationTarget Id=\"8\" /></Tempo>"
            "<TimeSignature><Manual Value=\"201\" /><AutomationTarget Id=\"9\" /></TimeSignature>"
            "</Mixer><DeviceChain><Devices><Limiter Id=\"0\" /></Devices></DeviceChain></DeviceChain>"
            "<AutomationEnvelopes><Envelopes>"
@@ -350,6 +350,54 @@ juce::StringArray selfTest(const juce::File& dir)
     check(! rackNote, "D: converted tracks aren't listed as \"plays inside Live, not imported\"");
     juce::StringArray prof; if (auto* a = ds["tracks"].getArray()) for (auto& x : *a) if (x["kind"] == "midi") prof.add(x["name"].toString() + "=" + x["profile"].toString());
     check(prof.joinIntoString(",") == "STAGE QC MIDI=qc,AXE FX MIDI=axe", "D (8c): MIDI tracks named like a modeler come in with its profile even when empty; an empty SONG track doesn't: " + prof.joinIntoString(","));
+
+    // ---- E (9a): 4/4 -> 7/8 -> 4/4, float-noise tempos, a tempo + meter step in a song's last bar (the next song's),
+    // utility locators (TERM x3, an unnamed one), a GTR CHANGE between songs, a lighting marker inside a song
+    const auto projE = dir.getChildFile("Sort Project");
+    wav(projE.getChildFile("Samples/Imported/band.wav"), 2);
+    {
+        juce::String t;
+        t += audioTrack(1, "Band", 3, 1.0, { { 0, 43.5, 0, 0, 0, false, false, {}, 1, 0, 0, "Samples/Imported/band.wav", "", "one" },
+                                             { 47.5, 79.5, 0, 0, 0, false, false, {}, 1, 0, 0, "Samples/Imported/band.wav", "", "two" },
+                                             { 83.5, 99.5, 0, 0, 0, false, false, {}, 1, 0, 0, "Samples/Imported/band.wav", "", "three" } });
+        const auto set = "<Tracks>" + t + "</Tracks>"
+                         + master(123.99999999999623, { { 42.5, 123.99999999999623 }, { 42.5, 179.9884490000081 }, { 82.5, 179.9884490000081 }, { 82.5, 100 } }, { { 0, 4, 4 }, { 32, 7, 8 }, { 35.5, 4, 4 }, { 42.5, 3, 4 } })
+                         + locators({ { 0, "ONE" }, { 20, "LIGHTS: BLACKOUT" }, { 43.5, "TERM" }, { 44, "GTR CHANGE" }, { 47.5, "TWO" }, { 79.5, "TERM" },
+                                      { 83.5, "THREE" }, { 99.5, "TERM" }, { 101.5, "" } });
+        als(projE.getChildFile("Sort.als"), set, "Ableton Live 12.4.3");
+    }
+    Options oe; oe.mode = "ableset";
+    const auto E = read(projE.getChildFile("Sort.als"), oe, err);
+    const auto es = E["songs"];
+    juce::StringArray sorted; juce::var gtr, lights, term;
+    if (auto* a = E["locators"].getArray()) for (auto& x : *a) { sorted.add(x["name"].toString() + "=" + x["choice"].toString()); if (x["name"] == "GTR CHANGE") gtr = x; if (x["name"] == "LIGHTS: BLACKOUT") lights = x; if (x["name"] == "TERM" && ! term.isObject()) term = x; }
+    check(sorted.joinIntoString(",") == "ONE=song,LIGHTS: BLACKOUT=marker,TERM=ignore,GTR CHANGE=break,TWO=song,TERM=ignore,THREE=song,TERM=ignore,=ignore",
+          "E (9a): Sort markers guesses: songs, TERM x3 ignored, GTR CHANGE a break, a marker inside a song, the unnamed one ignored: " + sorted.joinIntoString(","));
+    check(term["reason"].toString().contains("repeats 3") && (int) (double) term["bar"] == 12 && gtr["label"] == "Gear change" && gtr["reason"].toString().contains("no audio") && lights["reason"].toString().contains("inside ONE"),
+          "E (9a): the reasons (\"repeats 3x\", \"no audio under it\", \"inside ONE\"), Live's bar number across the 7/8 bar (TERM at bar 12), the break's label");
+    check(es.size() == 3 && es[0]["name"] == "ONE" && es[1]["name"] == "TWO" && es[2]["name"] == "THREE" && E["breaks"].size() == 1 && (int) E["breaks"][0]["after"] == 0 && E["breaks"][0]["label"] == "Gear change",
+          "E (9a): 3 songs; the break sits after ONE: " + juce::String(es.size()) + " songs, " + juce::String(E["breaks"].size()) + " break");
+    check(es[0]["marks"].size() == 1 && es[0]["marks"][0]["name"] == "LIGHTS: BLACKOUT" && (int) es[0]["marks"][0]["bar"] == 6 && near((double) es[0]["marks"][0]["beat"], 1),
+          "E (9a): the lighting locator is a marker on ONE's ruler (bar 6), not a song");
+    const auto t1 = es[0]["tmap"];
+    check(sigAt(t1, 8) == "4/4" && sigAt(t1, 9) == "7/8" && sigAt(t1, 10) == "4/4" && sigAt(t1, 11) == "4/4" && (int) es[0]["total"] == 11 && near(barStart(t1, 10) - barStart(t1, 9), 3.5 * 60 / 124),
+          "E (9a): Live's time signatures come in: 4/4, 7/8 at bar 9, 4/4 at bar 10; the 3/4 change in ONE's last bar is TWO's (no short bar): " + sigAt(t1, 11) + ", " + juce::String((int) es[0]["total"]) + " bars");
+    bool one124 = true; if (auto* a = t1.getArray()) for (auto& x : *a) one124 &= ! x.hasProperty("bpm") || (double) x["bpm"] == 124.0;
+    check(one124 && t1.size() == 3 && es[0]["endMoved"].isObject() && (double) es[0]["endMoved"]["to"] == 124.0,
+          "E (9a): ONE stays at exactly 124 to its end (the step to 179.988 in its last bar moved to TWO): " + juce::JSON::toString(t1, true));
+    check((double) es[1]["tmap"][0]["bpm"] == 179.988 && sigAt(es[1]["tmap"], 1) == "3/4" && ! es[1]["endMoved"].isObject(),
+          "E (9a): TWO starts at 179.988 in 3/4: " + es[1]["tmap"][0]["bpm"].toString());
+    juce::StringArray snaps; for (auto& s : { es[0], es[1], es[2] }) if (auto* a = s["snapped"].getArray()) for (auto& x : *a) snaps.add(juce::String((double) x["from"], 14) + "->" + x["to"].toString());
+    auto hasSnap = [&](const char* from, const char* to) { for (auto& x : snaps) if (x.startsWith(from) && (x.endsWith(juce::String("->") + to) || x.endsWith(juce::String("->") + to + ".0"))) return true; return false; };
+    bool to180 = false; for (auto& x : snaps) to180 |= x.endsWith("->180") || x.endsWith("->180.0");
+    check(hasSnap("123.9999999999", "124") && hasSnap("179.98844", "179.988") && ! to180,
+          "E (9a): float-noise tempos snapped and listed for the report (never to 180): " + snaps.joinIntoString(", "));
+    // the user's choices win: the break ignored, the marker made a song
+    auto* ch = new juce::DynamicObject(); ch->setProperty(juce::Identifier(gtr["key"].toString()), "ignore"); ch->setProperty(juce::Identifier(lights["key"].toString()), "song");
+    oe.choices = juce::var(ch);
+    const auto E2 = read(projE.getChildFile("Sort.als"), oe, err);
+    check(E2["songs"].size() == 4 && E2["songs"][1]["name"] == "LIGHTS: BLACKOUT" && E2["breaks"].size() == 0 && (double) E2["songs"][0]["seconds"] < 10,
+          "E (9a): the choices win (re-read): the marker made a song splits ONE, the break ignored: " + juce::String(E2["songs"].size()) + " songs, " + juce::String(E2["breaks"].size()) + " breaks");
     out.add(ok ? "ABLETON OK" : "ABLETON FAILED");
     return out;
 }

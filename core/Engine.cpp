@@ -99,13 +99,16 @@ std::string Engine::build(Program& P, const SongDef& song, std::vector<std::stri
         if (song.clickHits) {
             clicks = hitsOf(*song.clickHits);
         } else {
-            // Every beat (test song / spike).
+            // Every beat (test song / spike); 9a: in the meter's beat unit, the bar's first beat accented, the start of
+            // each group (7/8 as 2+2+3) at the normal level, the other beats of a grouped meter quieter.
             for (int b = 1; b <= P.tmap.numBars(); ++b) {
                 const auto& bar = P.tmap.bar(b);
+                const bool grouped = bar.grouping.size() > 1;
                 for (int k = 0; k < bar.num; ++k) {
                     const int64_t s = P.tmap.sampleAt(b, k + 1);
                     if (s >= P.songLen) break;
-                    clicks.push_back({ s, k == 0, 1.0f });
+                    const int a = P.tmap.accentOf(b, k);
+                    clicks.push_back({ s, a == 2, grouped && a == 0 ? 0.5f : 1.0f });
                 }
             }
         }

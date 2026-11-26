@@ -8,7 +8,7 @@ namespace setline {
 
 namespace {
 
-struct TempoState { double bpm = 120; int num = 4, den = 4; };
+struct TempoState { double bpm = 120; int num = 4, den = 4; std::vector<int> grouping; };
 
 TempoState stateAt(const std::vector<TempoChange>& sorted, int bar)
 {
@@ -16,7 +16,7 @@ TempoState stateAt(const std::vector<TempoChange>& sorted, int bar)
     for (auto& c : sorted) {
         if (c.bar > bar) break;
         if (c.bpm > 0) s.bpm = c.bpm;
-        if (c.num > 0 && c.den > 0) { s.num = c.num; s.den = c.den; }
+        if (c.num > 0 && c.den > 0) { s.num = c.num; s.den = c.den; s.grouping = c.grouping; }
     }
     return s;
 }
@@ -67,11 +67,11 @@ SongDef applyVersion(const SongDef& src, const VersionDef& vin, double sr, std::
             else if (k > 0 && parts[k - 1].bar >= 1) st = stateAt(tempo, parts[k - 1].bar + parts[k - 1].bars - 1);
             else st = stateAt(tempo, 1);
             if (p.bpm > 0) st.bpm = p.bpm;
-            if (p.num > 0 && p.den > 0) { st.num = p.num; st.den = p.den; }
+            if (p.num > 0 && p.den > 0) { st.num = p.num; st.den = p.den; st.grouping.clear(); }
         }
-        vt.push_back({ vb, st.bpm, st.num, st.den, false });
+        vt.push_back({ vb, st.bpm, st.num, st.den, false, st.grouping });
         if (! extra)
-            for (auto& c : tempo) if (c.bar > p.bar && c.bar < p.bar + p.bars) vt.push_back({ vb + (c.bar - p.bar), c.bpm, c.num, c.den, c.ramp });
+            for (auto& c : tempo) if (c.bar > p.bar && c.bar < p.bar + p.bars) { auto x = c; x.bar = vb + (c.bar - p.bar); vt.push_back(x); }
         VersionLayout::Part lp; lp.srcBar = extra ? 0 : p.bar; lp.verBar = vb; lp.bars = p.bars; lp.extra = extra; lp.tag = p.tag;
         lay.parts.push_back(lp);
         vb += p.bars;

@@ -176,7 +176,7 @@ function frame() {
     const fname = (f: string) => ((show && show.fields) || []).find((x: any) => x.id === f)?.name || "Field";
     switch (w.type) {
       case "song": h = big(song ? song.name : "No song", "", song && song.ver ? song.ver : ""); break;
-      case "bpm": h = bb ? big(`${+bb.bpm.toFixed(1)}`, "BPM", `${bb.num}/${bb.den}`) : big("–", "BPM"); break;
+      case "bpm": h = bb ? big(`${+bb.bpm.toFixed(2)}`, "BPM", `${bb.num}/${bb.den}`) : big("–", "BPM"); break;
       case "next": { const n = st.next, a = show && st.idx >= 0 ? (show.setlist.order[st.idx] || {}).after : null;
         h = big(n ? n.name : "End of set", "Next", n ? [n.vname, a ? (a.mode === "segue" ? "segue" : a.mode === "auto" ? `auto after ${a.sec || 0} s` : "stop") : ""].filter(Boolean).join(" · ") : ""); break; }
       case "timeline": h = song ? `<div class="tl">${song.secs.map((s: any) => { const on = sec && s.t0 === sec.t0, p = on ? (pos - s.t0) / Math.max(0.001, s.t1 - s.t0) : 0; return `<div class="${on ? "on" : ""} ${st.jumpQ === s.id ? "q" : ""}" style="flex:${s.bars}">${on ? `<i style="width:${(p * 100).toFixed(1)}%"></i>` : ""}<span style="position:relative">${esc(s.name)}</span></div>`; }).join("")}</div>` : big("–"); break;

@@ -81,6 +81,17 @@ std::unique_ptr<Xml> loadXml(const juce::File& f, juce::String& error)
 }
 
 // ---------------------------------------------------------------- time: Live beats (quarter notes) -> seconds
+// 9a: a tempo within 0.0005 BPM of a value with at most 3 decimals is that value (123.99999999999623 -> 124,
+// 179.9884490000081 -> 179.988): only float noise goes, never a real tempo
+double snapTempo(double v)
+{
+    for (int d = 0; d <= 3; ++d) {
+        const double k = std::pow(10.0, d), r = std::round(v * k) / k;
+        if (std::abs(v - r) < 0.0005) return r;
+    }
+    return v;
+}
+
 struct TempoCurve {
     struct P { double beat, bpm, sec; };
     std::vector<P> pts; // the tempo at each automation point; linear in BPM between points (Live's ramps)
@@ -122,6 +133,15 @@ struct TempoCurve {
         while (sec(hi) < s) hi *= 2;
         for (int k = 0; k < 80; ++k) { const double m = (lo + hi) / 2; (sec(m) < s ? lo : hi) = m; }
         return (lo + hi) / 2;
+    }
+    double bpmAt(double beat) const
+    {
+        size_t i = 0;
+        while (i + 1 < pts.size() && pts[i + 1].beat <= beat) ++i;
+        const auto& p = pts[i];
+        if (i + 1 >= pts.size() || beat <= p.beat) return p.bpm;
+        const auto& q = pts[i + 1];
+        return p.bpm + (q.bpm - p.bpm) * (beat - p.beat) / (q.beat - p.beat);
     }
     bool ramps() const { for (size_t i = 1; i < pts.size(); ++i) if (pts[i].beat > pts[i - 1].beat && std::abs(pts[i].bpm - pts[i - 1].bpm) > 1e-9) return true; return false; }
 };
@@ -291,6 +311,8 @@ struct Track {
 struct Project {
     juce::String name, live;
     TempoCurve tempo; std::vector<Meter> meters;
+    struct Snap { double beat, from, to; };
+    std::vector<Snap> snaps; // 9a: Live tempo values cleaned of float noise
     struct Loc { double beat; juce::String name; };
     std::vector<Loc> locators;
     std::vector<Loc> sectionClips; juce::String sectionsTrack; // AbleSet's Sections track (ableset.com/docs/sections-track)
@@ -350,7 +372,10 @@ Project readProject(const Xml& root, const juce::File& als, const Options& opts)
         if (target == tempoId) each(evs, "FloatEvent", [&](const Xml* e) { tev.push_back({ e->getDoubleAttribute("Time"), e->getDoubleAttribute("Value") }); });
         if (target == tsTarget) each(evs, "EnumEvent", [&](const Xml* e) { const double t = e->getDoubleAttribute("Time"); auto m = meterFrom(std::max(0.0, t), e->getIntAttribute("Value")); if (t <= 0) mev[0] = m; else mev.push_back(m); });
     });
-    P.tempo.build(tev, bpm0);
+    // 9a: Live's tempo values without float noise (123.99999999999623 -> 124); each change noted for the import report
+    auto clean = [&](double beat, double v) { const double r = snapTempo(v); if (std::abs(r - v) > 1e-12) P.snaps.push_back({ beat, v, r }); return r; };
+    for (auto& e : tev) e.second = clean(std::max(0.0, e.first), e.second);
+    P.tempo.build(tev, clean(0, bpm0));
     std::stable_sort(mev.begin(), mev.end(), [](auto& a, auto& b) { return a.beat < b.beat; });
     for (auto& m : mev) if (P.meters.empty() || m.num != P.meters.back().num || m.den != P.meters.back().den) { if (! P.meters.empty() && std::abs(P.meters.back().beat - m.beat) < 1e-9) P.meters.back() = m; else P.meters.push_back(m); }
     // locators
@@ -503,6 +528,7 @@ Grid gridFor(const Project& P, double b0, double b1, juce::StringArray& warn)
         int num = m.num, den = m.den;
         for (auto& x : P.meters)
             if (x.beat > cur + 1e-9 && x.beat < cur + q - 1e-9) { // a meter change inside the bar: a short bar up to it
+                if (cur + q >= b1 - 1e-3) break; // 9a: ...unless it's the song's last bar: then it's the next song's (Live steps a little early)
                 const double len = x.beat - cur;
                 for (int d : { den, 8, 16, 32 }) if (std::abs(len * d / 4.0 - std::round(len * d / 4.0)) < 1e-6) { den = d; num = (int) std::lround(len * d / 4.0); break; }
                 q = len;
@@ -516,7 +542,9 @@ Grid gridFor(const Project& P, double b0, double b1, juce::StringArray& warn)
     return g;
 }
 
-struct SongSpec { juce::String name; double b0, b1; struct Sec { double beat; juce::String name; bool loop; }; std::vector<Sec> secs; };
+struct SongSpec { juce::String name; double b0, b1; struct Sec { double beat; juce::String name; bool loop; }; std::vector<Sec> secs;
+                  std::vector<Sec> marks; bool nextFollows = false; };
+
 
 juce::var makeSong(const Project& P, const SongSpec& sp, const Options& opts)
 {
@@ -526,17 +554,41 @@ juce::var makeSong(const Project& P, const SongSpec& sp, const Options& opts)
     const double s0 = P.tempo.sec(sp.b0);
     auto secOf = [&](double beat) { return P.tempo.sec(beat) - s0; };
     // tempo map: one BPM per bar, so every bar line is where Live has it (ramps become steps, bar by bar)
-    juce::Array<juce::var> tmap;
+    juce::Array<juce::var> tmap, snapped;
     double lastBpm = -1; std::pair<int, int> lastSig { 0, 0 };
+    // 9a: a tempo change in the last bar, at or before the next song's start, is the next song's: from it on, this
+    // song keeps the tempo it had (the next song starts at the new tempo anyway)
+    double ownUntil = 1e300, ownBpm = 0, endFrom = 0;
+    if (sp.nextFollows && bars > 0) {
+        const auto& last = g.sig[(size_t) bars - 1];
+        const double full = last.first * 4.0 / last.second, from = std::max(sp.b0, sp.b1 - full);
+        for (size_t i = 1; i < P.tempo.pts.size(); ++i) {
+            const auto& pt = P.tempo.pts[i];
+            if (pt.beat > from + 1e-6 && pt.beat <= sp.b1 + 1e-6 && std::abs(pt.bpm - P.tempo.bpmAt(pt.beat - 1e-6)) > 1e-6) { ownUntil = pt.beat; ownBpm = P.tempo.bpmAt(pt.beat - 1e-6); break; }
+        }
+    }
+    double movedFrom = 0, movedTo = 0;
     for (int k = 0; k < bars; ++k) {
         const double q = g.start[(size_t) k + 1] - g.start[(size_t) k], dur = P.tempo.sec(g.start[(size_t) k + 1]) - P.tempo.sec(g.start[(size_t) k]);
-        const double bpm = dur > 0 ? q * 60.0 / dur : 120.0;
+        double raw = dur > 0 ? q * 60.0 / dur : 120.0;
+        if (g.start[(size_t) k + 1] > ownUntil + 1e-6) { if (movedFrom == 0) { movedFrom = raw; endFrom = k + 1; } raw = ownBpm; movedTo = raw; }
+        const double bpm = std::abs(raw - snapTempo(raw)) < 1e-6 ? snapTempo(raw) : raw; // arithmetic noise only (ramp bars keep their exact average)
+        if (bpm != raw && std::abs(bpm - raw) > 1e-13) { bool seen = false; for (auto& y : snapped) seen |= (double) y["to"] == bpm; if (! seen) snapped.add(obj({ { "from", raw }, { "to", bpm } })); }
         if (std::abs(bpm - lastBpm) > 1e-7 || g.sig[(size_t) k] != lastSig) {
             juce::Array<juce::var> sg; sg.add(g.sig[(size_t) k].first); sg.add(g.sig[(size_t) k].second);
             tmap.add(obj({ { "bar", k + 1 }, { "bpm", bpm }, { "sig", sg } }));
             lastBpm = bpm; lastSig = g.sig[(size_t) k];
         }
     }
+    for (auto& x : P.snaps)
+        if (x.beat >= sp.b0 - 1e-6 && x.beat < sp.b1 - 1e-6) {
+            bool seen = false;
+            for (auto& y : snapped) if ((double) y["to"] == x.to) { seen = true; if (auto* o = y.getDynamicObject()) o->setProperty("from", x.from); } // Live's own value wins over a bar's arithmetic
+            if (! seen) snapped.add(obj({ { "from", x.from }, { "to", x.to } }));
+        }
+    juce::var endMoved;
+    if (movedFrom != 0 && std::abs(snapTempo(movedFrom) - snapTempo(movedTo)) > 1e-9)
+        endMoved = obj({ { "bar", endFrom }, { "from", snapTempo(movedFrom) }, { "to", snapTempo(movedTo) }, { "next", P.tempo.bpmAt(ownUntil + 1e-6) } });
     if (P.tempo.ramps()) warn.addIfNotAlreadyThere("Tempo ramps come in bar by bar (each bar at its average tempo, bar lines exactly where Live has them).");
     // sections
     juce::Array<juce::var> secs;
@@ -761,81 +813,167 @@ juce::var makeSong(const Project& P, const SongSpec& sp, const Options& opts)
         }
     }
     juce::Array<juce::var> w; for (auto& x : warn) w.add(x);
+    // 9a: markers (locators inside the song's audio): a bar and beat on its ruler
+    juce::Array<juce::var> marks;
+    for (auto& m : sp.marks) {
+        const int k = g.barAt(m.beat);
+        const double q = g.start[(size_t) k + 1] - g.start[(size_t) k];
+        const double beat = 1.0 + (m.beat - g.start[(size_t) k]) * g.sig[(size_t) k].second / 4.0;
+        marks.add(obj({ { "name", m.name }, { "bar", k + 1 }, { "beat", q > 0 ? std::round(beat * 1000.0) / 1000.0 : 1.0 } }));
+    }
     return obj({ { "name", sp.name }, { "startBeat", sp.b0 }, { "endBeat", sp.b1 }, { "seconds", secOf(sp.b1) }, { "total", bars }, { "tmap", tmap }, { "secs", secs },
+                 { "marks", marks }, { "snapped", snapped }, { "endMoved", endMoved },
                  { "tracks", tracks }, { "audioTracks", nAudio }, { "midiTracks", nMidi }, { "clicks", clicks }, { "cues", cues }, { "warnings", w } });
 }
 
 // ---------------------------------------------------------------- songs from locators
-std::vector<SongSpec> splitSongs(const Project& P, juce::String mode, juce::String& used)
+// 9a: Sort markers. Every locator gets a guess (Song / Section / Marker / Break / Ignore) with its reason; the user can
+// change any of them (Options::choices); the songs are then made from the choices.
+struct LocSort {
+    juce::String key, raw, name, guess, choice, reason, label; // label: a Break's (Gear change / Tuning / Talk / Intermission)
+    double beat = 0; bool ends = false, loop = false, fromClip = false;
+};
+struct BreakSpec { juce::String name, label; double beat; int after; }; // after: the song (index in the specs) before it; -1 = none
+
+// Live's bar number at a beat (from bar 1, through its meter changes)
+double liveBarOf(const Project& P, double beat)
 {
-    std::vector<SongSpec> out;
-    const double end = std::max(P.endBeat, 1.0);
+    double bar = 1, at = 0; int num = 4, den = 4;
+    if (! P.meters.empty() && P.meters[0].beat <= 1e-9) { num = P.meters[0].num; den = P.meters[0].den; }
+    for (auto& m : P.meters) {
+        if (m.beat <= 1e-9) continue;
+        if (m.beat >= beat) break;
+        bar += (m.beat - at) / (num * 4.0 / den); at = m.beat; num = m.num; den = m.den;
+    }
+    return bar + (beat - at) / (num * 4.0 / den);
+}
+
+juce::String breakLabel(const juce::String& name)
+{
+    juce::StringArray w; w.addTokens(name.toUpperCase().replaceCharacters("-_:/>.,()", "         "), " ", "");
+    auto has = [&](std::initializer_list<const char*> ks) { for (auto* k : ks) if (w.contains(k)) return true; return false; };
+    if (has({ "TUNE", "TUNING" })) return "Tuning";
+    if (has({ "TALK" })) return "Talk";
+    if (has({ "INTERMISSION", "BREAK" })) return "Intermission";
+    if (has({ "GTR", "GUITAR", "CHANGE", "SWAP" })) return "Gear change";
+    return {};
+}
+
+std::vector<LocSort> sortLocators(const Project& P, juce::String mode, juce::String& used, const juce::var& choices)
+{
+    std::vector<LocSort> out;
     auto isAbleSet = [&] {
         if (P.sectionsTrack.isNotEmpty()) return true;
         for (auto& l : P.locators) {
             const auto n = l.name.trim(), u = stripLocator(n).toUpperCase();
             if (n.startsWithChar('>') || u == "STOP" || u == "AUTOSTOP" || u == "SONG END") return true;
         }
-        return false;
+        // 9a: a whole set without AbleSet's notation: unnamed locators ending songs, or a utility name used 3+ times (TERM)
+        std::map<juce::String, int> seen; int unnamed = 0;
+        for (auto& l : P.locators) { const auto n = l.name.trim().toUpperCase(); if (n.isEmpty()) ++unnamed; else if (++seen[n] >= 3) return true; }
+        return unnamed > 0 && P.locators.size() - (size_t) unnamed >= 2;
     };
     if (mode == "auto") mode = isAbleSet() ? "ableset" : "single";
     used = mode;
-    if (mode == "single" || P.locators.empty()) {
-        SongSpec s { P.name, 0, end, {} };
-        for (auto& l : P.locators) { juce::StringArray f; const auto n = stripLocator(l.name.trim().trimCharactersAtStart(">+").trim(), &f); if (n.isNotEmpty() && ! l.name.trim().startsWithChar('*')) s.secs.push_back({ l.beat, n, f.contains("LOOP") || f.contains("LOOPFULL") }); }
-        if (s.secs.empty() || s.secs.front().beat > 1e-6) { /* bars before the first locator have no section */ }
-        out.push_back(s);
-        return out;
-    }
-    if (mode == "each") {
-        for (size_t i = 0; i < P.locators.size(); ++i) {
-            const auto n = stripLocator(P.locators[i].name.trim());
-            if (n.isEmpty() || P.locators[i].name.trim().startsWithChar('*')) continue;
-            out.push_back({ n, P.locators[i].beat, i + 1 < P.locators.size() ? P.locators[i + 1].beat : end, {} });
-        }
-        return out;
-    }
-    if (mode == "plus") {
-        for (auto& l : P.locators) {
-            const auto raw = l.name.trim();
-            if (raw.startsWithChar('+')) { if (! out.empty()) out.back().b1 = l.beat; out.push_back({ stripLocator(raw.substring(1)), l.beat, end, {} }); }
-            else if (! out.empty() && raw.isNotEmpty() && ! raw.startsWithChar('*')) { juce::StringArray f; out.back().secs.push_back({ l.beat, stripLocator(raw, &f), f.contains("LOOP") || f.contains("LOOPFULL") }); }
-        }
-        return out;
-    }
-    // AbleSet (ableset.com/docs/locator-notation): a plain locator starts a song; "> Name" / ">> Name" a section
-    // ("Intro >>> Verse": the part before >>>); "SONG END", "STOP" / "AUTOSTOP" end it; "*" and ClyphX "[...]"
-    // locators are ignored; "[nosong]" marks a part that isn't a song; "{...}", "#tags", "+FLAGS" aren't part of the
-    // name (+LOOP makes a looping section).
-    bool open = false;
-    for (auto& l : P.locators) {
+    // audio under a stretch of the arrangement / clips starting near a beat (audio tracks only)
+    auto audioIn = [&](double a, double b) { for (auto& t : P.tracks) if (t.kind == "audio") for (auto& c : t.clips) if (! c.disabled && c.start < b - 1e-6 && c.end > a + 1e-6) return true; return false; };
+    auto startsNear = [&](double x) { for (auto& t : P.tracks) if (t.kind == "audio") for (auto& c : t.clips) if (! c.disabled && std::abs(c.start - x) <= 1.0) return true; return false; };
+    // a clip running through x (not a click / guide track, which often runs through the whole set)
+    auto guide = [](const juce::String& n) { const auto l = n.toLowerCase(); return l.contains("click") || l.contains("metronome") || l.contains("guide") || l.contains("cue") || l.contains("count"); };
+    auto straddled = [&](double x) { for (auto& t : P.tracks) if (t.kind == "audio" && ! guide(t.name)) for (auto& c : t.clips) if (! c.disabled && c.start < x - 1.0 && c.end > x + 1.0) return true; return false; };
+    // a section starting at x (a "> Name" locator or a Sections track clip): x starts a song, not a marker
+    auto sectionAt = [&](double x) {
+        for (auto& l : P.locators) if (std::abs(l.beat - x) < 1e-3 && l.name.trim().startsWithChar('>')) return true;
+        for (auto& c : P.sectionClips) if (std::abs(c.beat - x) < 1e-3) return true;
+        return false;
+    };
+    // how often each name appears (rule 1: a name used 3+ times is a utility marker, e.g. TERM)
+    std::map<juce::String, int> count;
+    for (auto& l : P.locators) { const auto n = stripLocator(l.name.trim().trimCharactersAtStart(">+.").trim()).toUpperCase(); if (n.isNotEmpty()) ++count[n]; }
+    juce::String openSong; // the song the guesses so far have open (for the reasons)
+    bool open = mode == "single";
+    if (open) openSong = P.name;
+    for (size_t i = 0; i < P.locators.size(); ++i) {
+        const auto& l = P.locators[i];
+        const double next = i + 1 < P.locators.size() ? P.locators[i + 1].beat : std::max(P.endBeat, l.beat);
+        LocSort x; x.beat = l.beat; x.raw = l.name; x.key = juce::String(l.beat, 3) + "|" + l.name;
         const auto raw = l.name.trim();
-        if (raw.isEmpty()) { if (open) { out.back().b1 = l.beat; open = false; } continue; } // an unnamed locator: the end of a song
-        if (raw.startsWithChar('*') || raw.startsWithChar('[')) continue;
         juce::StringArray f; bool nosong = false;
-        if (raw.startsWithChar('>')) {
-            if (! open) continue;
-            auto n = raw.trimCharactersAtStart(">").trim();
-            if (n.contains(">>>")) n = n.upToFirstOccurrenceOf(">>>", false, false).trim();
-            out.back().secs.push_back({ l.beat, stripLocator(n, &f), f.contains("LOOP") || f.contains("LOOPFULL") });
-            continue;
+        auto n = raw.startsWithChar('>') ? raw.trimCharactersAtStart(">").trim() : raw.startsWithChar('+') ? raw.substring(1) : raw.startsWithChar('.') ? raw.substring(1) : raw;
+        if (n.contains(">>>")) n = n.upToFirstOccurrenceOf(">>>", false, false).trim();
+        x.name = stripLocator(n, &f, &nosong); x.loop = f.contains("LOOP") || f.contains("LOOPFULL");
+        const auto u = x.name.toUpperCase();
+        const int reps = x.name.isEmpty() ? 0 : count[u];
+        auto set = [&](const char* g, const juce::String& why) { x.guess = g; x.reason = why; };
+        if (raw.isEmpty()) { set("ignore", openSong.isNotEmpty() && open ? "marks the end of " + openSong : juce::String("unnamed")); x.ends = true; }
+        else if (reps >= 3) { set("ignore", juce::String::fromUTF8("\xe2\x80\x9c") + x.name + juce::String::fromUTF8("\xe2\x80\x9d") + " repeats " + juce::String(reps) + juce::String::fromUTF8("\xc3\x97") + " across the set"); x.ends = mode != "single"; }
+        else if (mode == "ableset" && (raw.startsWithChar('*') || raw.startsWithChar('['))) set("ignore", "AbleSet: not a song or section (" + raw.substring(0, 1) + ")");
+        else if (mode == "ableset" && (u == "STOP" || u == "AUTOSTOP" || u == "SONG END")) { set("ignore", open ? "ends " + openSong : juce::String("an end marker")); x.ends = true; }
+        else if (mode == "ableset" && nosong) { set("ignore", "[nosong]: not a song"); x.ends = true; }
+        else if (const auto lab = breakLabel(x.name); lab.isNotEmpty() && ! audioIn(l.beat, next) && ! raw.startsWithChar('>')) { set("break", open ? "after " + openSong + ", no audio under it" : juce::String("no audio under it")); x.label = lab; }
+        else if (mode == "single") set("section", "a locator in the song");
+        else if (mode == "each") set("song", "every locator starts a song");
+        else if (mode == "plus") set(raw.startsWithChar('+') ? "song" : "section", raw.startsWithChar('+') ? "+ starts a song" : juce::String("a locator in ") + (open ? openSong : juce::String("the set")));
+        else if (raw.startsWithChar('>')) set("section", "> section");
+        else if (open && straddled(l.beat) && ! startsNear(l.beat) && ! sectionAt(l.beat)) set("marker", "inside " + openSong + juce::String::fromUTF8(" \xe2\x86\x92 kept as a marker"));
+        else set("song", startsNear(l.beat) ? "starts a block of audio" : juce::String("a name on its own, starts a new block"));
+        // the user's choice wins
+        x.choice = x.guess;
+        if (choices.isObject() && choices.hasProperty(juce::Identifier(x.key))) {
+            auto c = choices[juce::Identifier(x.key)].toString();
+            if (c.startsWith("break:")) { x.label = c.fromFirstOccurrenceOf(":", false, false).trim().substring(0, 24); c = "break"; } // "break:Tuning"
+            if (c == "song" || c == "section" || c == "marker" || c == "break" || c == "ignore") x.choice = c;
+            if (x.choice == "break" && x.label.isEmpty()) x.label = breakLabel(x.name).isNotEmpty() ? breakLabel(x.name) : juce::String("Gear change");
         }
-        const auto n = stripLocator(raw.startsWithChar('.') ? raw.substring(1) : raw, &f, &nosong), u = n.toUpperCase();
-        if (u == "STOP" || u == "AUTOSTOP" || u == "SONG END") { if (open) { out.back().b1 = l.beat; open = false; } continue; }
-        if (open) out.back().b1 = l.beat;
-        if (nosong || n.isEmpty()) { open = false; continue; }
-        out.push_back({ n, l.beat, end, {} }); open = true;
+        // keep track of the song open after this one (for the next reasons)
+        if (x.choice == "song") { open = true; openSong = x.name; }
+        else if (x.choice == "break" || (x.choice == "ignore" && x.ends)) open = false;
+        out.push_back(x);
     }
-    // sections from the Sections track's clips, in the song they start in; a locator at the same place wins
-    for (auto& c : P.sectionClips)
+    // the Sections track's clips (AbleSet): sections, unless chosen otherwise
+    for (auto& c : P.sectionClips) {
+        LocSort x; x.beat = c.beat; x.raw = c.name; x.key = "sec|" + juce::String(c.beat, 3); x.fromClip = true;
+        juce::StringArray f; x.name = stripLocator(c.name.trim(), &f); if (x.name.isEmpty()) x.name = "Section";
+        x.loop = f.contains("LOOP") || f.contains("LOOPFULL");
+        x.guess = x.choice = "section"; x.reason = P.sectionsTrack.isNotEmpty() ? P.sectionsTrack + " clip" : juce::String("section clip");
+        if (choices.isObject() && choices.hasProperty(juce::Identifier(x.key))) { const auto ch = choices[juce::Identifier(x.key)].toString(); if (ch == "ignore" || ch == "marker" || ch == "section") x.choice = ch; }
+        out.push_back(x);
+    }
+    return out;
+}
+
+std::vector<SongSpec> splitSongs(const Project& P, const std::vector<LocSort>& L, const juce::String& mode, std::vector<BreakSpec>& breaks)
+{
+    std::vector<SongSpec> out;
+    const double end = std::max(P.endBeat, 1.0);
+    bool open = false;
+    if (mode == "single" || P.locators.empty()) { out.push_back({ P.name, 0, end, {} }); open = true; }
+    for (auto& x : L) {
+        if (x.fromClip) continue;
+        if (x.choice == "song") {
+            if (open) out.back().b1 = x.beat;
+            out.push_back({ x.name.isNotEmpty() ? x.name : juce::String("Song"), x.beat, end, {} }); open = true;
+        } else if (x.choice == "section") { if (open) out.back().secs.push_back({ x.beat, x.name, x.loop }); }
+        else if (x.choice == "marker") { if (open) out.back().marks.push_back({ x.beat, x.name, false }); }
+        else if (x.choice == "break") { if (open) { out.back().b1 = x.beat; open = false; } breaks.push_back({ x.name, x.label, x.beat, (int) out.size() - 1 }); }
+        else if (x.ends && open) { out.back().b1 = x.beat; open = false; }
+    }
+    // sections (and markers) from the Sections track's clips, in the song they start in; a locator at the same place wins
+    for (auto& c : L) {
+        if (! c.fromClip || c.choice == "ignore") continue;
         for (auto& s : out)
             if (c.beat >= s.b0 - 1e-6 && c.beat < s.b1 - 1e-6) {
                 bool taken = false; for (auto& x : s.secs) taken |= std::abs(x.beat - c.beat) < 1e-3;
-                juce::StringArray f; const auto n = stripLocator(c.name.trim(), &f);
-                if (! taken) s.secs.push_back({ c.beat, n.isNotEmpty() ? n : juce::String("Section"), f.contains("LOOP") || f.contains("LOOPFULL") });
+                if (c.choice == "marker") s.marks.push_back({ c.beat, c.name, false });
+                else if (! taken) s.secs.push_back({ c.beat, c.name, c.loop });
                 break;
             }
-    for (auto& s : out) std::stable_sort(s.secs.begin(), s.secs.end(), [](auto& a, auto& b) { return a.beat < b.beat; });
+    }
+    for (auto& s : out) {
+        std::stable_sort(s.secs.begin(), s.secs.end(), [](auto& a, auto& b) { return a.beat < b.beat; });
+        std::stable_sort(s.marks.begin(), s.marks.end(), [](auto& a, auto& b) { return a.beat < b.beat; });
+    }
+    for (size_t i = 0; i + 1 < out.size(); ++i) out[i].nextFollows = true; // another song comes after it
     return out;
 }
 
@@ -870,15 +1008,37 @@ juce::var cutPadSamples(const juce::var& items, const juce::File& dir)
     return out;
 }
 
+// 9a: the project is on a removable drive (USB stick / external disk): the import tip
+static bool isRemovable(const juce::File& f)
+{
+   #if JUCE_WINDOWS
+    return f.isOnRemovableDrive() || (f.getFullPathName().length() > 2 && ! f.getFullPathName().startsWithIgnoreCase(juce::File::getSpecialLocation(juce::File::userHomeDirectory).getFullPathName().substring(0, 2)));
+   #else
+    return f.getFullPathName().startsWith("/Volumes/");
+   #endif
+}
+
 juce::var read(const juce::File& als, const Options& opts, juce::String& error)
 {
     auto x = loadXml(als, error);
     if (! x) return {};
     const auto P = readProject(*x, als, opts);
     juce::String used;
-    const auto specs = splitSongs(P, opts.mode, used);
+    const auto sorted = sortLocators(P, opts.mode, used, opts.choices);
+    std::vector<BreakSpec> brk;
+    const auto specs = splitSongs(P, sorted, used, brk);
     juce::Array<juce::var> songs;
-    for (auto& s : specs) if (s.b1 > s.b0 + 1e-6) songs.add(makeSong(P, s, opts));
+    std::vector<int> songOf(specs.size(), -1); // spec -> index in songs
+    for (size_t i = 0; i < specs.size(); ++i) if (specs[i].b1 > specs[i].b0 + 1e-6) { songOf[i] = songs.size(); songs.add(makeSong(P, specs[i], opts)); }
+    // 9a: the locator table (Sort markers) and the breaks between songs
+    juce::Array<juce::var> locs, breaks;
+    for (auto& x : sorted)
+        locs.add(obj({ { "key", x.key }, { "beat", x.beat }, { "bar", std::floor(liveBarOf(P, x.beat) + 1e-6) }, { "name", x.name }, { "raw", x.raw }, { "guess", x.guess },
+                       { "choice", x.choice }, { "reason", x.reason }, { "label", x.label }, { "clip", x.fromClip }, { "ends", x.ends } }));
+    for (auto& b : brk) {
+        int after = -1; for (int k = b.after; k >= 0 && after < 0; --k) after = songOf[(size_t) k];
+        breaks.add(obj({ { "name", b.name }, { "label", b.label }, { "beat", b.beat }, { "after", after } }));
+    }
     juce::Array<juce::var> ig, miss, warn;
     for (auto& s : P.ignored) ig.add(s);
     for (auto& s : P.missing) miss.add(s);
@@ -892,7 +1052,8 @@ juce::var read(const juce::File& als, const Options& opts, juce::String& error)
                                { "file", obj({ { "path", pd.file.existsAsFile() ? pd.file.getFullPathName() : juce::String() }, { "name", pd.fileName }, { "found", pd.file.existsAsFile() }, { "start", pd.start }, { "end", pd.end } }) } }));
     }
     return obj({ { "project", P.name }, { "live", P.live }, { "mode", used }, { "songs", songs }, { "ignored", ig }, { "missing", miss }, { "warnings", warn }, { "path", als.getFullPathName() },
-                 { "cuePads", pads }, { "converted", roles } });
+                 { "cuePads", pads }, { "converted", roles }, { "locators", locs }, { "breaks", breaks },
+                 { "removable", isRemovable(als) } });
 }
 
 juce::var locate(const juce::File& folder, const juce::StringArray& names)

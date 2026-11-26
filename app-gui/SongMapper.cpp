@@ -87,6 +87,7 @@ MappedSong mapSong(const juce::var& payload, double sr, int numOutputs,
             c.bpm = toDouble(e["bpm"], 0);
             if (auto* sg = e["sig"].getArray(); sg && sg->size() == 2) { c.num = (int) (*sg)[0]; c.den = (int) (*sg)[1]; }
             c.ramp = (bool) e["ramp"];
+            if (auto* g = e["grp"].getArray()) for (auto& x : *g) c.grouping.push_back((int) x); // 9a: click accent groups
             def.tempo.push_back(c);
         }
     if (def.tempo.empty()) def.tempo.push_back({ 1, 120, 4, 4 });
@@ -231,7 +232,7 @@ MappedSong mapSong(const juce::var& payload, double sr, int numOutputs,
                         const double per = 16.0 / std::max(1, sig.second);           // 16th steps per beat
                         const double st = toDouble(n["st"], 0);
                         const bool acc = (bool) n["acc"];
-                        const bool onBeat = std::fmod(st, per) == 0.0;
+                        const bool onBeat = std::fmod(st, per) == 0.0 && ! (bool) n["w"]; // 9a: w = a beat inside a group (7/8's 2nd 8th): quieter
                         ClickHitDef h;
                         h.bar = bar;
                         h.beat = 1.0 + st / per;

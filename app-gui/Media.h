@@ -40,6 +40,8 @@ public:
     juce::var probePaths(const juce::var& arg);
     // {session: path|"", copy, files: [path]} -> {files: [{path, ref}]} | {error}
     void import(const juce::var& arg, Done done);
+    // 9a: Cancel an import: removes the files it copied (paths from "copied"), only inside the session's media folder
+    int removeCopies(const juce::File& session, const juce::StringArray& paths);
     // Before saving to `to` (from `from`, "" if never saved): copies files flagged copy into <to folder>/Audio
     // and rewrites every reference relative to the new folder.
     // {from, to, files: [{ref, copy}]} -> {map: {oldRef: newRef}, missing: [ref]} | {error}

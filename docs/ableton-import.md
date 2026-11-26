@@ -4,6 +4,19 @@
 project, shows what it found, and copies nothing until you press **Import**. The project and its files are only read,
 never changed.
 
+Since 9a the whole import happens in **one window**, in three steps: **1 Sort markers → 2 Options → 3 Import**.
+Nothing else opens, re-lays out or flashes behind it; the songs go into the Library in one batch at the end (when
+you press Stop, if something is playing), and the summary appears in the same window.
+
+- **1 Sort markers**: every Live locator, with set.Line's guess and the reason in grey (below). Change any of them.
+  The choices are remembered per project file, so a re-import offers the same ones.
+- **2 Options**: the songs found (tick to import, duplicates, missing samples, Locate…), click / cue options,
+  sections from cues, name tracks after their file, the setlist.
+- **3 Import**: one progress list: the total (files, GB, time left), then a row per file with its own bar, ✓ when
+  done, and "… N more". **Run in background** shrinks the window to a pill in the top bar (click it to open it
+  again; the app stays usable). **Cancel** removes the files this import copied (files already in the Library stay).
+  A project on a removable or external drive gets the tip *Copy the project to this computer's drive first.*
+
 Live 10, 11 and 12 Sets are supported. Code: `app-gui/AbletonImport.cpp` (the reader), `ui/1-arrange.html` (preview,
 songs), `ui/src/pages/arrange.ts` (`importAbleton`). Test: `set.Line --ableton-test <dir>` (synthetic projects, in CI).
 
@@ -12,7 +25,8 @@ songs), `ui/src/pages/arrange.ts` (`importAbleton`). Test: `set.Line --ableton-t
 | Live | set.Line |
 |---|---|
 | Master tempo + its automation (steps and ramps) | The song's tempo map, **one tempo per bar**: every bar line lands exactly where Live has it (a ramp becomes each bar's average tempo; the music inside a ramping bar is not re-timed, set.Line never stretches). |
-| Time signature changes | Meter changes. A change that isn't on a bar line starts a short bar there (with a note). |
+| Time signature changes | Meter changes (9a: any meter, 1-32 over 1/2/4/8/16/32, shown as cyan badges on the ruler). A change that isn't on a bar line starts a short bar there (with a note). |
+| Tempo values | Stored exactly, without float noise: a tempo within 0.0005 BPM of a value with at most 3 decimals snaps to it (123.99999999999623 → 124, 179.9884490000081 → 179.988, shown as 179.99; never to 180). Each snap is listed in the summary. |
 | Locators | Sections (Intro, Verse, Pre, Chorus, Bridge, Outro, Count-in… by name; anything else: type **Other** with the locator's name). Not on a bar line: the nearest bar, with a note. |
 | Audio tracks, arrangement clips | One set.Line audio track per file (a Live track that uses several files becomes "Name", "Name (2)"…). Clip start / end, sample offset, looping clips (laid out pass by pass), clip gain, fades, deactivated clips (muted). |
 | Track volume, mute, colour, name | A gain trim, mute, the nearest set.Line colour, the name. |
@@ -93,6 +107,32 @@ clips at every tempo).
 
 Still to check with a real project that uses them: a MIDI clip's Program / Bank values are stored 0-based (sent as
 stored); MIDI controller envelopes map `ControllerTargets.N` to CC N − 2 (0 is pitch bend, 1 channel pressure).
+
+## The end of a song (9a)
+
+Live's tempo automation often steps a little before the next song's locator, so the last bar of a song used to get
+part of the next song's tempo. A tempo or time signature change that falls in a song's **last bar**, at or before the
+next song's start, belongs to the next song: the song keeps its own tempo and meter to its end, and the next song
+starts with the new ones. The summary says which songs this applied to.
+
+## Sort markers (9a)
+
+| Guess | When | Reason shown |
+|---|---|---|
+| **Ignore** | a name used 3 or more times across the set (e.g. `TERM`); it still ends the song before it | "TERM" repeats 6× across the set |
+| **Ignore** | an unnamed locator (it still ends the song before it, as before) | marks the end of SENECA |
+| **Break** | a name with GTR, GUITAR, CHANGE, SWAP (Gear change), TUNE, TUNING (Tuning), TALK (Talk), BREAK, INTERMISSION (Intermission), with no audio under it | after MERCY, no audio under it |
+| **Marker** | inside a song's audio (a clip runs through it, none starts there, no section starts there) | inside DEATH AVENUE → kept as a marker |
+| **Song** | otherwise, a locator that starts a block of audio (or a name on its own) | starts a block of audio |
+| **Section** | `> Name` locators and the Sections track's clips | SECTION clip |
+
+AbleSet's own rules still apply first (`*` and ClyphX `[…]` locators, `STOP` / `SONG END`, `[nosong]`).
+**Automatic** also treats a project as a whole set when it has unnamed end locators or a name used 3+ times.
+
+- **Markers** become markers on that song's ruler (right-click one to rename or delete it; right-click the ruler ›
+  Add marker… adds one).
+- **Breaks** go into the imported setlist between their songs. Until set.Line has Break items (9d) they're kept with
+  the setlist and become Break items then.
 
 ## Songs from a project
 

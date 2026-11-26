@@ -1238,6 +1238,66 @@ bool runSelfTest(bool verbose)
         std::snprintf(line, sizeof line, "backup rig: the primary gone -> the backup takes over %.0f ms later (limit 600), MIDI on, still playing", lostAt - died);
         check(lostAt > 0 && lostAt - died <= 600 && backupMidi && B.r.e.isPlaying(), line);
     }
+    // ---- Phase 9a: time signatures (mixed meters with tempo changes in between) ----
+    std::printf("Phase 9a time signatures\n");
+    {
+        // 4/4 at 120 (bars 1-2), 7/8 (bar 3), 6/8 at 100 (bars 4-5), 4/4 (bar 6), 90 from bar 7
+        const std::vector<TempoChange> mixed { { 1, 120, 4, 4 }, { 3, 0, 7, 8 }, { 4, 100, 6, 8 }, { 6, 0, 4, 4 }, { 7, 90, 0, 0 } };
+        TempoMap tm; tm.build(mixed, sr, 0, 10);
+        const int64_t want[] = { 0, 96000, 192000, 276000, 362400, 448800, 564000, 692000 };
+        bool starts = true; for (int b = 1; b <= 8; ++b) starts &= tm.sampleAt(b, 1) == want[b - 1];
+        check(starts, "meters: bar starts across 4/4 -> 7/8 -> 6/8 -> 4/4 with tempo changes (7/8 at 120 = 1.75 s, 6/8 at 100 = 1.8 s)");
+        bool back = true;
+        for (int b = 1; b <= 8; ++b)
+            for (int k = 0; k < tm.bar(b).num; ++k) { int ob = 0; double obt = 0; tm.barBeatAt(tm.sampleAt(b, k + 1.5), ob, obt); back &= ob == b && std::abs(obt - (k + 1.5)) < 1e-3; }
+        int lb = 0; double lbt = 0; tm.barBeatAt(275999, lb, lbt);
+        check(back && lb == 3 && lbt > 7.99 && lbt < 8.0, "meters: time -> bar.beat and back for every beat of every bar; the 7/8 bar has 7 beats (8ths)");
+        check(tm.sampleAt(3, 4) - tm.sampleAt(3, 3) == 12000 && tm.sampleAt(4, 2) - tm.sampleAt(4, 1) == 14400, "meters: the beat unit follows the denominator (an 8th at 120 = 0.25 s, at 100 = 0.3 s)");
+        const int acc7[] = { 2, 0, 1, 0, 1, 0, 0 }, acc6[] = { 2, 0, 0, 1, 0, 0 };
+        bool accOk = true; for (int k = 0; k < 7; ++k) accOk &= tm.accentOf(3, k) == acc7[k]; for (int k = 0; k < 6; ++k) accOk &= tm.accentOf(4, k) == acc6[k];
+        for (int k = 1; k < 4; ++k) accOk &= tm.accentOf(1, k) == 0;
+        check(accOk, "meters: default accents (7/8 as 2+2+3, 6/8 as 3+3, 4/4 on beat 1)");
+        auto custom = mixed; custom[1].grouping = { 3, 2, 2 }; custom[2].grouping = { 4, 2 }; // 4+2 isn't 6? it is: kept
+        TempoMap tc; tc.build(custom, sr, 0, 10);
+        auto bad = mixed; bad[1].grouping = { 3, 3 }; TempoMap tb; tb.build(bad, sr, 0, 10);
+        check(tc.accentOf(3, 3) == 1 && tc.accentOf(3, 2) == 0 && tc.accentOf(3, 5) == 1 && tc.accentOf(4, 4) == 1 && tb.accentOf(3, 2) == 1,
+              "meters: a custom grouping (7/8 as 3+2+2) moves the accents; one that doesn't add up falls back to the default");
+        auto odd = mixed; odd.push_back({ 8, 0, 5, 3 }); TempoMap to; to.build(odd, sr, 0, 10);
+        check(to.bar(8).num == 4 && to.bar(8).den == 4 && validMeter(32, 32) && ! validMeter(33, 4) && ! validMeter(4, 3), "meters: numerators 1-32, denominators 1/2/4/8/16/32 (5/3 is ignored)");
+
+        // the generated click: every 8th of the 7/8 bar, accents by group, sample-exact
+        SongDef song; song.name = "Meters"; song.tempo = mixed; song.clickOuts = { 0 }; song.clickGainDb = 0; song.lengthBars = 8;
+        OfflineRun r; r.load(song, sr, 2); r.start(0); r.runToEnd();
+        const auto got = onsets(r, 0);
+        std::vector<int64_t> in7; for (auto x : got) if (x >= 192000 && x < 276000) in7.push_back(x);
+        bool pos7 = in7.size() == 7; for (size_t k = 0; pos7 && k < 7; ++k) pos7 = in7[k] == 192000 + (int64_t) k * 12000;
+        auto peak = [&](int64_t at) { float m = 0; for (int64_t x = at; x < at + 600; ++x) m = std::max(m, std::fabs(r.at(0, x))); return m; };
+        const float pa = peak(192000), pg = peak(192000 + 2 * 12000), po = peak(192000 + 12000);
+        check(pos7 && (int) got.size() == 4 + 4 + 7 + 6 + 6 + 4 + 4 + 4, "click: one tick per 8th in 7/8 and 6/8, per quarter in 4/4, each on its exact sample (" + std::to_string(got.size()) + " ticks)");
+        check(pa > pg * 1.4f && pg > po * 1.6f && std::fabs(pg / pa - 0.6f) < 0.03f, "click: the bar's first 8th accented, group starts (beats 3, 5) at the beat level, the others quieter");
+
+        // SPP after a 7/8 bar: starting at bar 4 = 2 bars of 16 + 14 sixteenths = 46
+        SongDef c2 = song; c2.clickOuts = {};
+        c2.stems.push_back(rampStem(700000, 0.0f, 0));
+        OfflineRun rc; rc.load(c2, sr, 1, 128); rc.e.setMidiClock(1u, 1u, 1);
+        rc.start(276000); rc.step(); rc.e.stop();
+        int spp = -1; for (auto& m : rc.e.midiLog) if (m.d[0] == 0xF2) spp = m.d[1] | (m.d[2] << 7);
+        rc.e.midiLog.clear(); rc.start(362400); rc.step(); rc.e.stop();
+        int spp5 = -1; for (auto& m : rc.e.midiLog) if (m.d[0] == 0xF2) spp5 = m.d[1] | (m.d[2] << 7);
+        check(spp == 46 && spp5 == 58, "MIDI clock: Song Position after the 7/8 bar is 46 (bar 4) and 58 after a 6/8 bar (bar 5): 16ths, not bars");
+
+        // a queued jump (next bar) armed in bar 2 lands on the 7/8 bar's first sample; one armed inside the 7/8 bar on bar 4
+        OfflineRun rj; rj.load(c2, sr, 1, 128); rj.start(0);
+        while (rj.e.position() < 96000 + 30000) rj.step();
+        const auto& tj = rj.e.tempoMap();
+        const int64_t at1 = tj.nextBarStart(rj.e.position()), to1 = tj.sampleAt(3, 5);
+        rj.e.setJump(at1, to1, false);
+        while ((int64_t) rj.out[0].size() < at1 + 1000) rj.step();
+        const int64_t at2 = tj.nextBarStart(rj.e.position()); // inside the 7/8 bar: the next bar line is bar 4
+        const auto& o = rj.out[0];
+        check(at1 == 192000 && o[(size_t) at1] == (float) to1 * 1e-6f && to1 == 192000 + 4 * 12000 && at2 == 276000,
+              "quantised jump into a 7/8 bar: lands on its first sample, to beat 5 = 4 eighths in; armed inside it, the next bar line is the 7/8 bar's end");
+    }
     std::printf(ok ? "ALL CHECKS PASSED\n" : "SOME CHECKS FAILED\n");
     return ok;
 }

@@ -757,19 +757,25 @@ async function exportSetlist(listId?: string, to?: string) {
   if (r.error) page().toast(r.error); else if (r.path) page().toast(`Exported “${e.name}” to ${r.path}`);
   return r;
 }
-// ---- 7b: Import an Ableton Live project (.als). Read (in the app, read-only) -> preview -> copy the audio into the
-// Library (by content: the same file twice is stored once) with progress and Cancel -> the songs (and a setlist) ->
-// a summary, saved next to the Library's migration log. choose: tests answer the preview themselves.
-interface AbleData { project: string; live: string; mode: string; path: string; songs: any[]; ignored: string[]; missing: string[]; warnings: string[]; cuePads?: any[]; converted?: any[]; error?: string; cancelled?: boolean }
+// ---- 7b / 9a: Import an Ableton Live project (.als). Read (in the app, read-only) -> ONE window: 1 Sort markers ->
+// 2 Options -> 3 Import (copy the audio into the Library by content, one progress list, Run in background, Cancel
+// removes what was copied) -> the songs added in one batch (after Stop if playing) -> the summary in the same window,
+// saved next to the Library's migration log. choose: tests answer the preview themselves (no window then).
+interface AbleData { project: string; live: string; mode: string; path: string; songs: any[]; ignored: string[]; missing: string[]; warnings: string[]; cuePads?: any[]; converted?: any[]; locators?: any[]; breaks?: any[]; removable?: boolean; error?: string; cancelled?: boolean }
 type AbleChoice = { picks: { i: number; dup: string }[]; setlist: boolean; data?: AbleData; opt?: any };
-async function importAbleton(path?: string, choose?: (data: AbleData, dups: any[]) => Promise<AbleChoice | null>, mode = "auto") {
+// what the user chose in Sort markers, per project file (a re-import offers the same)
+const ABLE_CHOICES = "setline.ableChoices";
+const ableStore = (): Record<string, { mode: string; choices: Record<string, string> }> => { try { return JSON.parse(localStorage.getItem(ABLE_CHOICES) || "{}"); } catch { return {}; } };
+let ableProg: ((p: any) => void) | null = null; // 9a: copy progress goes to the import window, not the generic box
+async function importAbleton(path?: string, choose?: (data: AbleData, dups: any[]) => Promise<AbleChoice | null>, mode = "auto", choicesIn?: Record<string, string>) {
   if (page().playing) { page().toast("Stop playback first"); return { error: "playing" }; }
   if (!lib) { page().toast("Open a library first"); return { error: "no library" }; }
   const A = (window as any).SLAble;
   const ports = page().PORTS || [];
   const located: Record<string, string> = {};
+  let choices: Record<string, string> = { ...(choicesIn || {}) };
   const readAs = async (m: string, p: string) => {
-    const r = await SL.call<AbleData>("ableRead", { path: p, mode: m, ports });
+    const r = await SL.call<AbleData>("ableRead", { path: p, mode: m, ports, choices });
     if (r.error || r.cancelled) return r;
     // samples found with Locate… stay found when the mode changes
     for (const s of r.songs) for (const t of s.tracks || []) if (t.kind === "audio" && t.file && !t.file.found && located[t.file.name]) { t.file.found = true; t.file.path = located[t.file.name]; }
@@ -779,14 +785,33 @@ async function importAbleton(path?: string, choose?: (data: AbleData, dups: any[
   if (data.cancelled) return data;
   if (data.error) { page().toast(data.error); return data; }
   const src = data.path;
+  // the choices made for this project last time (not in tests that pass their own)
+  const kept = !choicesIn && !choose ? ableStore()[src] : undefined;
+  if (kept && (Object.keys(kept.choices || {}).length || (kept.mode && kept.mode !== mode))) {
+    choices = { ...(kept.choices || {}) }; mode = kept.mode || mode;
+    const d = await readAs(mode, src); if (!d.error) data = d;
+  }
   const dupsFor = async (d: AbleData) => {
-    const paths = [...new Set(d.songs.flatMap((s: any) => (s.tracks || []).filter((t: any) => t.file && t.file.found).map((t: any) => t.file.path as string)))];
+    // 9a: only songs whose name is already in the library can be duplicates: hash just their files (hashing a whole
+    // set off a USB drive took minutes before the window could open)
+    const names = new Set(page().songs.map((x: any) => String(x.name).trim().toLowerCase()));
+    const paths = [...new Set(d.songs.filter((s: any) => names.has(String(s.name).trim().toLowerCase())).flatMap((s: any) => (s.tracks || []).filter((t: any) => t.file && t.file.found).map((t: any) => t.file.path as string)))];
     const hashes = paths.length ? await SL.call<Record<string, string>>("hashFiles", { paths }) : {};
     return d.songs.map((s: any) => A.dups(s, hashes));
   };
-  const ctx = {
+  const remember = () => { const st = ableStore(); if (Object.keys(choices).length || ctx.mode !== "auto") st[src] = { mode: ctx.mode, choices }; else delete st[src]; try { localStorage.setItem(ABLE_CHOICES, JSON.stringify(st)); } catch { /* full */ } };
+  const ctx: any = {
     mode, dups: await dupsFor(data),
     remode: async (m: string) => { const d = await readAs(m, src); if (d.error) { page().toast(d.error); return null; } data = d; ctx.dups = await dupsFor(d); return d; },
+    // 9a: Sort markers: re-read with the user's choices (changes only; {} with a new mode starts over)
+    resort: async (diff: Record<string, string>, m: string) => {
+      if (m !== ctx.mode) choices = {};
+      choices = { ...choices, ...diff };
+      const d = await readAs(m, src); if (d.error) { page().toast(d.error); return null; }
+      // keep only the choices that differ from set.Line's guesses
+      for (const l of d.locators || []) { const v = l.choice === "break" ? "break:" + (l.label || "Gear change") : l.choice; if (choices[l.key] !== undefined && l.guess !== "break" && l.guess === ableKind(choices[l.key]) && v === choices[l.key]) delete choices[l.key]; }
+      ctx.mode = m; data = d; ctx.dups = await dupsFor(d); remember(); return d;
+    },
     locate: async (names: string[]) => {
       const r = await SL.call<{ found?: Record<string, string>; cancelled?: boolean }>("ableLocate", { names });
       if (!r.found) return null;
@@ -796,22 +821,44 @@ async function importAbleton(path?: string, choose?: (data: AbleData, dups: any[
       const d = await readAs(ctx.mode, src); if (d.error) return null; data = d; ctx.dups = await dupsFor(d); return d;
     },
   };
-  const choice: AbleChoice | null = choose ? await choose(data, ctx.dups) : await A.box(data, ctx);
-  if (!choice || !choice.picks.length) return { cancelled: true };
+  const choice: AbleChoice | null = choose ? await choose(data, ctx.dups) : await A.wizard(data, ctx);
+  const W = choose ? null : A.wiz();
+  if (!choice || !choice.picks.length) { if (W) W.close(); return { cancelled: true }; }
   if (choice.data) data = choice.data;
-  // the audio the chosen songs use, each file once
-  const files = [...new Set(choice.picks.flatMap((p) => (data.songs[p.i].tracks || []).filter((t: any) => t.file && t.file.found).map((t: any) => t.file.path as string)))];
-  let cancel = false;
-  const refs: Record<string, string> = {};
+  // the audio the chosen songs use, each file once (with its size and a name for the list)
+  const byPath = new Map<string, { name: string; bytes: number }>();
+  for (const p of choice.picks) for (const t of data.songs[p.i].tracks || []) if (t.file && t.file.found && !byPath.has(t.file.path)) byPath.set(t.file.path, { name: `${data.songs[p.i].name} / ${t.file.name || t.name}`, bytes: t.file.bytes || 0 });
+  const files = [...byPath.keys()];
+  const rows = files.map((f) => ({ name: byPath.get(f)!.name, bytes: byPath.get(f)!.bytes, frac: 0, state: "wait" }));
+  const total = rows.reduce((a, r) => a + r.bytes, 0);
+  let cancel = false, doneBytes = 0;
+  const t0 = performance.now();
+  const show = (phase: string) => {
+    const el = (performance.now() - t0) / 1000, cur = rows.find((r) => r.state === "run");
+    const d = doneBytes + (cur ? cur.bytes * cur.frac : 0);
+    const eta = d > 0 && el > 2 && total > d ? (total - d) / (d / el) : 0;
+    if (W) A.prog({ phase, files: rows, done: d, total, eta });
+  };
+  if (W) W.onCancel = () => { cancel = true; };
+  const refs: Record<string, string> = {}, copied: string[] = [];
   const cur = await SL.call<FileResult>("getSessionFile");
-  for (let k = 0; k < files.length && !cancel; k++) {
-    A.progress(k, files.length, files[k].split(/[\\/]/).pop(), () => { cancel = true; });
-    const r = await SL.call<{ files?: { path: string; ref: string }[]; error?: string }>("importAudio", { session: cur.path || "", copy: true, hashed: true, files: [files[k]] });
-    if (r.error) { A.progress(-1); page().toast(r.error); return { error: r.error }; }
-    for (const f of r.files || []) refs[f.path] = f.ref;
+  let k = 0;
+  ableProg = (p: any) => { const r = rows[k]; if (r && p.total > 0 && !p.finished) { r.frac = Math.min(1, p.done / p.total); show("copy"); } };
+  try {
+    for (k = 0; k < files.length && !cancel; k++) {
+      rows[k].state = "run"; show("copy");
+      const r = await SL.call<{ files?: { path: string; ref: string; copied?: string }[]; error?: string }>("importAudio", { session: cur.path || "", copy: true, hashed: true, files: [files[k]] });
+      if (r.error) { rows[k].state = "err"; show("copy"); page().toast(r.error); cancel = true; break; }
+      for (const f of r.files || []) { refs[f.path] = f.ref; if (f.copied) copied.push(f.copied); }
+      rows[k].state = "ok"; rows[k].frac = 1; doneBytes += rows[k].bytes; show("copy");
+    }
+  } finally { ableProg = null; }
+  if (cancel || (W && W.cancelled)) {
+    const n = copied.length ? await SL.call<number>("removeImported", { session: cur.path || "", paths: copied }).catch(() => 0) : 0;
+    if (W) W.close();
+    page().toast(`Import cancelled: no songs were added${n ? `; ${n} copied file${n === 1 ? "" : "s"} removed again` : ""}`);
+    return { cancelled: true };
   }
-  A.progress(-1);
-  if (cancel) { page().toast("Import cancelled: no songs were added"); return { cancelled: true }; }
   const infos: Record<string, AudioInfo> = {};
   for (const i of await probe(files)) infos[i.path] = i;
   if (!sessionRate) sessionRate = Object.values(infos).find((i) => i.rate)?.rate || rateForImport();
@@ -821,34 +868,55 @@ async function importAbleton(path?: string, choose?: (data: AbleData, dups: any[
   const opt = A.opt(choice.opt);
   let recWords = 0;
   if (opt.recCues && (data.cuePads || []).length) {
+    show("cues");
     const used = new Set<string>();
     for (const p of choice.picks) for (const c of data.songs[p.i].cues || []) used.add(c.track + "|" + c.note);
     const items = (data.cuePads || []).filter((x: any) => used.has(x.track + "|" + x.note) && x.file && x.file.found)
-      .map((x: any) => { const k = x.track + "|" + x.note; return { path: x.file.path, start: x.file.start || 0, end: x.file.end ?? -1, word: (opt.padWords[k] !== undefined ? opt.padWords[k] : x.word).trim() || x.word }; });
-    const uniq = items.filter((x: any, k: number) => items.findIndex((y: any) => y.word.toLowerCase() === x.word.toLowerCase()) === k);
+      .map((x: any) => { const k2 = x.track + "|" + x.note; return { path: x.file.path, start: x.file.start || 0, end: x.file.end ?? -1, word: (opt.padWords[k2] !== undefined ? opt.padWords[k2] : x.word).trim() || x.word }; });
+    const uniq = items.filter((x: any, i: number) => items.findIndex((y: any) => y.word.toLowerCase() === x.word.toLowerCase()) === i);
     if (uniq.length) {
       const cut = await SL.call<{ word: string; path: string }[]>("ableCueAudio", { items: uniq }).catch(() => []);
       if (cut.length) {
-        const imp = await SL.call<{ files?: { path: string; ref: string }[]; error?: string }>("importAudio", { session: cur.path || "", copy: true, files: cut.map((c) => c.path), sub: "Cues/Words" });
+        ableProg = () => {};
+        const imp = await SL.call<{ files?: { path: string; ref: string }[]; error?: string }>("importAudio", { session: cur.path || "", copy: true, files: cut.map((c) => c.path), sub: "Cues/Words" }).finally(() => { ableProg = null; });
         for (const f of imp.files || []) { const c = cut.find((x) => x.path === f.path); if (c) { opt.cueRefs[c.word.toLowerCase()] = { ref: f.ref, name: c.word + ".wav" }; recWords++; } }
       }
     }
   }
+  // never into the library while playing: the files are copied; the songs go in at Stop
+  while (page().playing) { show("wait"); await new Promise((r) => setTimeout(r, 300)); }
+  show("add");
   const res = A.add(data, choice.picks, refs, infos, choice.setlist, opt);
   loadedKey = null; nextKey = "";
+  const ms = Math.round(performance.now() - t0);
   // the summary (and the log next to the migration log)
+  const fmtB = (v: number) => String(+(+v).toFixed(3));
   const lines: string[] = [`Imported from Ableton: ${data.project} (${data.path})`,
-    `${res.added.length} new song${res.added.length === 1 ? "" : "s"}${res.versions.length ? `, ${res.versions.length} new version${res.versions.length === 1 ? "" : "s"}` : ""}${res.setlist ? `, setlist “${res.setlist}”` : ""}; ${files.length} audio file${files.length === 1 ? "" : "s"} copied into the library.`];
+    `${res.added.length} new song${res.added.length === 1 ? "" : "s"}${res.versions.length ? `, ${res.versions.length} new version${res.versions.length === 1 ? "" : "s"}` : ""}${res.setlist ? `, setlist “${res.setlist}”` : ""}${res.breaks ? ` with ${res.breaks} break${res.breaks === 1 ? "" : "s"}` : ""}; ${files.length} audio file${files.length === 1 ? "" : "s"} (${(total / 1e9).toFixed(2)} GB) copied into the library in ${ms < 60000 ? (ms / 1000).toFixed(1) + " s" : (ms / 60000).toFixed(1) + " min"}.`];
+  // 9a: Sort markers, meters, tempo clean-up
+  const L = data.locators || [];
+  const cnt = (c: string) => L.filter((l: any) => !l.clip && l.choice === c).length;
+  if (L.length) lines.push(`Markers sorted: ${cnt("song")} song${cnt("song") === 1 ? "" : "s"}, ${cnt("ignore")} ignored, ${cnt("break")} break${cnt("break") === 1 ? "" : "s"}, ${cnt("marker")} marker${cnt("marker") === 1 ? "" : "s"}, ${cnt("section")} section locator${cnt("section") === 1 ? "" : "s"}${L.some((l: any) => l.clip) ? `, ${L.filter((l: any) => l.clip && l.choice !== "ignore").length} section clips` : ""}.`);
   if (recWords) lines.push(`${recWords} recorded cue word${recWords === 1 ? "" : "s"} from the Live pads (the same voice as in Live).`);
-  for (const p of choice.picks) { const s = data.songs[p.i]; lines.push(`- ${s.name}: ${s.audioTracks} audio, ${s.midiTracks} MIDI, ${(s.clicks || []).length} click, ${(s.cues || []).length} cues, ${opt.secs[p.i] ? "sections from cues" : s.secs.length + " sections"}${(s.warnings || []).length ? "\n    " + s.warnings.join("\n    ") : ""}`); }
+  for (const p of choice.picks) {
+    const s = data.songs[p.i];
+    const meters = (s.tmap || []).filter((x: any, i: number, a: any[]) => i === 0 || x.sig.join("/") !== a[i - 1].sig.join("/")).map((x: any) => `${x.sig.join("/")}${x.bar > 1 ? " at " + x.bar : ""}`);
+    const notes: string[] = [];
+    if (meters.length > 1) notes.push(`meters: ${meters.join(" → ")}`);
+    if ((s.snapped || []).length) notes.push(`tempo cleaned: ${s.snapped.map((x: any) => `${x.from} → ${fmtB(x.to)}`).join(", ")}`);
+    if (s.endMoved) notes.push(`end tempo: its last bar stays at ${fmtB(s.endMoved.to)} (the change to ${fmtB(s.endMoved.next)} belongs to the next song)`);
+    if ((s.marks || []).length) notes.push(`${s.marks.length} marker${s.marks.length === 1 ? "" : "s"}`);
+    lines.push(`- ${s.name}: ${s.audioTracks} audio, ${s.midiTracks} MIDI, ${(s.clicks || []).length} click, ${(s.cues || []).length} cues, ${opt.secs[p.i] ? "sections from cues" : s.secs.length + " sections"}${notes.length ? "; " + notes.join("; ") : ""}${(s.warnings || []).length ? "\n    " + s.warnings.join("\n    ") : ""}`);
+  }
   if (otherRate.length) lines.push(`${otherRate.length} file${otherRate.length === 1 ? " isn't" : "s aren't"} at the library's rate (${sessionRate / 1000} kHz); set.Line never resamples, so ${otherRate.length === 1 ? "it plays" : "they play"} at the wrong speed until replaced: ${otherRate.map((i) => i.name).join(", ")}`);
   const missing = [...new Set(choice.picks.flatMap((p) => (data.songs[p.i].tracks || []).filter((t: any) => t.kind === "audio" && !(t.file && t.file.found)).map((t: any) => (t.file && t.file.name) as string)))].filter(Boolean);
   if (missing.length) lines.push(`Still missing (those tracks play silence until you add the file): ${missing.join(", ")}`);
   if ((data.ignored || []).length) lines.push(`Not imported (devices, plug-ins, returns): ${data.ignored.join(", ")}`);
   const logPath = await SL.call<string>("ableLog", { text: lines.join("\n") }).catch(() => "");
-  if (!choose) A.summary(lines, logPath, res.added[0] || (res.versions[0] && res.versions[0][0]) || "");
-  return { ...res, files: files.length, lines, logPath };
+  if (W) A.finish(lines, logPath, res.added[0] || (res.versions[0] && res.versions[0][0]) || "");
+  return { ...res, files: files.length, lines, logPath, ms, bytes: total };
 }
+const ableKind = (v: string) => String(v).split(":")[0];
 // Import: songs are matched by their id, then by their audio; one that differs asks Keep mine / Use imported / Keep both.
 async function importPackage(path?: string, choose?: (rows: any[]) => Promise<Record<string, string> | null>) {
   if (page().playing) { page().toast("Stop playback first"); return { error: "playing" }; }
@@ -1275,6 +1343,7 @@ async function addStems(s: Song) {
 // Copy progress: a small sheet with a bar while files are copied.
 let progressEl: HTMLElement | null = null;
 function onProgress(p: Progress) {
+  if (ableProg) { ableProg(p); return; } // 9a: an Ableton import shows it in its own window
   if ((p as any).kind === "export") { page().exportProgress(p); return; }
   if (p.kind === "save") { page().copyStatus(p); return; } // Save / Save As: a small indicator, nothing blocks
   if (p.finished) { progressEl?.remove(); progressEl = null; return; }
@@ -1531,7 +1600,7 @@ async function main() {
         // 6f: the Library
         openLibrary: (n = "", empty?: boolean) => openLibrary(n, empty), libSave: () => libSave(), lib: () => lib, libFiles, exportSetlist: (id?: string, to?: string) => exportSetlist(id, to), exportText,
         bandStart: (port: number) => SL.call("bandStart", { port, test: true }), rigFollow: (st: any) => rigFollow(st), rigSendSetlist: () => rigSendSetlist(), bandHost: () => bandHost,
-        importPackage: (p: string, choose?: any) => importPackage(p, choose), importAbleton: (p: string, choose?: any, mode?: string) => importAbleton(p, choose, mode), migrateShows: (paths: string[]) => migrateShows(paths), restoreBackup: (p: string, how: "replace" | "new") => restoreBackup(p, how), switchLibrary: (n: string) => switchLibrary(n), offerMigration: () => offerMigration() };
+        importPackage: (p: string, choose?: any) => importPackage(p, choose), importAbleton: (p: string, choose?: any, mode?: string, choices?: any) => importAbleton(p, choose, mode, choices), migrateShows: (paths: string[]) => migrateShows(paths), restoreBackup: (p: string, how: "replace" | "new") => restoreBackup(p, how), switchLibrary: (n: string) => switchLibrary(n), offerMigration: () => offerMigration() };
       out = await new AsyncFn("SL", "hooks", info.testScript)(SL, hooks);
     } catch (e) { out = { error: String((e as Error)?.stack || e) }; }
     if (out !== undefined) await SL.call("testDone", { text: JSON.stringify(out, null, 1) }); // undefined: it went to another page
