@@ -483,7 +483,9 @@ function showStatus(stats?: Stats) {
          + `\nDropouts ${stats.xruns === null ? "n/a" : stats.xruns} · disk underruns ${stats.underruns}`
          + `\nMIDI ${stats.midiSent} sent, ${stats.midiDropped} dropped`;
   }
-  chip.title = tip + "\nClick for Settings › Audio";
+  // 8a: on a narrow window the chip is just its dot, so the tooltip starts with what the text says
+  const said = txt.textContent || "";
+  chip.title = (tip.startsWith(said) ? "" : said + "\n") + tip + "\nClick for Settings › Audio";
   dot.style.background = red ? "var(--red, #ff453a)" : "var(--green, #30d158)";
   chip.classList.toggle("bad", red);
 }

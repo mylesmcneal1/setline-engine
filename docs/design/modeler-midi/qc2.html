@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>set.Line — modeler-aware MIDI (mockup)</title>
+<link rel="stylesheet" href="base.css">
+<style>
+body{grid-template-rows:52px 1fr}
+.main{grid-template-columns:minmax(0,1fr) 340px}.right{overflow:auto}
+.ctr{display:block;min-height:0;padding:0 8px}.ctr .sh{height:58px}.ctr>.grid{height:30px}
+.row{display:grid;grid-template-columns:300px minmax(0,1fr);gap:6px;margin-bottom:5px}
+.hd{background:#1c1c1e;border-radius:9px;display:flex;align-items:center;gap:8px;padding-right:10px;overflow:hidden;height:100%}
+.ln{background:#141415;border-radius:9px;position:relative;overflow:hidden}
+.tab{width:5px;align-self:stretch}
+.secs span{position:absolute;top:4px;bottom:4px;border-radius:5px;font-size:11px;font-weight:600;padding:3px 6px;color:#0b0b0c;white-space:nowrap;overflow:hidden}
+.preset{position:absolute;top:5px;height:22px;border-radius:6px;background:#2a2a30;border:1px solid #46464e;font-size:11px;font-weight:700;color:#e4e4e8;padding:3px 8px;white-space:nowrap;overflow:hidden}
+.preset b{color:#8e8e96;font-weight:600}
+.scene{position:absolute;top:31px;bottom:6px;border-radius:7px;color:#0b0b0c;font-weight:800;font-size:12px;padding:5px 8px;white-space:nowrap;overflow:hidden;display:flex;align-items:center;gap:6px}
+.scene i{font-style:normal;background:rgba(0,0,0,.25);color:#fff;border-radius:5px;padding:1px 6px;font-size:11px}
+.scene small{font-weight:600;opacity:.8}
+.scene.sel{outline:2px solid #fff;outline-offset:1px}
+.fs{position:absolute;bottom:6px;height:12px;border-radius:3px;background:#ffd60a}
+.qcgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:8px}
+.qcb{border-radius:10px;padding:9px 6px;text-align:center;font-weight:800;color:#0b0b0c;position:relative;font-size:15px}
+.qcb small{display:block;font-size:10px;font-weight:600;opacity:.8;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.qcb.on{outline:2px solid #fff;outline-offset:2px}
+.pick{display:grid;grid-template-columns:repeat(8,1fr);gap:4px;margin-top:6px}
+.pick span{background:#2a2a2e;border-radius:5px;text-align:center;padding:5px 0;font-size:11px;color:#c9c9cf}
+.pick span.on{background:var(--blue);color:#fff;font-weight:700}
+.pop{position:absolute;z-index:20;background:#2c2c30;border:0.5px solid #48484e;border-radius:12px;box-shadow:0 14px 40px rgba(0,0,0,.6);padding:10px;width:290px}
+.pop h4{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+.devsel{display:flex;gap:6px;flex-wrap:wrap}
+.devsel span{background:var(--s3);border-radius:7px;padding:5px 9px;font-size:12px}
+.devsel span.on{background:#0a84ff;color:#fff;font-weight:600}
+</style></head>
+<body>
+<div class="top">
+  <div class="logo">set.Line</div>
+  <div class="seg"><span class="on">Show</span><span>Perform</span><span>Band</span></div>
+  <span class="tb">File ▾</span><div class="sp"></div>
+  <div class="tp"><b>⏮</b><b>◀◀</b><b>■</b><b class="play">▶</b><b>▶▶</b><b>↻</b></div>
+  <div class="pos mono"><div><span class="big">1 . 1 . 1</span><small>0:00.0</small></div><div><span class="big">92</span><small>BPM · 4/4</small></div></div>
+  <div class="sp"></div><div class="pill"><span class="dot"></span>iD14 · 48k · 128</div><div class="gear">⚙</div>
+</div>
+<div class="main">
+ <div class="ctr" id="ctr" style="position:relative">
+  <div class="sh"><span style="width:5px;height:30px;border-radius:3px;background:#22c3a6"></span><h1>Glasshouse</h1><span class="chip">Album ▾</span><span class="meta mono">92 BPM · 4/4 · F♯ · 3:26</span></div>
+  <div class="grid" style="grid-template-columns:300px minmax(0,1fr);gap:6px"><div class="lab" style="border-radius:8px">Bars</div><div class="lanebg ruler" id="ruler" style="border-radius:8px"></div></div>
+  <div class="grid" style="grid-template-columns:300px minmax(0,1fr);gap:6px;margin:5px 0"><div class="lab" style="border-radius:8px">Sections</div><div class="lanebg secs" id="secs" style="border-radius:8px;height:30px"></div></div>
+  <div>
+   <div class="row" style="height:46px"><div class="hd"><span class="tab" style="background:#ff6b6b"></span><span style="width:18px;text-align:center;color:#ff6b6b">∿</span><span style="flex:1">Drums</span><span class="out">FOH L/R ▾</span></div><div class="ln"><div class="clip" style="left:5px;right:5px;background:rgba(255,107,107,.18);border:1px solid rgba(255,107,107,.4)"></div></div></div>
+   <div class="row" style="height:96px"><div class="hd" style="background:#1f2230"><span class="tab" style="background:#5aa9ff"></span>
+      <div style="width:34px;height:34px;border-radius:8px;background:#000;border:1px solid #333;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;letter-spacing:.02em">QC</div>
+      <div style="flex:1;line-height:1.3"><b>Guitar rig</b><br><span style="font-size:11px;color:var(--muted)">Quad Cortex · Ch 1</span><br><span style="font-size:11px;color:#9fc0e6">Setlist 5 · Scene mode</span></div><span class="out">USB MIDI ▾</span></div>
+     <div class="ln" id="qclane"></div></div>
+   <div class="row" style="height:46px"><div class="hd"><span class="tab" style="background:#ffd60a"></span><span style="width:18px;text-align:center;color:#ffd60a">⎍</span><span style="flex:1">Lights</span><span class="out">loopMIDI · Ch 16 ▾</span></div><div class="ln"><div class="clip" style="left:5px;width:30%;background:rgba(255,214,10,.14);border:1px solid rgba(255,214,10,.4)"><span class="cl">PC 4</span></div></div></div>
+   <div style="padding:10px 4px;color:var(--muted);font-size:12px;line-height:1.6;max-width:760px">Double-click the Guitar rig lane to drop a scene · drag a scene's edge to move the change · the thin bar on top is the preset (sent once, at its start) · yellow ticks are footswitch presses (stomps).</div>
+  </div>
+  <div class="pop" id="pop" style="left:620px;top:330px;z-index:50">
+   <h4>Change to scene at bar 25</h4>
+   <div class="qcgrid" style="grid-template-columns:repeat(4,1fr)" id="popgrid"></div>
+   <div style="font-size:11px;color:var(--muted);margin-top:8px">Sends CC 43 = 2 (Scene C) on Ch 1</div>
+  </div>
+ </div>
+ <div class="right" id="right"></div>
+</div>
+<script>
+const SC=[['A','Clean','#64d2ff'],['B','Crunch','#ffd60a'],['C','Lead','#ff453a'],['D','Ambient','#bf5af2'],['E','Rhythm DT','#30d158'],['F','Solo boost','#ff9f0a'],['G','Breakdown','#ff375f'],['H','Swell','#5e5ce6']];
+const MAX=58;
+document.getElementById('ruler').innerHTML=[1,9,17,25,33,41,49,57].map(b=>`<span style="left:${(b-1)/MAX*100+.3}%">${b}</span>`).join('');
+const S=[[0,8,'Intro','--s-intro'],[8,16,'Verse 1','--s-verse'],[24,14,'Chorus 1','--s-chorus'],[38,4,'Turn','--s-pre'],[42,16,'Verse 2','--s-verse']];
+document.getElementById('secs').innerHTML=S.map(s=>`<span style="left:calc(${s[0]/MAX*100}% + 1px);width:calc(${s[1]/MAX*100}% - 2px);background:var(${s[3]})">${s[2]}</span>`).join('');
+const P=[[0,58,'17A','Glasshouse Rig']];
+const Z=[[0,8,3],[8,16,0],[24,14,2,1],[38,4,7],[42,16,0]];
+document.getElementById('qclane').innerHTML=P.map(p=>`<div class="preset" style="left:calc(${p[0]/MAX*100}% + 5px);width:calc(${p[1]/MAX*100}% - 10px)">Preset ${p[2]} <b>· ${p[3]}</b></div>`).join('')+
+ Z.map(z=>{const s=SC[z[2]];return `<div class="scene${z[3]?' sel':''}" style="left:calc(${z[0]/MAX*100}% + 3px);width:calc(${z[1]/MAX*100}% - 6px);background:${s[2]}"><i>${s[0]}</i>${s[1]}</div>`}).join('')+
+ [30,33,47].map(b=>`<div class="fs" style="left:calc(${b/MAX*100}%);width:6px" title="Footswitch"></div>`).join('');
+document.getElementById('popgrid').innerHTML=SC.map((s,i)=>`<div class="qcb${i==2?' on':''}" style="background:${s[2]}">${s[0]}<small>${s[1]}</small></div>`).join('');
+document.getElementById('right').innerHTML=`<div class="rh"><span class="tab2" style="background:#5aa9ff"></span><h2>Guitar rig</h2><small>MIDI track</small></div>
+<div class="card"><h3>Device</h3><div class="devsel"><span class="on">Quad Cortex</span><span>Axe-Fx III</span><span>Helix</span><span>Kemper</span><span>Generic</span></div>
+<div class="f" style="margin-top:8px"><span>Port · Channel</span><span class="sel2">USB MIDI · 1 ▾</span></div><div class="f"><span>Mode on load</span><div class="segm"><span>Preset</span><span class="on">Scene</span><span>Stomp</span></div></div></div>
+<div class="card"><h3>Preset</h3><div class="f"><span>Setlist</span><span class="sel2">5 · Fall Tour ▾</span></div>
+<div style="font-size:12px;color:var(--muted);margin-top:4px">Bank 17</div><div class="pick">${'ABCDEFGH'.split('').map(l=>`<span class="${l=='A'?'on':''}">17${l}</span>`).join('')}</div>
+<div class="f" style="margin-top:6px"><span>Name</span><span class="sel2">Glasshouse Rig</span></div></div>
+<div class="card"><h3>Preset fields</h3>
+<div class="f"><span>Tuning</span><span class="sel2">Drop C ▾</span></div>
+<div class="f"><span>Guitar</span><span class="sel2">Baritone ▾</span></div>
+<div class="f"><span>Pickup / setting</span><span class="sel2">Bridge</span></div>
+<div class="f"><span>Tech notes</span><span class="sel2" style="min-width:150px">Fresh 11s, check B</span></div>
+<div style="font-size:11px;color:var(--muted);margin-top:6px">Every song using 17A gets these automatically (a song can override one). Band screens and the "Until next change" countdown can use them.</div>
+<div style="font-size:12px;color:#5aa9ff;margin-top:6px">＋ Add field · Manage fields…</div></div><div class="card"><h3>Scenes · colours match your QC</h3><div class="qcgrid">${SC.map((s,i)=>`<div class="qcb" style="background:${s[2]}">${s[0]}<small>${s[1]}</small></div>`).join('')}</div>
+<div style="font-size:11px;color:var(--muted);margin-top:8px">Click a scene to rename it or change its colour. Saved with this preset, so every song using 17A shows the same names and colours.</div></div>`;
+</script>
+</body></html>

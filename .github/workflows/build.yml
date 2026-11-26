@@ -67,6 +67,19 @@ jobs:
       - name: UI pages parse (inline scripts)
         run: node tests/ui-syntax.mjs
 
+      # 8a: the main views in headless Chrome at 1280x800 (the band's MacBook) and 1440x900; fails when the top bar
+      # or the right panel overflows, a button wraps or a menu item has no text. Screenshots are kept as an artifact.
+      - name: UI layout at 1280x800
+        run: node tests/ui-layout.mjs --shots ui-layout-shots
+
+      - name: Upload UI layout screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-layout-${{ matrix.name }}
+          path: ui-layout-shots
+          if-no-files-found: ignore
+
       - name: Find binaries (macOS)
         if: matrix.name == 'macos'
         run: |
