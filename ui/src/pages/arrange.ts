@@ -738,8 +738,8 @@ async function exportSetlist(listId?: string, to?: string) {
 // ---- 7b: Import an Ableton Live project (.als). Read (in the app, read-only) -> preview -> copy the audio into the
 // Library (by content: the same file twice is stored once) with progress and Cancel -> the songs (and a setlist) ->
 // a summary, saved next to the Library's migration log. choose: tests answer the preview themselves.
-interface AbleData { project: string; live: string; mode: string; path: string; songs: any[]; ignored: string[]; missing: string[]; warnings: string[]; error?: string; cancelled?: boolean }
-type AbleChoice = { picks: { i: number; dup: string }[]; setlist: boolean; data?: AbleData };
+interface AbleData { project: string; live: string; mode: string; path: string; songs: any[]; ignored: string[]; missing: string[]; warnings: string[]; cuePads?: any[]; converted?: any[]; error?: string; cancelled?: boolean }
+type AbleChoice = { picks: { i: number; dup: string }[]; setlist: boolean; data?: AbleData; opt?: any };
 async function importAbleton(path?: string, choose?: (data: AbleData, dups: any[]) => Promise<AbleChoice | null>, mode = "auto") {
   if (page().playing) { page().toast("Stop playback first"); return { error: "playing" }; }
   if (!lib) { page().toast("Open a library first"); return { error: "no library" }; }
@@ -794,12 +794,31 @@ async function importAbleton(path?: string, choose?: (data: AbleData, dups: any[
   for (const i of await probe(files)) infos[i.path] = i;
   if (!sessionRate) sessionRate = Object.values(infos).find((i) => i.rate)?.rate || rateForImport();
   const otherRate = Object.values(infos).filter((i) => i.rate && i.rate !== sessionRate);
-  const res = A.add(data, choice.picks, refs, infos, choice.setlist);
+  // 8b: recorded cue audio: each pad the chosen songs use, its part of the sample cut into a WAV and copied into the
+  // Library as that word ("Use your recorded cue audio")
+  const opt = A.opt(choice.opt);
+  let recWords = 0;
+  if (opt.recCues && (data.cuePads || []).length) {
+    const used = new Set<string>();
+    for (const p of choice.picks) for (const c of data.songs[p.i].cues || []) used.add(c.track + "|" + c.note);
+    const items = (data.cuePads || []).filter((x: any) => used.has(x.track + "|" + x.note) && x.file && x.file.found)
+      .map((x: any) => { const k = x.track + "|" + x.note; return { path: x.file.path, start: x.file.start || 0, end: x.file.end ?? -1, word: (opt.padWords[k] !== undefined ? opt.padWords[k] : x.word).trim() || x.word }; });
+    const uniq = items.filter((x: any, k: number) => items.findIndex((y: any) => y.word.toLowerCase() === x.word.toLowerCase()) === k);
+    if (uniq.length) {
+      const cut = await SL.call<{ word: string; path: string }[]>("ableCueAudio", { items: uniq }).catch(() => []);
+      if (cut.length) {
+        const imp = await SL.call<{ files?: { path: string; ref: string }[]; error?: string }>("importAudio", { session: cur.path || "", copy: true, files: cut.map((c) => c.path), sub: "Cues/Words" });
+        for (const f of imp.files || []) { const c = cut.find((x) => x.path === f.path); if (c) { opt.cueRefs[c.word.toLowerCase()] = { ref: f.ref, name: c.word + ".wav" }; recWords++; } }
+      }
+    }
+  }
+  const res = A.add(data, choice.picks, refs, infos, choice.setlist, opt);
   loadedKey = null; nextKey = "";
   // the summary (and the log next to the migration log)
   const lines: string[] = [`Imported from Ableton: ${data.project} (${data.path})`,
     `${res.added.length} new song${res.added.length === 1 ? "" : "s"}${res.versions.length ? `, ${res.versions.length} new version${res.versions.length === 1 ? "" : "s"}` : ""}${res.setlist ? `, setlist “${res.setlist}”` : ""}; ${files.length} audio file${files.length === 1 ? "" : "s"} copied into the library.`];
-  for (const p of choice.picks) { const s = data.songs[p.i]; lines.push(`- ${s.name}: ${s.audioTracks} audio, ${s.midiTracks} MIDI, ${s.secs.length} sections${(s.warnings || []).length ? "\n    " + s.warnings.join("\n    ") : ""}`); }
+  if (recWords) lines.push(`${recWords} recorded cue word${recWords === 1 ? "" : "s"} from the Live pads (the same voice as in Live).`);
+  for (const p of choice.picks) { const s = data.songs[p.i]; lines.push(`- ${s.name}: ${s.audioTracks} audio, ${s.midiTracks} MIDI, ${(s.clicks || []).length} click, ${(s.cues || []).length} cues, ${opt.secs[p.i] ? "sections from cues" : s.secs.length + " sections"}${(s.warnings || []).length ? "\n    " + s.warnings.join("\n    ") : ""}`); }
   if (otherRate.length) lines.push(`${otherRate.length} file${otherRate.length === 1 ? " isn't" : "s aren't"} at the library's rate (${sessionRate / 1000} kHz); set.Line never resamples, so ${otherRate.length === 1 ? "it plays" : "they play"} at the wrong speed until replaced: ${otherRate.map((i) => i.name).join(", ")}`);
   const missing = [...new Set(choice.picks.flatMap((p) => (data.songs[p.i].tracks || []).filter((t: any) => t.kind === "audio" && !(t.file && t.file.found)).map((t: any) => (t.file && t.file.name) as string)))].filter(Boolean);
   if (missing.length) lines.push(`Still missing (those tracks play silence until you add the file): ${missing.join(", ")}`);

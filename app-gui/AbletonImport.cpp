@@ -1,4 +1,5 @@
 #include "AbletonImport.h"
+#include <juce_audio_formats/juce_audio_formats.h>
 #include <algorithm>
 #include <cmath>
 #include <functional>
@@ -31,6 +32,25 @@ bool flag(const Xml* e, std::initializer_list<const char*> names, bool def = fal
     return s.isEmpty() ? def : s.equalsIgnoreCase("true");
 }
 template <typename F> void each(const Xml* e, const char* name, F f) { if (e) for (auto* c : e->getChildWithTagNameIterator(name)) f(c); }
+const Xml* findDeep(const Xml* e, const char* name)
+{
+    if (! e) return nullptr;
+    for (auto* c : e->getChildIterator()) { if (c->hasTagName(name)) return c; if (auto* f = findDeep(c, name)) return f; }
+    return nullptr;
+}
+// 8b: a Drum Rack pad / sample name as a cue word: "verse 1" -> "Verse 1", "DRUMFILL" -> "Drumfill", "03_Chorus.wav" -> "Chorus"
+juce::String cueWord(juce::String n)
+{
+    const auto ext = n.fromLastOccurrenceOf(".", false, false);
+    if (n.containsChar('.') && ext.length() >= 2 && ext.length() <= 4 && ! ext.containsChar(' ')) n = n.upToLastOccurrenceOf(".", false, false);
+    n = n.replaceCharacter('_', ' ').trim();
+    int k = 0; while (k < n.length() && juce::CharacterFunctions::isDigit(n[k])) ++k;   // "03 Chorus", "3-Verse": a number in front
+    if (k > 0 && k < n.length() && (n[k] == ' ' || n[k] == '-' || n[k] == '.')) n = n.substring(k + 1).trim();
+    juce::StringArray w; w.addTokens(n.toLowerCase(), " ", ""); w.removeEmptyStrings();
+    if (w.isEmpty()) return {};
+    w.set(0, w[0].substring(0, 1).toUpperCase() + w[0].substring(1));
+    return w.joinIntoString(" ");
+}
 
 juce::var obj(std::initializer_list<std::pair<const char*, juce::var>> kv)
 {
@@ -258,6 +278,9 @@ struct Track {
     double gainDb = 0; bool mute = false;
     std::vector<Clip> clips;
     juce::String midiOut; int midiCh = 1; bool noOut = false;
+    juce::String role;              // 8b: "click" / "cues" for MIDI tracks that play a Drum Rack / Simpler inside Live
+    struct Pad { int note = -1; juce::String name; juce::File file; juce::String fileName; double start = 0, end = -1; }; // start / end: the part of the sample the pad plays (samples)
+    std::vector<Pad> pads;          // the Drum Rack's pads (note -> chain name, sample); one pad with note -1 = a Simpler (any note)
     juce::String audioOut;          // Live's audio output target ("AudioOut/None" = Sends Only, "AudioOut/Track.103/TrackIn"...)
     std::vector<double> sends;      // send levels (linear, 1 = 0 dB), one per return track in order
     bool hasNotes = false;
@@ -417,11 +440,42 @@ Project readProject(const Xml& root, const juce::File& als, const Options& opts)
                     T.hasNotes = T.hasNotes || ! k.notes.empty();
                     T.clips.push_back(k);
                 });
-                if (T.noOut && ! T.devices.isEmpty() && T.hasNotes)
+                if (T.noOut && ! T.devices.isEmpty()) {
+                    // 8b: the pads of its Drum Rack (note = 128 - ReceivingNote, name = the chain's name, the sample it plays),
+                    // or one Simpler that plays for every note
+                    auto* chain = kid(t, "DeviceChain");
+                    if (auto* rack = findDeep(chain, "DrumGroupDevice"))
+                        each(kid(rack, "Branches"), "DrumBranch", [&](const Xml* b) {
+                            Track::Pad pd;
+                            pd.note = 128 - (int) num(b, { "BranchInfo", "ReceivingNote" }, 128 - 36);
+                            pd.name = val(b, { "Name", "UserName" }); if (pd.name.isEmpty()) pd.name = val(b, { "Name", "EffectiveName" });
+                            if (auto* part = findDeep(b, "MultiSamplePart")) { pd.file = finder.resolve(path(part, { "SampleRef", "FileRef" }), pd.fileName); pd.start = num(part, { "SampleStart" }); pd.end = num(part, { "SampleEnd" }, -1); }
+                            T.pads.push_back(pd);
+                        });
+                    else if (auto* simp = findDeep(chain, "OriginalSimpler")) {
+                        Track::Pad pd; pd.name = val(simp, { "UserName" });
+                        if (auto* part = findDeep(simp, "MultiSamplePart")) { pd.file = finder.resolve(path(part, { "SampleRef", "FileRef" }), pd.fileName); pd.start = num(part, { "SampleStart" }); pd.end = num(part, { "SampleEnd" }, -1); }
+                        T.pads.push_back(pd);
+                    }
+                    const auto lname = T.name.toLowerCase();
+                    auto any = [&](const juce::StringArray& words, const juce::String& in) { for (auto& w : words) if (in.contains(w)) return true; return false; };
+                    const juce::StringArray clickWords { "click", "clk", "metronome", "metro", "tick" };
+                    const juce::StringArray sectionWords { "intro", "verse", "chorus", "bridge", "pre", "outro", "ending", "breakdown", "build", "solo", "one", "two", "three", "four" };
+                    int clicky = 0, cuey = 0;
+                    for (auto& pd : T.pads) { const auto n = (pd.name + " " + pd.fileName).toLowerCase(); clicky += any(clickWords, n) || n.contains("cowbell") || n.contains("beep"); cuey += any(sectionWords, n); }
+                    const bool nameClick = any(clickWords, lname);
+                    const bool nameCue = lname == "qs" || lname == "q's" || lname == "q" || lname.contains("cue") || lname == "guide" || lname == "guides" || lname.contains("spoken");
+                    if (! T.hasNotes) {} // nothing to convert (an empty template track)
+                    else if (nameClick && ! nameCue) T.role = "click";
+                    else if (nameCue) T.role = "cues";
+                    else if (! T.pads.empty() && clicky * 2 >= (int) T.pads.size()) T.role = "click";
+                    else if (! T.pads.empty() && cuey * 2 >= (int) T.pads.size()) T.role = "cues";
+                }
+                if (T.role.isEmpty() && T.noOut && ! T.devices.isEmpty() && T.hasNotes)
                     P.warnings.addIfNotAlreadyThere("MIDI track \"" + T.name + "\" plays " + T.devices.joinIntoString(", ") + " inside Live, not a MIDI port: not imported (set.Line makes its own click and cues; bounce it to audio if you need it).");
             } else continue;
             for (auto& k : T.clips) P.endBeat = std::max(P.endBeat, k.end);
-            for (auto& d : T.devices) P.ignored.addIfNotAlreadyThere(d + " (" + T.name + ")");
+            if (T.role.isEmpty()) for (auto& d : T.devices) P.ignored.addIfNotAlreadyThere(d + " (" + T.name + ")");
             P.tracks.push_back(T);
         }
     for (auto& d : deviceNames(kid(master, "DeviceChain"))) P.ignored.addIfNotAlreadyThere(d + " (master)");
@@ -504,7 +558,7 @@ juce::var makeSong(const Project& P, const SongSpec& sp, const Options& opts)
         chain.add(t.name); return chain.joinIntoString(" / ");
     };
     auto barBeat = [&](double beat, int& bar, double& bt) { const int k = g.barAt(beat); bar = k + 1; bt = 1.0 + (beat - g.start[(size_t) k]) * g.sig[(size_t) k].second / 4.0; };
-    juce::Array<juce::var> tracks;
+    juce::Array<juce::var> tracks, clicks, cues;
     int nAudio = 0, nMidi = 0;
     std::set<juce::String> used;
     auto uniq = [&](juce::String n) { const auto b = n; for (int k = 2; used.count(n.toLowerCase()); ++k) n = b + " (" + juce::String(k) + ")"; used.insert(n.toLowerCase()); return n; };
@@ -591,6 +645,66 @@ juce::var makeSong(const Project& P, const SongSpec& sp, const Options& opts)
                 if (! found) warn.addIfNotAlreadyThere("\"" + name + "\": " + k->fileName + " is missing.");
                 tracks.add(tr); ++nAudio;
             }
+        } else if (t.kind == "midi" && t.role.isNotEmpty()) {
+            // 8b: Live's click / cue MIDI tracks. Every note in the song with its bar and beat; the clips' bar ranges.
+            struct N { double ab; int key, vel; };
+            std::vector<N> notes; std::vector<std::pair<int, int>> ranges; // bars [first, last]
+            for (auto& k : t.clips) {
+                if (k.disabled || k.end <= sp.b0 + 1e-9 || k.start >= sp.b1 - 1e-9) continue;
+                const double sm = k.startMarker(), a0 = std::max(k.start, sp.b0), a1 = std::min(k.end, sp.b1);
+                ranges.push_back({ g.barAt(a0) + 1, g.barAt(a1 - 1e-6) + 1 });
+                for (auto& n : k.notes) {
+                    auto at = [&](double ab) { if (ab >= a0 - 1e-9 && ab < a1 - 1e-9) notes.push_back({ ab, n.key, n.vel }); };
+                    if (! k.loopOn) { if (n.t >= sm - 1e-9) at(k.start + (n.t - sm)); continue; }
+                    const double L = k.loopEnd - k.loopStart; if (L <= 1e-9) continue;
+                    double first = k.start + (n.t - sm);
+                    if (n.t < sm - 1e-9 || n.t >= k.loopEnd - 1e-9) { if (n.t < k.loopStart - 1e-9 || n.t >= k.loopEnd - 1e-9) continue; first = k.start + (k.loopEnd - sm) + (n.t - k.loopStart); }
+                    for (double ab = first; ab < a1 - 1e-9; ab += L) at(ab);
+                }
+            }
+            if (notes.empty() && ranges.empty()) continue;
+            std::sort(notes.begin(), notes.end(), [](const N& a, const N& b) { return a.ab < b.ab; });
+            if (t.role == "click") {
+                // accent: a note that (nearly) always falls on beat 1 when the others don't; else louder notes on beat 1; else beat 1
+                std::map<int, std::pair<int, int>> byKey; double v1 = 0, vo = 0; int n1 = 0, no = 0;
+                for (auto& n : notes) { int bar; double bt; barBeat(n.ab, bar, bt); const bool one = std::abs(bt - 1.0) < 1e-3; auto& c = byKey[n.key]; c.first++; c.second += one ? 1 : 0; if (one) { v1 += n.vel; ++n1; } else { vo += n.vel; ++no; } }
+                int accKey = -1; juce::String how = "beat 1";
+                if (byKey.size() >= 2)
+                    for (auto& [key, c] : byKey) {
+                        if (c.second * 10 < c.first * 8) continue;
+                        bool othersOff = true; for (auto& [k2, c2] : byKey) if (k2 != key && c2.second * 5 > c2.first) othersOff = false;
+                        if (othersOff) { accKey = key; how = "note"; }
+                    }
+                const bool byVel = accKey < 0 && n1 > 0 && no > 0 && v1 / n1 >= vo / no + 8;
+                if (byVel) how = "velocity";
+                const double velCut = byVel ? (v1 / n1 + vo / no) / 2 : 0;
+                juce::Array<juce::var> nv; int offGrid = 0;
+                for (auto& n : notes) {
+                    int bar; double bt; barBeat(n.ab, bar, bt);
+                    const auto sig = g.sig[(size_t) (bar - 1)];
+                    const double st = (bt - 1.0) * 16.0 / sig.second;
+                    if (std::abs(st - std::round(st)) > 0.05) ++offGrid;
+                    const bool acc = accKey >= 0 ? n.key == accKey : byVel ? n.vel >= velCut : std::abs(bt - 1.0) < 1e-3;
+                    nv.add(obj({ { "bar", bar }, { "st", (int) std::lround(st) }, { "acc", acc } }));
+                }
+                std::sort(ranges.begin(), ranges.end());
+                juce::Array<juce::var> regs; int r0 = -1, r1 = -1;
+                for (auto& [a, b] : ranges) { if (r0 < 0) { r0 = a; r1 = b; } else if (a <= r1 + 1) r1 = std::max(r1, b); else { regs.add(obj({ { "bar", r0 }, { "bars", r1 - r0 + 1 } })); r0 = a; r1 = b; } }
+                if (r0 >= 0) regs.add(obj({ { "bar", r0 }, { "bars", r1 - r0 + 1 } }));
+                if (offGrid) warn.addIfNotAlreadyThere(""" + name + "": " + juce::String(offGrid) + " click note" + (offGrid > 1 ? "s aren't" : " isn't") + " on a 16th; they're moved to the nearest one.");
+                clicks.add(obj({ { "name", name }, { "source", t.name }, { "regions", regs }, { "notes", nv }, { "accent", how } }));
+            } else {
+                std::map<int, const Track::Pad*> padOf; const Track::Pad* simpler = nullptr;
+                for (auto& pd : t.pads) { if (pd.note < 0) simpler = &pd; else padOf[pd.note] = &pd; }
+                for (auto& n : notes) {
+                    int bar; double bt; barBeat(n.ab, bar, bt);
+                    const auto* pd = padOf.count(n.key) ? padOf[n.key] : simpler;
+                    auto word = pd ? cueWord(pd->name.isNotEmpty() ? pd->name : pd->fileName) : juce::String();
+                    if (word.isEmpty()) word = "Note " + juce::String(n.key);
+                    cues.add(obj({ { "bar", bar }, { "beat", bt }, { "note", n.key }, { "word", word }, { "track", t.name } }));
+                }
+            }
+            continue;
         } else if (t.kind == "midi") {
             juce::Array<juce::var> evs;
             bool any = false;
@@ -642,7 +756,7 @@ juce::var makeSong(const Project& P, const SongSpec& sp, const Options& opts)
     }
     juce::Array<juce::var> w; for (auto& x : warn) w.add(x);
     return obj({ { "name", sp.name }, { "startBeat", sp.b0 }, { "endBeat", sp.b1 }, { "seconds", secOf(sp.b1) }, { "total", bars }, { "tmap", tmap }, { "secs", secs },
-                 { "tracks", tracks }, { "audioTracks", nAudio }, { "midiTracks", nMidi }, { "warnings", w } });
+                 { "tracks", tracks }, { "audioTracks", nAudio }, { "midiTracks", nMidi }, { "clicks", clicks }, { "cues", cues }, { "warnings", w } });
 }
 
 // ---------------------------------------------------------------- songs from locators
@@ -721,6 +835,35 @@ std::vector<SongSpec> splitSongs(const Project& P, juce::String mode, juce::Stri
 
 } // namespace
 
+juce::var cutPadSamples(const juce::var& items, const juce::File& dir)
+{
+    juce::AudioFormatManager fm; fm.registerBasicFormats();
+    juce::Array<juce::var> out;
+    dir.createDirectory();
+    if (auto* a = items.getArray())
+        for (auto& it : *a) {
+            const juce::File src(it["path"].toString());
+            const auto word = it["word"].toString().trim();
+            std::unique_ptr<juce::AudioFormatReader> r(fm.createReaderFor(src));
+            if (! r || word.isEmpty()) continue;
+            const auto len = (juce::int64) r->lengthInSamples;
+            const auto s0 = juce::jlimit<juce::int64>(0, len, (juce::int64) (double) it["start"]);
+            const double e = it["end"];
+            const auto s1 = e < 0 ? len : juce::jlimit<juce::int64>(s0, len, (juce::int64) e + 1);
+            if (s1 - s0 < 16) continue;
+            juce::AudioBuffer<float> buf((int) juce::jmax(1u, r->numChannels), (int) (s1 - s0));
+            r->read(&buf, 0, buf.getNumSamples(), s0, true, true);
+            const auto f = dir.getChildFile(juce::File::createLegalFileName(word) + ".wav");
+            f.deleteFile();
+            std::unique_ptr<juce::OutputStream> os(new juce::FileOutputStream(f));
+            if (! static_cast<juce::FileOutputStream*>(os.get())->openedOk()) continue;
+            juce::WavAudioFormat wav;
+            const auto opts = juce::AudioFormatWriterOptions {}.withSampleRate(r->sampleRate).withNumChannels(buf.getNumChannels()).withBitsPerSample(24);
+            if (auto w = wav.createWriterFor(os, opts)) { w->writeFromAudioSampleBuffer(buf, 0, buf.getNumSamples()); w.reset(); out.add(obj({ { "word", word }, { "path", f.getFullPathName() } })); }
+        }
+    return out;
+}
+
 juce::var read(const juce::File& als, const Options& opts, juce::String& error)
 {
     auto x = loadXml(als, error);
@@ -734,7 +877,16 @@ juce::var read(const juce::File& als, const Options& opts, juce::String& error)
     for (auto& s : P.ignored) ig.add(s);
     for (auto& s : P.missing) miss.add(s);
     for (auto& s : P.warnings) warn.add(s);
-    return obj({ { "project", P.name }, { "live", P.live }, { "mode", used }, { "songs", songs }, { "ignored", ig }, { "missing", miss }, { "warnings", warn }, { "path", als.getFullPathName() } });
+    juce::Array<juce::var> pads, roles;
+    for (auto& t : P.tracks) {
+        if (t.role.isNotEmpty()) roles.add(obj({ { "track", t.name }, { "role", t.role }, { "pads", (int) t.pads.size() } }));
+        if (t.role == "cues")
+            for (auto& pd : t.pads)
+                pads.add(obj({ { "track", t.name }, { "note", pd.note }, { "name", pd.name }, { "word", cueWord(pd.name.isNotEmpty() ? pd.name : pd.fileName) },
+                               { "file", obj({ { "path", pd.file.existsAsFile() ? pd.file.getFullPathName() : juce::String() }, { "name", pd.fileName }, { "found", pd.file.existsAsFile() }, { "start", pd.start }, { "end", pd.end } }) } }));
+    }
+    return obj({ { "project", P.name }, { "live", P.live }, { "mode", used }, { "songs", songs }, { "ignored", ig }, { "missing", miss }, { "warnings", warn }, { "path", als.getFullPathName() },
+                 { "cuePads", pads }, { "converted", roles } });
 }
 
 juce::var locate(const juce::File& folder, const juce::StringArray& names)

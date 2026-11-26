@@ -650,6 +650,17 @@ Bridge::Options Bridge::addTo(Options o)
             juce::MessageManager::callAsync([rv, done, alive_] { if (*alive_ != nullptr) done(rv); });
         }).detach();
     });
+    // 8b: the pads' parts of their samples as cue words: {items: [{path, start, end, word}]} -> [{word, path}] (WAVs in a
+    // temporary folder; importAudio then copies them into the Library)
+    o = addAsync(o, "ableCueAudio", [this](const juce::var& a, auto done) {
+        const auto items = a["items"];
+        auto alive_ = alive;
+        std::thread([items, done, alive_] {
+            const auto dir = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("setline-ableton-cues").getChildFile(juce::String::toHexString(juce::Random::getSystemRandom().nextInt64()));
+            auto v = ableton::cutPadSamples(items, dir);
+            juce::MessageManager::callAsync([v, done, alive_] { if (*alive_ != nullptr) done(v); });
+        }).detach();
+    });
     // the import's summary, next to the Library's migration log -> its path
     o = add(o, "ableLog", [this](const juce::var& a) {
         const auto f = lib.folder().getChildFile("ableton-import-log.txt");

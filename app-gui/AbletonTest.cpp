@@ -258,8 +258,8 @@ juce::StringArray selfTest(const juce::File& dir)
     check(secNames(cs[0]) == "INTRO@1,CHORUS@3L" && secNames(cs[1]) == "VERSE 1@1,OUTRO@3", "C: sections from the SECTION track's clips, flags read (+LOOP): " + secNames(cs[0]) + " | " + secNames(cs[1]));
     check(! findTrack(cs[0], "SONG").isObject() && ! findTrack(cs[0], "SECTION").isObject() && (int) cs[0]["midiTracks"] == 0,
           "C: the SONG / SECTION marker tracks and the Simpler click track aren't imported as MIDI tracks");
-    bool simpler = false; if (auto* w = C["warnings"].getArray()) for (auto& x : *w) simpler |= x.toString().contains("CLICK") && x.toString().contains("inside Live");
-    check(simpler, "C: the Simpler click track is named in the warnings (it plays inside Live, not to a MIDI port)");
+    bool simpler = false; if (auto* w = C["converted"].getArray()) for (auto& x : *w) simpler |= x["track"] == "CLICK" && x["role"] == "click";
+    check(simpler && cs[0]["clicks"].size() == 1, "C: the CLICK track playing a Simpler inside Live becomes a set.Line click track (8b)");
     const auto bt = findTrack(cs[0], "Backtrack");
     check(bt["bus"].toString() == "TRAX" && near((double) bt["gainDb"], 20 * std::log10(0.5), 1e-4) && ! (bool) bt["mute"],
           "C: a Sends Only track: its return track is its bus (TRAX; a send at -inf doesn't count) and the send level is in its gain (-6 dB): " + bt["bus"].toString() + " " + bt["gainDb"].toString());
@@ -269,6 +269,77 @@ juce::StringArray selfTest(const juce::File& dir)
     check((bool) findTrack(cs[0], "PRACTICE")["mute"] && recNote, "C: a track the returns record into (a practice mix) comes in muted, with a note");
     const auto bc = findTrack(cs[1], "Backtrack")["clips"][0];
     check(near((double) bc["fi"], 0.004) && near((double) bc["off"], 10.0), "C: Live's 4 ms clip-edge fade on an unwarped clip stays 4 ms; Beta's audio from 10 s into the file");
+
+    // ---- D (8b): Live's click and cue MIDI tracks playing Drum Racks inside Live -> set.Line click clips and cues
+    const auto projD = dir.getChildFile("Drum Rack Project");
+    wav(projD.getChildFile("Samples/Recorded/cues.wav"), 1.0);   // one take, two pads play parts of it
+    wav(projD.getChildFile("Samples/Imported/chorus.wav"), 0.5);
+    {
+        auto notesXml = [](std::vector<std::tuple<int, double, double, int>> ns) { // (key, time, dur, vel)
+            std::map<int, juce::String> byKey;
+            for (auto& [k, t, d, v] : ns) byKey[k] += "<MidiNoteEvent Time=\"" + juce::String(t) + "\" Duration=\"" + juce::String(d) + "\" Velocity=\"" + juce::String(v) + "\" OffVelocity=\"64\" IsEnabled=\"true\" />";
+            juce::String x; int id = 0;
+            for (auto& [k, n] : byKey) x += "<KeyTrack Id=\"" + juce::String(id++) + "\"><Notes>" + n + "</Notes>" + V("MidiKey", juce::String(k)) + "</KeyTrack>";
+            return "<Notes><KeyTracks>" + x + "</KeyTracks></Notes>";
+        };
+        auto clip = [&](double a, double b, const juce::String& notes) {
+            return "<MidiClip Id=\"0\" Time=\"" + juce::String(a) + "\">" + V("CurrentStart", a) + V("CurrentEnd", b) + "<Loop>" + V("LoopStart", 0.0) + V("LoopEnd", b - a) + V("StartRelative", 0.0) + V("LoopOn", "false") + "</Loop>"
+                   + V("Name", "") + V("Disabled", "false") + notes + V("BankSelectCoarse", "-1") + V("BankSelectFine", "-1") + V("ProgramChange", "-1") + "</MidiClip>";
+        };
+        auto pad = [](const juce::String& name, int note, const juce::String& rel, int s0, int s1) {
+            return "<DrumBranch Id=\"0\"><Name>" + V("EffectiveName", name) + V("UserName", name) + "</Name><DeviceChain><MidiToAudioDeviceChain><Devices><OriginalSimpler Id=\"0\"><Player><MultiSampleMap><SampleParts><MultiSamplePart Id=\"0\">"
+                   + "<SampleRef><FileRef>" + V("RelativePathType", "3") + V("RelativePath", rel) + V("Path", "") + "</FileRef></SampleRef>" + V("SampleStart", juce::String(s0)) + V("SampleEnd", juce::String(s1))
+                   + "</MultiSamplePart></SampleParts></MultiSampleMap></Player></OriginalSimpler></Devices></MidiToAudioDeviceChain></DeviceChain><BranchInfo>" + V("ReceivingNote", juce::String(128 - note)) + "</BranchInfo></DrumBranch>";
+        };
+        auto track = [](int id, const juce::String& name, const juce::String& clips, const juce::String& pads) {
+            return "<MidiTrack Id=\"" + juce::String(id) + "\">" + V("TrackGroupId", "-1") + "<Name>" + V("EffectiveName", name) + V("UserName", name) + "</Name>" + V("Color", "2")
+                   + "<DeviceChain><Mixer><Volume>" + V("Manual", 1.0) + "</Volume><Speaker>" + V("Manual", "true") + "</Speaker></Mixer>"
+                   + "<MidiOutputRouting>" + V("Target", "MidiOut/None") + V("UpperDisplayString", "None") + V("LowerDisplayString", "") + "</MidiOutputRouting>"
+                   + "<MainSequencer><ClipTimeable><ArrangerAutomation><Events>" + clips + "</Events></ArrangerAutomation></ClipTimeable></MainSequencer>"
+                   + "<DeviceChain><Devices><DrumGroupDevice Id=\"0\"><Branches>" + pads + "</Branches></DrumGroupDevice></Devices></DeviceChain></DeviceChain></MidiTrack>";
+        };
+        // CLICK: quarter notes over bars 2-4 (beats 4-16); the accent is its own note (37) on beat 1
+        std::vector<std::tuple<int, double, double, int>> ck; for (int i = 0; i < 12; ++i) ck.push_back({ i % 4 == 0 ? 37 : 36, (double) i, 0.25, 100 });
+        // DRUM CLICK: 8ths over bars 1-2, one note; beat 1 louder
+        std::vector<std::tuple<int, double, double, int>> dk; for (int i = 0; i < 16; ++i) dk.push_back({ 36, i * 0.5, 0.25, i % 8 == 0 ? 127 : 80 });
+        // Qs: "VERSE" (part of cues.wav), "one" (another part), and a pad with no name that plays chorus.wav
+        const auto qpads = pad("VERSE", 69, "Samples/Recorded/cues.wav", 4800, 9599) + pad("one", 92, "Samples/Recorded/cues.wav", 0, 4799) + pad("", 68, "Samples/Imported/chorus.wav", 0, 23999);
+        std::vector<std::tuple<int, double, double, int>> q { { 69, 0.0, 1.0, 100 }, { 92, 4.0, 1.0, 100 }, { 68, 8.5, 1.0, 100 } };
+        juce::String t;
+        t += track(1, "CLICK", clip(4, 16, notesXml(ck)), pad("Metronome", 36, "", 0, 0) + pad("MetronomeUp", 37, "", 0, 0));
+        t += track(2, "DRUM CLICK", clip(0, 8, notesXml(dk)), pad("Cubase", 36, "", 0, 0));
+        t += track(3, "Qs", clip(0, 32, notesXml(q)), qpads);
+        t += track(4, "-----------", "", pad("verse", 69, "", 0, 0) + pad("chorus", 68, "", 0, 0)); // an empty template: not converted
+        const auto set = "<Tracks>" + t + "</Tracks>" + master(120, {}, { { 0, 4, 4 } }) + locators({ { 0, "Song D" }, { 32, "" } });
+        als(projD.getChildFile("Drum Rack.als"), set, "Ableton Live 12.4.3");
+    }
+    Options od; od.mode = "ableset";
+    const auto D = read(projD.getChildFile("Drum Rack.als"), od, err);
+    const auto ds = D["songs"][0];
+    juce::StringArray conv; if (auto* c = D["converted"].getArray()) for (auto& x : *c) conv.add(x["track"].toString() + "=" + x["role"].toString());
+    check(conv.joinIntoString(",") == "CLICK=click,DRUM CLICK=click,Qs=cues", "D: CLICK / DRUM CLICK are click tracks, Qs is the cue track; an empty rack track isn't converted: " + conv.joinIntoString(","));
+    auto clickOf = [&](const juce::String& src) { if (auto* a = ds["clicks"].getArray()) for (auto& c : *a) if (c["source"].toString() == src) return c; return juce::var(); };
+    const auto c1 = clickOf("CLICK"), c2 = clickOf("DRUM CLICK");
+    check(c1.isObject() && c1["regions"].size() == 1 && (int) c1["regions"][0]["bar"] == 2 && (int) c1["regions"][0]["bars"] == 3,
+          "D: the click plays only where Live's clips are (bars 2-4): " + juce::JSON::toString(c1["regions"], true));
+    int acc1 = 0; bool accOnOne = true; if (auto* n = c1["notes"].getArray()) for (auto& x : *n) { acc1 += (bool) x["acc"]; if ((bool) x["acc"] != ((int) x["st"] == 0)) accOnOne = false; }
+    check(c1["accent"] == "note" && c1["notes"].size() == 12 && acc1 == 3 && accOnOne, "D: the accent is the note that plays on beat 1 (MetronomeUp): " + c1["accent"].toString() + ", " + juce::String(acc1) + " accents");
+    juce::StringArray st2; int acc2 = 0; if (auto* n = c2["notes"].getArray()) for (auto& x : *n) { if ((int) x["bar"] == 1) st2.add(x["st"].toString()); acc2 += (bool) x["acc"]; }
+    check(c2["accent"] == "velocity" && st2.joinIntoString(" ") == "0 2 4 6 8 10 12 14" && acc2 == 2,
+          "D: the drum click's 8ths become off-beats (16th steps 0 2 4 ... 14), its louder beat 1 the accent: " + c2["accent"].toString() + " / " + st2.joinIntoString(" "));
+    juce::StringArray cw; if (auto* a = ds["cues"].getArray()) for (auto& c : *a) cw.add(c["word"].toString() + "@" + c["bar"].toString() + "." + juce::String((double) c["beat"]));
+    check(cw.joinIntoString(", ") == "Verse@1.1, One@2.1, Chorus@3.1.5", "D: a cue for every Qs note, its words from the pad's name, or its sample's file name when the pad has none: " + cw.joinIntoString(", "));
+    juce::var vp, op; if (auto* a = D["cuePads"].getArray()) for (auto& x : *a) { if ((int) x["note"] == 69) vp = x; if ((int) x["note"] == 92) op = x; }
+    check(D["cuePads"].size() == 3 && vp.isObject() && (bool) vp["file"]["found"] && (int) (double) vp["file"]["start"] == 4800 && (int) (double) vp["file"]["end"] == 9599 && op["word"] == "One",
+          "D: the pads (note, name, word, sample and the part of it the pad plays) for the preview's table");
+    juce::Array<juce::var> items; { auto* io = new juce::DynamicObject(); io->setProperty("path", vp["file"]["path"]); io->setProperty("start", 4800); io->setProperty("end", 9599); io->setProperty("word", "Verse"); items.add(juce::var(io)); }
+    const auto cut = cutPadSamples(juce::var(items), dir.getChildFile("cut"));
+    juce::AudioFormatManager fm; fm.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> rd(cut.size() == 1 ? fm.createReaderFor(juce::File(cut[0]["path"].toString())) : nullptr);
+    check(rd && rd->lengthInSamples == 4800 && cut[0]["word"] == "Verse" && juce::File(cut[0]["path"].toString()).getFileName() == "Verse.wav",
+          "D: a pad's part of its sample becomes its own recorded word (Verse.wav, 4800 samples)");
+    bool rackNote = false; if (auto* w = D["warnings"].getArray()) for (auto& x : *w) rackNote |= x.toString().contains("inside Live");
+    check(! rackNote, "D: converted tracks aren't listed as \"plays inside Live, not imported\"");
     out.add(ok ? "ABLETON OK" : "ABLETON FAILED");
     return out;
 }

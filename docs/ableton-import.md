@@ -19,8 +19,70 @@ songs), `ui/src/pages/arrange.ts` (`importAbleton`). Test: `set.Line --ableton-t
 | Group tracks | Flattened: "Vox / BGV 1". The group's volume and mute carry down. |
 | Warped clips | Imported when they play at their own speed (the warp markers match the arrangement tempo). One that would need stretching (or transposing) still comes in, flagged: *"This clip was time-stretched in Ableton. Bounce/export it at the song's tempo and replace the file."* |
 | MIDI tracks, arrangement clips | Notes (with length and velocity), the clip's Bank (MSB / LSB) + Program Change at the clip's start, CC envelopes in clips (each point, and 16ths along a ramp). |
-| A MIDI track's output | The set.Line MIDI port with the same name; none: unassigned, with a note. A MIDI track whose output is *None* and that plays an instrument inside Live (a Simpler click or cue samples) isn't imported, with a note; a MIDI track with only empty clips (a SONG marker track) isn't either. |
+| A MIDI track's output | The set.Line MIDI port with the same name; none: unassigned, with a note. A click or cue track played inside Live becomes a set.Line click track / cues (below); any other MIDI track whose output is *None* and that plays an instrument inside Live isn't imported, with a note; a MIDI track with only empty clips (a SONG marker track) isn't either. |
 | Samples | Copied into the Library by content (the same file twice is stored once). Found at their path, relative to the project, or by name in the project folder, its parents (2 levels) and the folders beside it; still missing: **Locate…** searches a folder you pick. |
+
+## Click and cue tracks played inside Live (8b)
+
+Many sets play their click and spoken cues from MIDI tracks inside Live. A Drum Rack (or one Simpler) holds the click
+sounds or the recorded cue words on its pads, and MIDI clips trigger them. set.Line turns those into its own click
+tracks and cues.
+
+A MIDI track whose output is *None* and that plays a Drum Rack or Simpler is one of these:
+
+- **Click track:** its name has *click*, *clk*, *metronome*, *metro* or *tick* (CLICK, DRUM CLICK...), or most of
+  its pads or samples are named like a metronome.
+- **Cue track:** it's named *Qs*, *Q's*, *Cues*, *Guide* or *Spoken* (or has "cue" in its name), or most of its pads
+  are section or count words.
+
+A track with no notes (an empty template) is left alone.
+
+**Clicks.** Each click track becomes a set.Line click track:
+
+- The first one is **Click**.
+- One whose Live name has "drum" is **Drum click**, with its own clips, sound, level and output.
+- Its notes become click clips, but only where Live's MIDI clips are, so a song's click starts and stops where it
+  did in Live.
+- Each note keeps its place on the 16th grid, so 8th or 16th off-beats come across as they are.
+
+The accent comes from the first of these that applies:
+
+1. A note that (nearly) always plays on beat 1 when the other notes don't (Live's *MetronomeUp* pad).
+2. Louder notes on beat 1.
+3. Beat 1.
+
+Outputs follow the usual rule: an existing Click output, else the next free one.
+
+**Cues.** Every note on the cue track becomes a cue at its bar and beat. Its words come from the pad the note plays:
+
+| Live | Cue words |
+|---|---|
+| The pad's chain name (`verse 1`, `DRUMFILL`) | "Verse 1", "Drumfill": first letter capitalised, the rest lower case |
+| No chain name: the pad's sample (`03_Chorus.wav`) | "Chorus": no extension, no number in front, `_` as spaces |
+| `one`…`four`, `1`…`8`, `count…` | Count-in words |
+
+A note is matched to its pad the way Live does it: a Drum Rack pad's note is 128 − its *ReceivingNote*. The preview
+shows the mapping as a table (**Edit pad / note → cue words**), and every word can be changed there before importing.
+
+**Use your recorded cue audio** is on when the pads' samples are found. Each word then plays its pad's own sample, so
+the band hears the same voice as in Live:
+
+- A pad plays only part of its sample (Simpler's start and end). That part is cut into its own file (`Verse 1.wav`)
+  and copied into the Library as a recorded word of that song.
+- Cues are placed with the 7a rule: the word's onset lands on the beat.
+- With the option off, cues are spoken by the current voice.
+
+**Make sections from cues** is off by default. You turn it on per song in the preview, or with the button in the
+song panel:
+
+- Each section cue (Intro, Verse, Pre-chorus, Build, Chorus, Bridge, Breakdown, Outro / Ending, Solo, \*drop...)
+  starts a section of that type at its bar.
+- Count-ins, song-name cues and other cues (Ring out, Drumfill, Vocal start) don't start one.
+- The bars before the first section cue become an Intro.
+
+**Name tracks after their audio file** is off by default. When it's on, an audio track takes its file's name instead
+of Live's track name, without the extension or a number in front. For example, "33-hof sb SNARE BOMB" playing
+`hof BACK TRACK.wav` becomes "hof BACK TRACK".
 
 **Not imported** (listed in the preview): devices, plug-ins, return and master effects, automation other than tempo,
 meter and clip CCs, Session View clips, video. set.Line is playback only.

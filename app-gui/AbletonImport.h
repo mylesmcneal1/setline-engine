@@ -25,6 +25,10 @@ juce::var read(const juce::File& als, const Options& opts, juce::String& error);
 // "Locate…": the files named in `names` (file names), searched for in `folder` and below. {name: full path}.
 juce::var locate(const juce::File& folder, const juce::StringArray& names);
 
+// 8b: cuts the part of each sample a Drum Rack pad plays ({path, start, end (samples; end < 0 = to the end), word}) into
+// its own WAV in dir (<word>.wav). -> [{word, path}] for the ones that worked. The project's files are only read.
+juce::var cutPadSamples(const juce::var& items, const juce::File& dir);
+
 // --ableton-test: writes synthetic projects + tiny WAVs to dir, imports them, checks the results. Report lines
 // ("ok ..." / "FAIL ..."), last line ABLETON OK or ABLETON FAILED.
 juce::StringArray selfTest(const juce::File& dir);
