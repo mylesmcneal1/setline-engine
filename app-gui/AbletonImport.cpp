@@ -744,13 +744,19 @@ juce::var makeSong(const Project& P, const SongSpec& sp, const Options& opts)
                     }
                 }
             }
-            if (! any || evs.isEmpty()) continue; // empty clips only (markers, e.g. a SONG track): nothing to send
+            // 8c: a track named like a modeler (QC / QUAD / CORTEX, AXE / FX3 / FRACTAL) comes in with that device's profile,
+            // even with empty clips (only the profile is set); other empty tracks (markers, e.g. a SONG track) don't
+            const auto up = t.name.toUpperCase();
+            const auto words = juce::StringArray::fromTokens(up.replaceCharacters("-_/.", "    "), " ", "");
+            const juce::String profile = up.contains("QUAD") || up.contains("CORTEX") || words.contains("QC") ? "qc"
+                                       : up.contains("AXE") || up.contains("FX3") || up.contains("FX III") || up.contains("FRACTAL") ? "axe" : "";
+            if (! any || (evs.isEmpty() && profile.isEmpty())) continue;
             if (t.noOut && ! t.devices.isEmpty()) continue; // notes for an instrument inside Live (a project-level note says so)
             juce::String port;
             if (t.midiOut.isNotEmpty())
                 for (auto& p : opts.midiPorts) if (p.containsIgnoreCase(t.midiOut) || t.midiOut.containsIgnoreCase(p) || p.removeCharacters(" ()").containsIgnoreCase(t.midiOut.removeCharacters(" ()"))) { port = p; break; }
             if (port.isEmpty()) warn.addIfNotAlreadyThere("MIDI track \"" + name + "\": " + (t.midiOut.isNotEmpty() ? "its output \"" + t.midiOut + "\" isn't a MIDI port here" : juce::String("it has no MIDI output in Live")) + "; choose a port on its header.");
-            tracks.add(obj({ { "name", uniq(name) }, { "kind", "midi" }, { "col", colourFor(t.color) }, { "mute", mute }, { "midi", obj({ { "port", port }, { "wanted", t.midiOut }, { "ch", t.midiCh }, { "events", evs } }) }, { "source", t.name } }));
+            tracks.add(obj({ { "name", uniq(name) }, { "kind", "midi" }, { "col", colourFor(t.color) }, { "mute", mute }, { "midi", obj({ { "port", port }, { "wanted", t.midiOut }, { "ch", t.midiCh }, { "events", evs } }) }, { "source", t.name }, { "profile", profile } }));
             ++nMidi;
         }
     }

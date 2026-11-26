@@ -310,6 +310,14 @@ juce::StringArray selfTest(const juce::File& dir)
         t += track(2, "DRUM CLICK", clip(0, 8, notesXml(dk)), pad("Cubase", 36, "", 0, 0));
         t += track(3, "Qs", clip(0, 32, notesXml(q)), qpads);
         t += track(4, "-----------", "", pad("verse", 69, "", 0, 0) + pad("chorus", 68, "", 0, 0)); // an empty template: not converted
+        // 8c: modeler tracks with empty clips (only the profile comes in), and an empty track with another name (left out)
+        auto plain = [&](int id, const juce::String& name) {
+            return "<MidiTrack Id=\"" + juce::String(id) + "\">" + V("TrackGroupId", "-1") + "<Name>" + V("EffectiveName", name) + V("UserName", name) + "</Name>" + V("Color", "2")
+                   + "<DeviceChain><Mixer><Volume>" + V("Manual", 1.0) + "</Volume><Speaker>" + V("Manual", "true") + "</Speaker></Mixer>"
+                   + "<MidiOutputRouting>" + V("Target", "MidiOut/None") + V("UpperDisplayString", "None") + V("LowerDisplayString", "") + "</MidiOutputRouting>"
+                   + "<MainSequencer><ClipTimeable><ArrangerAutomation><Events>" + clip(0, 32, "<Notes><KeyTracks /></Notes>") + "</Events></ArrangerAutomation></ClipTimeable></MainSequencer></DeviceChain></MidiTrack>";
+        };
+        t += plain(6, "STAGE QC MIDI") + plain(7, "AXE FX MIDI") + plain(8, "SONG");
         const auto set = "<Tracks>" + t + "</Tracks>" + master(120, {}, { { 0, 4, 4 } }) + locators({ { 0, "Song D" }, { 32, "" } });
         als(projD.getChildFile("Drum Rack.als"), set, "Ableton Live 12.4.3");
     }
@@ -340,6 +348,8 @@ juce::StringArray selfTest(const juce::File& dir)
           "D: a pad's part of its sample becomes its own recorded word (Verse.wav, 4800 samples)");
     bool rackNote = false; if (auto* w = D["warnings"].getArray()) for (auto& x : *w) rackNote |= x.toString().contains("inside Live");
     check(! rackNote, "D: converted tracks aren't listed as \"plays inside Live, not imported\"");
+    juce::StringArray prof; if (auto* a = ds["tracks"].getArray()) for (auto& x : *a) if (x["kind"] == "midi") prof.add(x["name"].toString() + "=" + x["profile"].toString());
+    check(prof.joinIntoString(",") == "STAGE QC MIDI=qc,AXE FX MIDI=axe", "D (8c): MIDI tracks named like a modeler come in with its profile even when empty; an empty SONG track doesn't: " + prof.joinIntoString(","));
     out.add(ok ? "ABLETON OK" : "ABLETON FAILED");
     return out;
 }

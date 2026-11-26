@@ -1089,9 +1089,24 @@
   .abcues{margin:10px 0 4px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,.04);text-align:left;font-size:12.5px} .abcues .abset{margin:6px 0}
   .abpads{max-height:220px;overflow:auto;margin-top:6px} .abpads table{width:100%;border-collapse:collapse;font-size:12px} .abpads th{text-align:left;color:var(--muted);font-weight:500;padding:3px 6px} .abpads td{padding:2px 6px;white-space:nowrap} .abpads input{width:100%;min-width:110px}
   .absec{display:block;margin:4px 0 0 28px;font-size:12px}
+  .modb{flex:none;width:26px;height:26px;border-radius:7px;background:#000;color:#fff;font:800 8.5px/1 Inter,sans-serif;display:grid;place-items:center;text-align:center;letter-spacing:.02em;border:1px solid #2c3038} .modb.axe{color:#ff9f0a;font-size:7.5px}
+  .tn .modst{display:block;font-size:10.5px;line-height:1.3;color:var(--muted);font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .tn .modst em{font-style:normal;color:#64d2ff}
+  .modpick{position:fixed;z-index:300;background:#26292f;border:1px solid #3a3f48;border-radius:12px;padding:12px;box-shadow:0 18px 50px rgba(0,0,0,.6);width:340px}
+  .modpick .mpk{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+  .mpg,.mscenes{display:grid;grid-template-columns:repeat(4,1fr);gap:6px} .mpg button,.mscenes button{background:var(--sc);border-radius:8px;padding:7px 2px;color:#111;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0;cursor:pointer}
+  .mpg b,.mscenes b{font-size:15px;font-weight:800} .mpg small,.mscenes small{font-size:10.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;min-height:13px}
+  .mpf{display:grid;grid-template-columns:repeat(8,1fr);gap:4px} .mpf button{background:#33373f;border-radius:6px;padding:4px 0;font-weight:700;color:#ffd60a}
+  .modpick .mps{margin-top:10px;font-size:11.5px;color:var(--muted)}
+  .modseg{flex-wrap:wrap;margin-bottom:4px} .modseg button{flex:1 1 auto}
+  .mbank{display:grid;grid-template-columns:repeat(8,1fr);gap:3px;margin:6px 0} .mbank button{background:#2a2d33;border-radius:5px;padding:5px 0;font-size:10.5px;font-weight:600;color:var(--text);min-width:0} .mbank button.on{background:var(--blue,#0a84ff);color:#fff}
+  .mbig{display:flex;align-items:center;gap:10px;margin:2px 0 6px} .mbig input{width:86px;font:800 26px/1 var(--code,monospace);color:#ff9f0a;background:transparent;border:1px solid #2c3038;border-radius:8px;padding:4px 6px}
+  .mbig b{display:block;font-size:13px} .mbig small{color:var(--muted);font-size:11px}
+  .mres{display:flex;flex-direction:column;gap:2px;margin-top:4px;max-height:150px;overflow:auto} .mres button{text-align:left;padding:4px 6px;border-radius:5px;font-size:12px;color:var(--text)} .mres button:hover{background:#2a2d33} .mres b{font-family:var(--code,monospace);color:#ff9f0a;margin-right:6px}
+  .mpal{display:flex;flex-wrap:wrap;gap:6px} .mpal i{width:20px;height:20px;border-radius:50%;cursor:pointer} .mpal i.on{outline:2px solid #fff;outline-offset:2px}
   .diagv{font-family:var(--code);font-size:12px;line-height:1.45;word-break:break-word;color:var(--text)}
 </style>
 <script src="ui.js"></script>
+<script src="modeler.js"></script>
 </head>
 <body>
 
@@ -1377,7 +1392,7 @@ let presets=[
 let pid=10, evId=1;
 const P=id=>presets.find(x=>x.id===id);
 // An event's label: its preset's name, else the message (with the track's patch names, if it has a list).
-const evName=(e,s,t)=>e.presetId&&P(e.presetId)?P(e.presetId).name:autoLabel(e,s&&t&&s.midiCfg&&s.midiCfg[t]?s.midiCfg[t].names:'');
+const evName=(e,s,t)=>{ const m=e.mod&&s&&t&&window.MODUI?MODUI.label(e,s,t):null; if(m) return m; return e.presetId&&P(e.presetId)?P(e.presetId).name:autoLabel(e,s&&t&&s.midiCfg&&s.midiCfg[t]?s.midiCfg[t].names:''); };
 function linkTo(e,preset){ PAYKEYS.forEach(k=>delete e[k]); Object.assign(e,preset.p); e.presetId=preset.id; }
 function syncPreset(pr){ songs.forEach(s=>Object.values(s.midi||{}).forEach(list=>list.forEach(e=>{ if(e.presetId===pr.id){ PAYKEYS.forEach(k=>delete e[k]); Object.assign(e,pr.p); } }))); }
 const isMidiTrack=(s,t)=>!!(s.midiCfg&&s.midiCfg[t]);
@@ -2067,15 +2082,16 @@ function renderFolders(){
     s.tracks.forEach((t,ti)=>{
       if(!trackInVer(s,t,curVer(s))) return; // another version's own audio
       const mid=isMidiTrack(s,t), kind=trackKind(s,t), c=trackCol(s,t), off=mid?!!(s.mute||{})[t]:isOff(s,t), solo=!!(s.solo||{})[t], v=gainOf(s,t), dt=esc(t);
-      const chip=mid?`${esc(portShort(s.midiCfg[t].port))} · Ch ${s.midiCfg[t].ch}`:(routeOf(s,t)?esc(routeOf(s,t)):'No output');
-      h+=`<div class="row trk ${mid?'midi':''} ${off?'muted':''}"><div class="lh" data-song="${id}" data-track="${dt}">
-        <span class="ctab" style="background:${c}" title="Track colour"></span><span class="tico" style="color:${c}">${TICON[kind]}</span>
-        <span class="tn" title="${dt}${['Click','Cues'].includes(t)?'':' · double-click to rename'}">${dt}</span>
+      const chip=mid?`${esc(portShort(s.midiCfg[t].port))}${window.MODUI&&MODUI.dev(s,t)?'':` · Ch ${s.midiCfg[t].ch}`}`:(routeOf(s,t)?esc(routeOf(s,t)):'No output');
+      const th=mid&&window.MODUI&&MODUI.dev(s,t)?Math.max(TH,76):TH; // 8c: a modeler lane is taller (preset bar + scene blocks)
+      h+=`<div class="row trk ${mid?'midi':''} ${off?'muted':''}" ${th!==TH?`style="--th:${th}px"`:''}><div class="lh" data-song="${id}" data-track="${dt}">
+        <span class="ctab" style="background:${c}" title="Track colour"></span>${mid&&window.MODUI&&MODUI.dev(s,t)?MODUI.badge(s,t):`<span class="tico" style="color:${c}">${TICON[kind]}</span>`}
+        <span class="tn" title="${dt}${['Click','Cues'].includes(t)?'':' · double-click to rename'}">${dt}${mid&&window.MODUI&&MODUI.dev(s,t)?`<small class="modst">${esc(MODUI.devLine(s,t))}<br><em>${esc(MODUI.status(s,t))}</em></small>`:''}</span>
         <button class="ochip ${mid||routeOf(s,t)?'':'no'}" data-song="${id}" data-track="${dt}" title="${mid?'MIDI port and channel':'Output'}">${chip} ▾</button>
         ${mid?'':`<span class="hf" data-song="${id}" data-track="${dt}" style="--p:${fadP(v)}" title="${dbTxt(v)} dB · double-click: 0 dB · Alt-drag: fine"><i></i><u></u></span>`}
         <span class="ms"><button class="mb ${(s.mute||{})[t]?'on':''}" data-song="${id}" data-track="${dt}" title="Mute">M</button>${mid?'':`<button class="sb ${solo?'on':''}" data-song="${id}" data-track="${dt}" title="Solo (Alt-click: solo only this)">S</button>`}</span>
         ${mid?'':`<span class="hm"><b data-m="${id}|${dt}"></b></span>`}</div>
-        <div class="lane" style="width:${W}px"><canvas data-song="${id}" data-t="${ti}" data-w="${W}" width="1" height="${TH}" style="width:1px;height:${TH}px"></canvas></div></div>`;
+        <div class="lane" style="width:${W}px"><canvas data-song="${id}" data-t="${ti}" data-w="${W}" width="1" height="${th}" style="width:1px;height:${th}px"></canvas></div></div>`;
     });
     h+=`<div class="add"><button class="btn addT" data-k="audio" data-song="${id}">＋ Audio track</button><button class="btn addT" data-k="click" data-song="${id}">＋ Click track</button><button class="btn addT" data-k="midi" data-song="${id}">＋ MIDI track</button>${s.tracks.includes('Cues')?'':`<button class="btn addT" data-k="cues" data-song="${id}">＋ Cues track</button>`}</div>`;
     h+=`</div><div class="ph"></div></div>`;
@@ -2169,6 +2185,7 @@ function drawLane(cv){
       g.fillStyle=sel?'#e9ebef':'#2a2f37'; g.beginPath(); g.roundRect(X,o.y,tw,o.h,5); g.fill();
       g.fillStyle=sel?'#0b0c0e':'#d9dce1'; g.fillText(txt,X+7,o.y+o.h/2+4); if(recFor(s,c.text)){ g.fillStyle=sel?'#0b0c0e':'#f5a524'; g.beginPath(); g.arc(X+tw-4,o.y+4,2.2,0,7); g.fill(); } g.fillStyle=sel?'#e9ebef':'#8a909b'; g.fillRect(X,4,1.5,H-8); });
     if(!cs.length){ g.fillStyle='#4f555f'; g.font='11px Inter, sans-serif'; g.fillText('No cues. Double-click to add a spoken cue.',10,H/2+4); } }
+  else if(role==='midi'&&window.MODUI&&MODUI.dev(s,t)){ g.clearRect(0,0,W,H); MODUI.draw(cv,g,s,t,W,H,off,c); } // 8c: a modeler's presets and scenes
   else if(role==='midi'){ g.clearRect(0,0,W,H); const evs=[...(s.midi[t]||[])].sort((a,b)=>evTime(s,a)-evTime(s,b)), regs=regsOf(s,t);
     const chip=(e,X,nx,cy,ch,faint)=>{ let lab=evName(e,s,t); g.font='500 10px Inter, sans-serif'; const room=nx-X-6; let tw=g.measureText(lab).width+10; if(tw>room){ lab=autoLabel(e).replace('Prog ','P'); tw=g.measureText(lab).width+10; }
       const w=Math.max(6,Math.min(tw,room)); g.globalAlpha=faint||off?.35:1; g.fillStyle=hexA(c,.9); g.fillRect(X,cy-1,1.5,ch+2);
@@ -2361,7 +2378,7 @@ async function phraseEditor(){ await loadPhrases(); const L=PHRASES.list.map(p=>
   bg.querySelector('#phAdd').onclick=()=>{ L.push({t:'',n:0}); draw(); const ins=bg.querySelectorAll('.phr input'); ins[ins.length-1].focus(); };
   bg.querySelector('[data-a=no]').onclick=close;
   bg.querySelector('[data-a=ok]').onclick=()=>{ const seen=new Set(); PHRASES.list=L.map(p=>({t:p.t.trim(),n:p.n})).filter(p=>p.t&&!seen.has(p.t.toLowerCase())&&seen.add(p.t.toLowerCase())); savePhrases(); close(); toast('Cue phrases saved'); }; }
-function wireRegLane(cv){ const s=songs.find(x=>x.id===cv.dataset.song), t=s.tracks[+cv.dataset.t], k=laneMenuFor(s,t); if(!k) return false; cv.onclick=null;
+function wireRegLane(cv){ const s=songs.find(x=>x.id===cv.dataset.song), t=s.tracks[+cv.dataset.t]; if(window.MODUI&&isMidiTrack(s,t)&&MODUI.dev(s,t)){ MODUI.wire(cv,s,t); return true; } const k=laneMenuFor(s,t); if(!k) return false; cv.onclick=null;
   const xOf=bar=>s.bars[Math.min(bar,s.total+1)-1].t*PXS;
   if(k==='cue'){ const hit=x=>{ const g=cv.getContext('2d'); g.font='600 10.5px Inter, sans-serif'; return cuesOf(s).find(c=>{ const X=cueT(s,c)*PXS; return x>=X-3&&x<=X+g.measureText(c.text).width+14; }); };
     cv.onpointerdown=e=>{ if(e.button!==0) return; const c=hit(lx(cv,e)); if(!c){ const tt=lx(cv,e)/PXS, alt=e.altKey; boxOrClick(e,s,()=>{ setPick(null); locate(s,snapT(s,tt,alt)); }); return; }
@@ -2517,6 +2534,7 @@ function trackPanel(s){ if(!trackOpen||trackOpen.song!==s.id) return ''; const t
   if(k==='audio'){ const f=(s.files||{})[t], fname=f&&(f.path||f.name)?String(f.path||f.name).split(/[\\/]/).pop():'', v=gainOf(s,t);
     h+=rcard('Audio',rrow('Gain',`<span class="rsl"><input type="range" class="fad wide" min="-60" max="6" step="0.5" value="${v}" style="--p:${fadP(v)}" data-song="${s.id}" data-track="${esc(t)}" title="Volume. Double-click for 0 dB"><b class="db ${v>0?'hot':''}" data-dbfor="${s.id}|${esc(t)}">${dbTxt(v)}</b></span>`)
       +rrow('File',`<span class="rval" title="${esc(f&&f.path||'')}">${fname?esc(fname)+(f.rate?' · '+String(f.rate/1000).replace(/\.0$/,'')+'k':''):'No audio file'}</span>`)); }
+  if(mid&&window.MODUI) h+=MODUI.panel(s,t); // 8c: Device (Quad Cortex / Axe-Fx III / Generic), preset, scenes, preset fields
   if(mid){ const m=s.midiCfg[t], ports=[...new Set([...PORTS,m.port].filter(Boolean))];
     h+=rcard('MIDI',rrow('Port',`<select id="tPort">${ports.map(p=>`<option ${p===m.port?'selected':''}>${esc(p)}</option>`).join('')}</select>`)
       +rrow('Channel',`<select id="tCh">${Array.from({length:16},(_,i)=>`<option value="${i+1}" ${+m.ch===i+1?'selected':''}>${i+1}</option>`).join('')}</select>`)
@@ -2527,7 +2545,7 @@ function trackPanel(s){ if(!trackOpen||trackOpen.song!==s.id) return ''; const t
   h+=`<button class="rdanger" id="tDel">Delete track…</button>`;
   return h; }
 function wireTrackPanel(s){ const ins=$('insp'); if(!trackOpen||trackOpen.song!==s.id||!$('tDel')) return; const t=trackOpen.track;
-  wireVol(ins); if(typeof wireAltSelects==='function') wireAltSelects(ins);
+  wireVol(ins); if(typeof wireAltSelects==='function') wireAltSelects(ins); if(window.MODUI&&isMidiTrack(s,t)) MODUI.wirePanel(s,t);
   $('tTitle').ondblclick=()=>renameTrackBox(s,t,$('tTitle'));
   ins.querySelectorAll('.tcsw').forEach(b=>b.onclick=()=>{ snap(); (s.tcol||(s.tcol={}))[t]=b.dataset.c; refresh(); });
   $('tOut').onclick=()=>{ const r=$('tOut').getBoundingClientRect(); (isMidiTrack(s,t)?midiMenu:outMenu)({clientX:r.left,clientY:r.bottom+4},s,t); };
@@ -3256,7 +3274,7 @@ function ableSong(src){ const id=freshSongId(), so={id,name:src.name,key:'—',c
     so.tracks.push(name); so.tcol[name]=t.col; if(t.mute) so.mute[name]=true;
     if(t.kind==='audio'){ if(t.file&&t.file.found) so.files[name]={path:t.file.path,src:t.file.path,copy:true}; so.clips[name]=(t.clips||[]).map(c=>({start:c.start,end:c.end,off:c.off,gain:+(+c.gain||0).toFixed(2),fi:c.fi||0,fo:c.fo||0,...(c.mute?{mute:true}:{})}));
       if(Math.abs(t.gainDb||0)>0.01) so.gain[name]=Math.max(-60,+(+t.gainDb).toFixed(2)); }
-    else { so.midiCfg[name]={port:t.midi.port||'',ch:t.midi.ch||1,early:'0'}; so.midi[name]=(t.midi.events||[]).map(e=>({id:evId++,...e})); }
+    else { so.midiCfg[name]={port:t.midi.port||'',ch:t.midi.ch||1,early:'0',...(t.profile?{dev:t.profile}:{})}; so.midi[name]=(t.midi.events||[]).map(e=>({id:evId++,...e})); }
     rows.push({t,name}); });
   normSecs(so); buildBars(so);
   // tracks that reach Live's outputs through the same return track (bus) share an output, across the whole import
@@ -3264,7 +3282,7 @@ function ableSong(src){ const id=freshSongId(), so={id,name:src.name,key:'—',c
     if(ABLE_BUS[t.bus]) so.outs[name]=[...ABLE_BUS[t.bus]]; else { so.outs[name]=defaultOuts(so,name); ABLE_BUS[t.bus]=[...so.outs[name]]; } });
   ensureOuts(so);
   const extra=so.tracks.filter(t=>!rows.some(r=>r.name===t)).map(t=>({name:t,kind:ROLE[t]==='cues'?'cues':'click',out:outLabel(so.outs[t]),stretched:false,missing:false,file:null}));
-  return {so,extra,rows:rows.map(({t,name})=>({name,kind:t.kind,out:t.kind==='audio'?outLabel(so.outs[name])+(t.bus?` · Live: ${t.bus}`:''):(t.midi.port?`${t.midi.port} · Ch ${t.midi.ch}`:'No MIDI port'),stretched:!!t.stretched,missing:t.kind==='audio'&&!(t.file&&t.file.found),file:t.file}))}; }
+  return {so,extra,rows:rows.map(({t,name})=>({name,kind:t.kind,out:t.kind==='audio'?outLabel(so.outs[name])+(t.bus?` · Live: ${t.bus}`:''):(t.profile?(t.profile==='qc'?'Quad Cortex':'Axe-Fx III')+' (suggested) · ':'')+(t.midi.port?`${t.midi.port} · Ch ${t.midi.ch}`:'No MIDI port'),stretched:!!t.stretched,missing:t.kind==='audio'&&!(t.file&&t.file.found),file:t.file}))}; }
 function ableDups(src,hashes){ const hs=(src.tracks||[]).filter(t=>t.file&&t.file.found&&hashes[t.file.path]).map(t=>hashes[t.file.path]);
   return songs.find(s=>s.name.trim().toLowerCase()===String(src.name).trim().toLowerCase()&&Object.values(s.files||{}).some(f=>f&&f.path&&hs.some(h=>String(f.path).includes(h))))||null; }
 // The preview: songs found (tick to import), each expandable (tracks, outputs, warnings), duplicates, missing samples
@@ -3477,7 +3495,7 @@ function vamp(){ const s=songs.find(x=>x.id===playId); if(VAMP){ VAMP=null; toas
 
 // ---- what the band's screens are told about the setlist (the host sends it when it changes) ----
 function bandShow(){ const L=curSetObj(), out={t:'show',lib:'',setlist:{id:L.id,name:L.name,finishBy:L.finishBy||'',order:[]},songs:{},fields:FIELDS,screens:BAND.screens.map(x=>({id:x.id,name:x.name,col:x.col,device:x.device})),network:BAND.network||''};
-  const add=(s,v)=>{ const doc={name:s.name,col:s.col,key:s.key,ver:versOf(s).length>1?v.name:'',vers:versOf(s).map(x=>({id:x.id,name:x.name})),len:verLen(s,v),bars:[],secs:[],cues:[],patches:{},fields:SLBandMerge(s.fields,v&&v.fields)};
+  const add=(s,v)=>{ const doc={name:s.name,col:s.col,key:s.key,ver:versOf(s).length>1?v.name:'',vers:versOf(s).map(x=>({id:x.id,name:x.name})),len:verLen(s,v),bars:[],secs:[],cues:[],patches:{},fields:SLBandMerge(SLBandMerge(window.MODUI?MODUI.presetFields(s):{},s.fields),v&&v.fields)};
     const map=(!v||v.custom||isFullVer(s,v))?s.secPos.map(p=>({sb:p.start,bars:p.bars,secId:p.id,name:p.name,type:p.type})):verMap(s,v);
     let t=0; const srcToVer=[]; // [srcStart, srcEnd, verStart]
     map.forEach((p,i)=>{ const t0=t;
@@ -3705,8 +3723,9 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
   redraw(){ lcd(); },
   // Everything a .setline session holds.
   sessionData(){ const o=JSON.parse(ser()); o.presets=presets.filter(p=>!p.built); o.click=CLICK; if(Object.keys(CLICKT).length) o.clickT=CLICKT; o.cueVoice=CUEV; if(Object.keys(PRON).length) o.pron=PRON; if(Object.keys(VNUDGE).length) o.voiceNudge=VNUDGE; if(CUEWORDS.length) o.cueWords=CUEWORDS;
-    if(LIBMODE){ if(PHRASES) o.phrases=PHRASES.list; if(USER_LISTS.length) o.patchLists=USER_LISTS; } if(FIELDS.length) o.fields=FIELDS; if(BAND.screens.length||BAND.network||BAND.pin) o.dashboards=BAND; return o; },
+    if(LIBMODE){ if(PHRASES) o.phrases=PHRASES.list; if(USER_LISTS.length) o.patchLists=USER_LISTS; } if(FIELDS.length) o.fields=FIELDS; if(window.MODP&&(Object.keys(MODP.qc||{}).length||Object.keys(MODP.axe||{}).length)) o.modelerPresets=MODP; if(BAND.screens.length||BAND.network||BAND.pin) o.dashboards=BAND; return o; },
   loadSession(o){ ROUTE_LOG=[]; migrateRouting(o); migrateMidi(o); migrateVersions(o);
+    window.MODP=o.modelerPresets&&typeof o.modelerPresets==='object'?{qc:o.modelerPresets.qc||{},axe:o.modelerPresets.axe||{}}:{qc:{},axe:{}}; // 8c
     if(Array.isArray(o.phrases)) PHRASES={list:o.phrases.filter(x=>x&&typeof x.t==='string')}; if(Array.isArray(o.patchLists)){ USER_LISTS=o.patchLists; saveLists(); } FIELDS=Array.isArray(o.fields)?o.fields:[]; BAND=o.dashboards&&typeof o.dashboards==='object'&&!Array.isArray(o.dashboards)?{network:'',pin:'',screens:[],...o.dashboards}:{network:'',pin:'',screens:[]}; BSEL=null; BWID=null; if(Array.isArray(o.presets)){ presets=[...o.presets]; } if(o.click) CLICK={...CLICK,...o.click}; CLICKT={...(o.clickT||{})}; CUEV={voice:'',name:'',speed:1,...(o.cueVoice||{})}; cuevFresh=false; PRON={...(o.pron||{})}; VNUDGE={...(o.voiceNudge||{})}; UNKNOWN=[]; CUEWORDS=Array.isArray(o.cueWords)?o.cueWords:[]; cwSeq=1+Math.max(0,...allWords().map(w=>+String(w.id).slice(1)||0));
     restore(JSON.stringify({songs:o.songs||[],setlists:o.setlists&&o.setlists.length?o.setlists:[{id:'L1',name:'Setlist 1',order:[]}],curSet:o.curSet||'L1'}));
     // ids made from now on must not collide with the loaded ones
@@ -4304,5 +4323,6 @@ try{ document.fonts.ready.then(()=>renderFolders()); }catch(e){}
 // Opened from the loading window ("Choose another output…"): Settings › Audio right away.
 try{ const q=new URLSearchParams(location.search).get('settings'); if(q) setTimeout(()=>openSettings(q),300); }catch(e){}
 </script>
+<script src="modeler-ui.js"></script>
 </body>
 </html>

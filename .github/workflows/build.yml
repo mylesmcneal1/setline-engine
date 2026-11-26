@@ -67,6 +67,9 @@ jobs:
       - name: UI pages parse (inline scripts)
         run: node tests/ui-syntax.mjs
 
+      - name: Modeler MIDI (Quad Cortex / Axe-Fx III messages, preset fields, lane drag and drop)
+        run: node tests/modeler.test.mjs
+
       # 8a: the main views in headless Chrome at 1280x800 (the band's MacBook) and 1440x900; fails when the top bar
       # or the right panel overflows, a button wraps or a menu item has no text. Screenshots are kept as an artifact.
       - name: UI layout at 1280x800
