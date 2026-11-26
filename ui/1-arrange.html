@@ -1151,6 +1151,7 @@
 <link rel="stylesheet" href="time9e.css">
 <link rel="stylesheet" href="fix10a.css">
 <link rel="stylesheet" href="ix10.css">
+<link rel="stylesheet" href="c10.css">
 </head>
 <body>
 
@@ -1903,7 +1904,7 @@ function clickPanel(s){ if(!clickOpen) return ''; const T=clickOpen, c=clickCfg(
     +(sub!=='off'?rrow('Off-beat level',rslider('ckSubG',c.subGain,-30,0,1,db(c.subGain))):'')
     +rrow('Same click for every song',tog('ckSame',!own,own?`Only ${s.name} uses these settings`:'Every song uses these settings'))
     +`<div class="racts"><button class="btn line" id="ckPrev">▶ Preview a bar</button></div>`
-    +`<p class="rnote">Where it clicks comes from the click clips on the track: double-click a clip to edit its beats. Off-beats add quieter clicks between the beats.</p>`); }
+    +`<p class="rnote">The click plays the notes in the track’s MIDI clip: click the track to edit them (Accent and Click lanes, velocity = level). Off-beats add quieter clicks between the beats.</p>`); }
 // Click settings: "Click" uses s.click (this song) / CLICK (the set); another click track s.clickT[t] / CLICKT[t].
 function ownClick(s,t){ return t==='Click'?!!s.click:!!(s.clickT&&s.clickT[t]); }
 function wireClickPanel(s){ if(!$('ckSound')) return; const T=clickOpen, main=T==='Click', own=()=>ownClick(s,T), cfg=()=>clickCfg(s,T),
@@ -2089,7 +2090,7 @@ function verStrip(s,v,max){ let parts, bars=0;
 function verBars(s,v){ return v.custom?((v.state&&v.state.secs)||[]).reduce((a,x)=>a+(x.bars||0),0):verParts(s,v).reduce((a,p)=>a+p.bars,0); }
 function verStripHTML(s){ const vs=versOf(s), max=Math.max(1,...vs.map(v=>verBars(s,v)));
   return `<div class="vstrip" data-song="${s.id}"><div class="vh"><span>Versions</span><button class="vadd" data-song="${s.id}" title="A copy of the version shown">＋ Version</button></div>${vs.map(v=>{ const x=!v.custom&&verParts(s,v).some(p=>p.extra);
-    return `<div class="vr ${v.id===s.ver?'on':''}" data-song="${s.id}" data-v="${v.id}"><span class="vnm" title="Double-click to rename">${esc(v.name)}${x?' <b class="vdia">◆</b>':''}${v.custom?' <em>custom</em>':''}${v.def&&vs.length>1?' <em>default</em>':''}</span><div class="st">${verStrip(s,v,max)}</div><small>${fmt(verLen(s,v))}</small></div>`; }).join('')}</div>`; }
+    return `<div class="vr ${v.id===s.ver?'on':''}" data-song="${s.id}" data-v="${v.id}"><span class="vnm" title="Double-click to rename">${esc(v.name)}${x?' <b class="vdia">◆</b>':''}${v.own?' <em>own timeline</em>':v.custom?' <em>custom</em>':''}${v.def&&vs.length>1?' <em>default</em>':''}</span><div class="st">${verStrip(s,v,max)}</div><small>${fmt(verLen(s,v))}</small></div>`; }).join('')}</div>`; }
 // sections the version shown leaves out (dimmed on the timeline); a reordered version numbers its sections
 const secOff=(s,id)=>{ const v=curVer(s); if(v.custom) return false; normVer(s,v); const o=v.order.find(q=>q.k==='sec'&&q.id===id); return !!o&&!o.on; };
 function secOrd(s,id){ const v=curVer(s); if(v.custom||isFullVer(s,v)) return 0; const on=v.order.filter(o=>o.on), i=on.findIndex(o=>o.k==='sec'&&o.id===id); if(i<0) return 0;
@@ -3859,6 +3860,8 @@ function bandShow(){ const L=curSetObj(), out={t:'show',lib:'',setlist:{id:L.id,
     if(!map.length) doc.bars.push([0,4,4,120]);
     const vt=x=>{ for(const [a,b,v0] of srcToVer) if(x>=a-1e-6&&x<b-1e-6) return v0+(x-a); return null; };
     (s.cues||[]).forEach(c=>{ const x=vt(cueT(s,c)); if(x!==null) doc.cues.push({t:+x.toFixed(3),text:c.text}); });
+    // 10c: the beat lights follow the click notes: [time, 1 = accent] (the main Click track's clip)
+    if(window.SLClick&&s.tracks.includes('Click')){ const h=[]; SLClick.view(s,'Click').notes.forEach(n=>{ const x=vt(SLClick.tkTime(s,n.tk)); if(x!==null) h.push([+x.toFixed(4),n.a?1:0]); }); h.sort((a,b)=>a[0]-b[0]); doc.hits=h; }
     // 9b: a preset change in the middle of the song: the fields it sets (that the song / version don't) from that point
     if(window.MODUI&&typeof MODP!=='undefined'){ const own=SLBandMerge(s.fields||{},v&&v.fields||{}), ch=[];
       s.tracks.filter(t=>isMidiTrack(s,t)&&MODUI.dev(s,t)).forEach(t=>{ const d=MODUI.dev(s,t); (s.midi[t]||[]).filter(e=>e.mod==='preset').forEach(e=>{ const x=vt(evTime(s,e)); if(x===null||x<=0.01) return; const pf=((MODP[d]||{})[e.preset]||{}).fields||{}, f={}; Object.entries(pf).forEach(([k,val])=>{ if(val!==''&&(own[k]===undefined||own[k]==='')) f[k]=String(val); }); if(Object.keys(f).length) ch.push({t:+x.toFixed(3),f}); }); });
@@ -4699,5 +4702,8 @@ try{ const q=new URLSearchParams(location.search).get('settings'); if(q) setTime
 <script src="time9e.js"></script>
 <script src="fix10a.js"></script>
 <script src="ix10.js"></script>
+<script src="vers10.js"></script>
+<script src="click10.js"></script>
+<script src="secs10.js"></script>
 </body>
 </html>

@@ -10,6 +10,7 @@ export class ClockSync {
 }
 export function predictPos(state: any, hostNow: number): number;
 export function barBeatAt(song: any, t: number): { bar: number; beat: number; num: number; den: number; bpm: number; barT: number; barLen: number };
+export function hitAt(song: any, t: number): [number, number] | null;
 export function sectionAt(song: any, t: number): any;
 export function nextSection(song: any, t: number): any;
 export function barsUntil(song: any, t: number, tEnd: number): number;

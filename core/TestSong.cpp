@@ -394,6 +394,19 @@ bool runSelfTest(bool verbose)
         check(st && onsets(rn, 0).empty(), "click hits: an empty list means no click at all (not the every-beat click)");
     }
 
+    // 2b) 10c: a click clip in mixed meters (4/4, then 7/8 from bar 3) becomes hits that play on their exact samples:
+    // a triplet position in 4/4, accents on 7/8's group starts, an 8th inside a group.
+    {
+        SongDef song; song.name = "clip"; song.tempo = { { 1, 120, 4, 4 }, { 3, 0, 7, 8 } }; song.clickOuts = { 0 }; song.clickGainDb = 0;
+        song.clickHits = std::vector<ClickHitDef> { { 1, 1, true }, { 1, 2 + 1.0 / 3, false }, { 3, 1, true }, { 3, 3, true }, { 3, 5, true }, { 3, 6.5, false }, { 4, 7, false } };
+        OfflineRun r; r.load(song, sr, 2); r.start(0); r.runToEnd();
+        const auto& tm = r.e.tempoMap();
+        std::vector<int64_t> expect; for (auto& h : *song.clickHits) expect.push_back(tm.sampleAt(h.bar, h.beat));
+        const auto got = onsets(r, 0);
+        check(got == expect && expect[2] == (int64_t) std::llround(4.0 * sr) && expect[1] > expect[0],
+              "10c: click notes in 4/4 then 7/8 play on their exact samples (" + std::to_string(got.size()) + " of " + std::to_string(expect.size()) + "; bar 3 at 4.000 s)");
+    }
+
     // 3) Live track level: ramped over 10 ms, no steps; works for stems and the click.
     {
         const int ramp = (int) std::lround(0.010 * sr);

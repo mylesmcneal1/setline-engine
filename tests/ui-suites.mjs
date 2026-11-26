@@ -9,6 +9,7 @@ export const SUITES = [
   { name: "sizes", files: ["timeline-sizes.js"], call: "timelineSizes()" },
   { name: "10a", files: ["ui-10a.js"], call: "check10a()" },
   { name: "10b", files: ["ui-10b.js"], call: "check10b()" },
+  { name: "10c", files: ["ui-10c.js"], call: "check10c()" },
 ];
 export async function suiteCode(s) { return (await Promise.all(s.files.map((f) => readFile(resolve(here, f), "utf8")))).join("\n") + `\nreturn await ${s.call};`; }
 // --only a,b: just those suites

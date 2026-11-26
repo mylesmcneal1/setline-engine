@@ -1,5 +1,5 @@
 // Unit tests for the band screens' shared logic (ui/src/band/logic.js): node tests/band/logic.test.mjs
-import { ClockSync, untilNextChange, fieldValueAt, curfew, allowed, mergeFields, preset, WIDGETS, barBeatAt, changesAhead, predictPos } from "../../ui/src/band/logic.js";
+import { ClockSync, untilNextChange, fieldValueAt, curfew, allowed, mergeFields, preset, WIDGETS, barBeatAt, changesAhead, predictPos, hitAt } from "../../ui/src/band/logic.js";
 
 let failed = 0, passed = 0;
 const check = (name, ok, detail) => { if (ok) passed++; else failed++; console.log((ok ? "ok   " : "FAIL ") + name + (ok || detail === undefined ? "" : "  " + JSON.stringify(detail))); };
@@ -105,6 +105,9 @@ const show = {
   check("bar / beat from the bar list", a.bar === 2 && near(a.beat, 3), a);
   const ch = changesAhead(s, 2.5, 4).map((x) => x.text);
   check("change warnings: “7/8 next bar”, “→ 90 BPM next bar”, then 4/4 and 96 BPM", ch[0] === "7/8 next bar" && ch[1] === "→ 90 BPM next bar" && ch.includes("→ 96 BPM in 2"), ch);
+  // 10c: the beat lights follow the click notes: the last note at or before a time
+  const h = { ...s, hits: [[0, 1], [0.5, 0], [1.25, 0], [2, 1]] };
+  check("hitAt: the last click note (an accent lights beat 1)", hitAt(h, 0.6)[0] === 0.5 && hitAt(h, 2.1)[1] === 1 && hitAt({ bars: s.bars }, 1) === null && hitAt(h, -0.1) === null, [hitAt(h, 0.6), hitAt(h, 2.1)]);
   check("position prediction between updates", near(predictPos({ h: 1000, tr: { playing: true, time: 10 } }, 1500), 10.5) && near(predictPos({ h: 1000, tr: { playing: false, time: 10 } }, 1500), 10));
 }
 

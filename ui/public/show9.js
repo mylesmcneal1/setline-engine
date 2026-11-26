@@ -271,6 +271,7 @@
     b.innerHTML = `<b>${n} song${n === 1 ? "" : "s"} selected</b>
       <button class="btn line" data-a="add" ${n ? "" : "disabled"}>＋ Add to setlist</button><button class="btn line" data-a="col" ${n ? "" : "disabled"}>Colour</button>
       <button class="btn line" data-a="dup" ${n ? "" : "disabled"}>Duplicate</button><button class="btn line" data-a="exp" ${n ? "" : "disabled"}>Export…</button>
+      ${window.SLSecs ? `<button class="btn line" data-a="secs" ${n ? "" : "disabled"}>✨ Sections from cues</button>` : ""}${window.SL10c && SL10c.mergeBox ? `<button class="btn line" data-a="merge" ${n > 1 ? "" : "disabled"}>Merge as versions…</button>` : ""}
       <button class="btn line danger9" data-a="del" ${n ? "" : "disabled"}>${iconOf("del")} Delete</button><button class="btn line" data-a="done">Done</button>`;
     b.querySelectorAll("button").forEach((x) => x.onclick = (e) => act(x.dataset.a, e));
   }
@@ -278,6 +279,8 @@
     const ids = [...songSel].filter((id) => songs.some((s) => s.id === id));
     if (a === "done") { setSelect(false); return; }
     if (!ids.length) return;
+    if (a === "secs") { SLSecs.fromCues(ids.map((id) => songs.find((s) => s.id === id))); return; } // 10c
+    if (a === "merge") { SL10c.mergeBox(ids); return; }
     if (a === "add") { snap(); let k = 0; ids.forEach((id) => { if (!setOrder.includes(id)) { setOrder.push(id); k++; } }); refresh(); toast(k ? `Added ${k} song${k === 1 ? "" : "s"} to ${curSetObj().name}` : "Already in this setlist", undo); return; }
     if (a === "col") { const r = e.currentTarget.getBoundingClientRect(); swatchPop({ left: r.left, right: r.right, top: r.top - 150 }, songs.find((s) => s.id === ids[0]).col, (c) => { snap(); ids.forEach((id) => { songs.find((s) => s.id === id).col = c; }); refresh(); }); return; }
     if (a === "dup") { snap(); const made = []; ids.forEach((id) => { const n0 = songs.length; dupSong(id); if (songs.length > n0) made.push(songs[songs.length - 1].id); }); songSel.clear(); made.forEach((x) => songSel.add(x)); refresh(); bar(); toast(`Duplicated ${ids.length} song${ids.length === 1 ? "" : "s"}`, undo); return; }

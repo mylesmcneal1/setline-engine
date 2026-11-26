@@ -345,6 +345,7 @@
   document.addEventListener("keydown", (e) => {
     if (!(MAC ? e.metaKey : e.ctrlKey)) return;
     const t = e.target; const typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
+    if (t && t.closest && t.closest("[data-keys=own]")) return; // an editor with its own ⌘D / ⌘C / ⌘V (the click clip)
     const c = comboOf(e);
     if (typing && !["cmd+k", "cmd+slash", "cmd+comma"].includes(c)) return; // a text field keeps ⌘C, ⌘V, ⌘Z, ⌘A…
     if (document.querySelector(".cfbg") && !["cmd+z", "cmd+shift+z"].includes(c)) return; // a dialog is open

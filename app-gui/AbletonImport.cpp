@@ -737,7 +737,9 @@ juce::var makeSong(const Project& P, const SongSpec& sp, const Options& opts)
                     const double st = (bt - 1.0) * 16.0 / sig.second;
                     if (std::abs(st - std::round(st)) > 0.05) ++offGrid;
                     const bool acc = accKey >= 0 ? n.key == accKey : byVel ? n.vel >= velCut : std::abs(bt - 1.0) < 1e-3;
-                    nv.add(obj({ { "bar", bar }, { "st", (int) std::lround(st) }, { "acc", acc } }));
+                    // 10c: the exact position (quarters from the song's first bar) and Live's velocity go along: the click
+                    // clip keeps them (it snaps a note to the 16th grid only when it's more than a tick off)
+                    nv.add(obj({ { "bar", bar }, { "st", (int) std::lround(st) }, { "acc", acc }, { "q", n.ab - g.start[0] }, { "vel", n.vel } }));
                 }
                 std::sort(ranges.begin(), ranges.end());
                 juce::Array<juce::var> regs; int r0 = -1, r1 = -1;

@@ -47,6 +47,13 @@ export function barBeatAt(song, t) {
   const beatLen = (60 / bpm) * (4 / den), barLen = beatLen * num;
   return { bar: i + 1, beat: 1 + Math.max(0, t - bt) / beatLen, num, den, bpm, barT: bt, barLen };
 }
+// 10c: the last click note at or before t: [time, 1 = accent] (the beat lights follow the actual notes), or null
+export function hitAt(song, t) {
+  const H = song && song.hits; if (!H || !H.length || H[0][0] > t + 1e-4) return null;
+  let lo = 0, hi = H.length - 1, i = 0;
+  while (lo <= hi) { const m = (lo + hi) >> 1; if (H[m][0] <= t + 1e-4) { i = m; lo = m + 1; } else hi = m - 1; }
+  return H[i];
+}
 export function sectionAt(song, t) {
   const secs = (song && song.secs) || [];
   return secs.find((s) => t >= s.t0 && t < s.t1) || null;

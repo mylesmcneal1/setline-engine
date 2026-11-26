@@ -1,0 +1,60 @@
+/* set.Line 10c: the click clip editor, ghost sections, the merge and sections-from-cues boxes */
+
+/* the click clip editor: a panel under the timeline */
+#clk10 { position: relative; flex: none; display: flex; flex-direction: column; border-top: 1px solid rgba(255, 255, 255, .1); background: #121317; outline: none; min-height: 170px; }
+#clk10 .crz10 { position: absolute; left: 0; right: 0; top: -3px; height: 6px; cursor: ns-resize; z-index: 2; }
+#clk10 .ch10 { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-bottom: 1px solid rgba(255, 255, 255, .06); font-size: 12.5px; flex-wrap: nowrap; overflow: hidden; }
+#clk10 .ch10 > b { font-size: 13.5px; color: #fff; white-space: nowrap; }
+#clk10 .cbars10 { color: #8b90a0; white-space: nowrap; margin-right: auto; }
+#clk10 .clab10 { color: #8b90a0; margin-left: 4px; }
+#clk10 .seg10 { display: inline-flex; background: rgba(255, 255, 255, .05); border-radius: 7px; padding: 2px; }
+#clk10 .seg10 button { border: 0; background: transparent; color: #c9ccd3; padding: 3px 9px; border-radius: 5px; font: inherit; cursor: pointer; white-space: nowrap; }
+#clk10 .seg10 button.on { background: rgba(255, 255, 255, .14); color: #fff; }
+#clk10 .ch10 .btn { height: 26px; padding: 0 10px; font-size: 12px; white-space: nowrap; }
+#clk10 .chint10 { display: flex; align-items: center; gap: 8px; padding: 4px 12px; background: rgba(255, 170, 30, .1); color: #ffcf6b; font-size: 12px; }
+#clk10 .chint10[hidden] { display: none; }
+#clk10 .chint10 .btn { height: 22px; font-size: 11.5px; padding: 0 8px; }
+#clk10 .cb10 { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+#clk10 .cl10 { position: absolute; left: 0; top: 0; bottom: 0; width: var(--head, 200px); padding-left: 10px; box-sizing: border-box; }
+#clk10 .crow10 { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+#clk10 .crow10 i { width: 10px; height: 10px; border-radius: 2px; }
+#clk10 .crow10 em { margin-left: auto; margin-right: 10px; font-style: normal; font: 11px var(--mono, ui-monospace, monospace); color: #8b90a0; }
+#clk10 .cvl10 { margin-top: 10px; color: #8b90a0; font-size: 12px; }
+#clk10 canvas.cc10 { position: absolute; top: 0; cursor: crosshair; }
+
+/* ghost sections from cues in an empty Sections lane */
+.ghost10 { position: absolute; top: 3px; bottom: 3px; border: 1.5px dashed rgba(255, 255, 255, .35); border-radius: 5px; background: rgba(255, 255, 255, .03); pointer-events: none; overflow: hidden; }
+.ghost10 span { display: block; padding: 2px 6px; font-size: 11.5px; font-weight: 600; color: rgba(255, 255, 255, .7); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gact10 { position: absolute; top: 50%; transform: translateY(-50%); display: flex; gap: 6px; z-index: 3; }
+.gact10 .btn { height: 22px; padding: 0 9px; font-size: 11.5px; white-space: nowrap; box-shadow: 0 2px 8px rgba(0, 0, 0, .5); }
+.gact10 .btn.pri { background: #ff9f0a; color: #111; border-color: #ff9f0a; }
+.lhcues10 { border: 0; background: rgba(255, 180, 40, .14); color: #ffcf6b; border-radius: 5px; font-size: 10.5px; padding: 1px 6px; margin-left: auto; margin-right: 4px; cursor: pointer; white-space: nowrap; }
+.lhcues10:hover { background: rgba(255, 180, 40, .26); }
+
+/* Make sections from cues… */
+.seced10 { width: min(760px, 94vw); }
+.sstrip10 { position: relative; height: 26px; margin: 10px 0 12px; border-radius: 6px; background: rgba(255, 255, 255, .04); overflow: hidden; }
+.sstrip10 span { position: absolute; top: 2px; bottom: 2px; border-radius: 4px; background: var(--sc); color: #111; font-size: 11px; font-weight: 700; padding: 3px 5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; box-sizing: border-box; border-right: 1px solid rgba(0, 0, 0, .4); }
+.sstrip10 span.off { background: transparent; border: 1.5px dashed rgba(255, 255, 255, .25); color: rgba(255, 255, 255, .4); }
+.scols10 { display: grid; grid-template-columns: 3fr 2fr; gap: 16px; }
+.scols10 h4 { margin: 0 0 6px; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: #8b90a0; }
+.slist10 { max-height: 260px; overflow-y: auto; }
+.srow10, .wrow10 { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 12.5px; }
+.srow10 i { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.srow10 .sname10 { flex: 1; min-width: 0; height: 24px; }
+.srow10 .mono { color: #8b90a0; font-size: 11px; white-space: nowrap; }
+.wrow10 em { font-style: normal; color: #ffcf6b; font-size: 11px; margin-left: auto; }
+
+/* Merge as versions… and the import's Versions block */
+.mergebox10 { width: min(620px, 94vw); }
+.mgl10 { margin: 10px 0; }
+.mgr10 { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; font-size: 13px; }
+.mgr10.on { background: rgba(255, 255, 255, .05); }
+.mgr10 .mgn10 { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mgr10 em { font-style: normal; color: #30d158; font-size: 12px; }
+.mgr10 input[data-n] { width: 170px; height: 24px; margin-left: 6px; }
+.abver10 { margin: 0 0 10px; padding: 8px 10px; border-radius: 9px; background: rgba(100, 210, 255, .06); border: 1px solid rgba(100, 210, 255, .2); }
+.abvh10 { display: flex; gap: 10px; align-items: baseline; margin-bottom: 4px; font-size: 13px; }
+.abvr10 { display: flex; align-items: center; gap: 6px; padding: 3px 0; font-size: 12.5px; flex-wrap: wrap; }
+.abvr10 select { max-width: 220px; }
+.abvr10 input[data-mn] { width: 150px; height: 22px; }

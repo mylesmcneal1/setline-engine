@@ -906,6 +906,9 @@ async function importAbleton(path?: string, choose?: (data: AbleData, dups: any[
   const L = data.locators || [];
   const cnt = (c: string) => L.filter((l: any) => !l.clip && l.choice === c).length;
   if (L.length) lines.push(`Markers sorted: ${cnt("song")} song${cnt("song") === 1 ? "" : "s"}, ${cnt("ignore")} ignored, ${cnt("break")} break${cnt("break") === 1 ? "" : "s"}, ${cnt("marker")} marker${cnt("marker") === 1 ? "" : "s"}, ${cnt("section")} section locator${cnt("section") === 1 ? "" : "s"}${L.some((l: any) => l.clip) ? `, ${L.filter((l: any) => l.clip && l.choice !== "ignore").length} section clips` : ""}.`);
+  // 10c: songs merged as versions (GARDEN + GARDEN (EXTENDED INTRO))
+  for (const m of (res as any).merged || []) lines.push(`Merged “${m.song}” into “${m.main}” as the version “${m.version}” (its own timeline: ${m.tracks} tracks${m.shared ? `, ${m.shared} audio file${m.shared === 1 ? "" : "s"} shared` : ""})${(m.both || []).length ? `; “${m.both.join("”, “")}” had both, so it keeps “${m.main}” once (‹ › picks the version)` : ""}.`);
+  for (const e of (res as any).mergeErrors || []) lines.push("Not merged: " + e);
   if (recWords) lines.push(`${recWords} recorded cue word${recWords === 1 ? "" : "s"} from the Live pads (the same voice as in Live).`);
   for (const p of choice.picks) {
     const s = data.songs[p.i];

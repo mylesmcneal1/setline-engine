@@ -239,6 +239,8 @@ MappedSong mapSong(const juce::var& payload, double sr, int numOutputs,
                         h.accent = acc && useAccent;
                         h.gainDb = h.accent ? 0.0f
                                  : (! acc && ! onBeat ? subGain : beatGain) - accentGain - engineBeatDb;
+                        // 10c: a click clip note's velocity scales its level (127 = as before): 40·log10(v / 127) dB
+                        if (n.hasProperty("v")) h.gainDb += 40.0f * std::log10(juce::jlimit(1.0f, 127.0f, (float) toDouble(n["v"], 127)) / 127.0f);
                         hits.push_back(h);
                     }
             }
