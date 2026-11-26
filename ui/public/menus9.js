@@ -1,92 +1,181 @@
-// set.Line 9c: the menus (File · Edit · View · Song · Setlist · Customize · Window · Help, and the macOS app menu).
-// Described here from the page's state and sent to the app, which shows them in the macOS menu bar or the Windows
-// window's menu bar (no in-app menu button any more). An item's command comes back as a "menu" event "m:<id>".
-// Shortcuts: shown in the menus; the page handles the keys itself (below), so they work while it has focus.
+// set.Line menus (9c, reorganised in 10b): the menu bar (macOS main menu, the Windows window menu), the right-click
+// and ⋯ menus, ⌘K and the ⌘/ sheet all come from here, so an action has one name, one shortcut and one place.
+// - The menu bar: described from the page's state and sent to the app; an item comes back as "m:<id>".
+// - Object menus (a song, a break, a track, a section): SLMenus.obj(kind, at, …) for right-click and ⋯.
+// - Shortcuts: every key a menu shows works while the page has focus (the dispatcher at the bottom); on the Mac the
+//   page takes the key first (it calls preventDefault), so the menu's own key equivalent never fires twice.
+// - Cut / Copy / Paste / Select all / Undo / Redo in a text field: the app's text editing (the native side does
+//   it when a text field has focus, SLMenus.textFocus), the page's own otherwise.
 (() => {
   "use strict";
   const $ = (id) => document.getElementById(id);
   const MAC = /Mac/.test(navigator.platform);
   const native = () => typeof NATIVE !== "undefined" && NATIVE && typeof ncall === "function";
   const mod = () => (window.SLE && SLE.mod) || {};
-  const song = () => songs.find((x) => x.id === (focusId || selId)) || null;
+  const W = () => window.SLWords || {};
   const busy = () => typeof playing !== "undefined" && playing;
-  let ACT = {}, libs = [];
-  const it = (id, label, act, o = {}) => { ACT[id] = act; return { id: "m:" + id, label, key: o.key || "", dis: !!o.dis, check: !!o.check }; };
-  const sep = () => ({ sep: true });
-  const sub = (label, items, dis) => ({ label, sub: items, dis: !!dis });
-  const tab = (t) => { const a = document.querySelector(`.tabs a[data-tab="${t}"]`); if (a) a.click(); };
+  const locked = () => typeof LOCKED !== "undefined" && LOCKED;
+  const stage = () => busy() || locked(); // safe on stage: destructive actions wait
+  const songOf = (id) => songs.find((x) => x.id === id) || null;
+  const song = () => songOf(focusId || selId);
+  const area = () => (window.SLDrag && SLDrag.area ? SLDrag.area() : "set");
+  const trk = () => (typeof trackOpen !== "undefined" && trackOpen && songOf(trackOpen.song) ? { s: songOf(trackOpen.song), t: trackOpen.track } : null);
+  const fixedT = (t) => ["Click", "Cues"].includes(t);
+  const sel = () => (typeof songSel !== "undefined" && songSel.size > 1 ? [...songSel] : []);
   const breaks = () => window.SLBreaks || null;
+  const tab = (t) => { const a = document.querySelector(`.tabs a[data-tab="${t}"]`); if (a) a.click(); };
+  const at0 = () => { const r = (document.activeElement && document.activeElement.getBoundingClientRect && document.activeElement !== document.body) ? document.activeElement.getBoundingClientRect() : { left: innerWidth / 2 - 100, bottom: 160 }; return { clientX: r.left, clientY: r.bottom + 4 }; };
+  let ACT = {}, libs = [], DRY = null;
+  // an item: id, label, key (cmd+shift+a), act, and dis / check / danger
+  const it = (id, label, act, o = {}) => { ACT[id] = act; return { id: "m:" + id, label, key: o.key || "", dis: !!o.dis, check: !!o.check, danger: !!o.danger, group: o.group || "", help: o.help || "" }; };
+  const sep = () => ({ sep: true });
+  const head = (label) => ({ header: label });
+  const sub = (label, items, dis) => ({ label, sub: items, dis: !!dis });
 
+  // ================================================================ the actions behind more than one menu
+  const renameAny = () => { const T = trk(); if (area() === "track" && T && !fixedT(T.t)) { renameTrack(T.s, T.t); return; }
+    if (typeof selSec !== "undefined" && selSec && songOf(selSec.song)) { renameSec(songOf(selSec.song), selSec.id); return; }
+    const s = song(); if (s) renameSong(s.id); };
+  const renameTrack = (s, t) => { const el = document.querySelector(`.row.trk > .lh[data-song="${s.id}"][data-track="${CSS.escape(t)}"] .tn`); renameTrackBox(s, t, el || document.body); };
+  const dupAny = () => { const T = trk(); if (area() === "track" && T && !fixedT(T.t)) { SL9.dupTrack(T.s, T.t); return; }
+    if ((typeof multiOn === "function" && multiOn()) || (typeof curItem === "function" && curItem())) { doDup(); return; }
+    const s = song(); if (s && !stage()) dupSong(s.id); };
+  const delAny = () => { const T = trk(); if (area() === "track" && T && !fixedT(T.t)) { SL9.deleteTrack(T.s, T.t); return; }
+    if ((typeof multiOn === "function" && multiOn()) || (typeof curItem === "function" && curItem())) { doDelete(); return; }
+    const ids = sel(); if (ids.length) { deleteSongs(ids, typeof songSelFrom !== "undefined" ? songSelFrom : "menu"); return; }
+    const s = song(); if (s) deleteSong(s.id); };
+  const colourSong = (s, at) => swatchPop({ left: at.clientX, right: at.clientX, top: at.clientY, bottom: at.clientY }, s.col, (c) => { snap(); s.col = c; refresh(); toast(`Changed the colour of “${s.name}”`, undo); });
+  const colourTrack = (s, t, at) => swatchPop({ left: at.clientX, right: at.clientX, top: at.clientY, bottom: at.clientY }, trackCol(s, t), (c) => { snap(); (s.tcol || (s.tcol = {}))[t] = c; refresh(); toast(`Changed the colour of “${t}”`, undo); });
+  const PAL_NAMES = () => (typeof PAL !== "undefined" ? PAL : []);
+  const colourItems = (cur, set, pre) => PAL_NAMES().map((c, i) => it(pre + i, "● " + c, () => set(c), { check: String(cur || "").toLowerCase() === String(c).toLowerCase() }));
+  const addToSet = (ids) => { ids = ids.filter((id) => !setOrder.includes(id)); if (!ids.length) { toast("Already in " + curSetObj().name); return; } snap(); ids.forEach((id) => setOrder.push(id)); refresh(); toast(`Added ${ids.length > 1 ? ids.length + " songs" : "“" + songOf(ids[0]).name + "”"} to ${curSetObj().name}`, undo); };
+  const remFromSet = (ids) => { ids = ids.filter((id) => setOrder.includes(id)); if (!ids.length) return; if (typeof removeFromSet === "function") removeFromSet(ids); };
+  // Make sections from cues (10c makes it a preview with ghost sections; until then: replace or fill, with Undo)
+  const secsFromCuesAct = (ids) => { const list = (ids && ids.length ? ids : [song() && song().id]).map(songOf).filter(Boolean);
+    if (window.SL10c && SL10c.fromCues) { SL10c.fromCues(list); return; }
+    snap(); let n = 0; list.forEach((s) => { if (secsFromCues(s)) n++; }); refresh(); toast(n ? `Made sections from the cues in ${n > 1 ? n + " songs" : "“" + list[0].name + "”"}` : "No section cues (Verse, Chorus…) found", n ? undo : null); };
+  const verItems = (s, pre) => { if (!s) return []; const vs = versOf(s), cur = curVer(s); return [...vs.map((v, i) => it(pre + i, v.name, () => { snap(); showVer(s, v.id); refresh(); if (window.SLE && SLE.nextChanged) SLE.nextChanged(); }, { check: v === cur })), sep(), it(pre + "new", "New version", () => { snap(); const v = newVer(s); refresh(); toast(`Added the version “${v.name}”`, undo); })]; };
+  const heights = (s, pre) => (window.TL9 && s ? TL9.SIZES.map(([n], i) => it(pre + i, n, () => TL9.setSize(s, i), { check: TL9.sizeOf(s) === i })) : []);
+  const moveSet = (dir) => { if (window.SLDrag) SLDrag.stepSet(dir); };
+  const moveTrack = (dir) => { const T = trk(); if (T && window.SLDrag) SLDrag.stepTrack(T.s, T.t, dir); };
+
+  // ================================================================ the menu bar
   function spec() {
     ACT = {};
-    const s = song(), p = busy();
+    const s = song(), T = trk(), p = busy(), st = stage(), many = sel();
     const look = window.SLLook ? SLLook.get() : {};
+    const reveal = MAC ? "Show in Finder" : "Show in Explorer";
     const file = [
-      it("newSong", "New song…", () => openNewSong(), { key: "cmd+n", dis: p }),
-      it("newSetlist", "New setlist", () => setlistCmd("new"), { key: "cmd+shift+n", dis: p }),
-      it("addBreak", "Add break", () => breaks() && breaks().add(), { key: "cmd+b", dis: !breaks() }),
+      it("newSong", "New song…", () => openNewSong(), { key: "cmd+n", dis: st, group: "Library" }),
+      it("newSetlist", "New setlist", () => setlistCmd("new"), { key: "cmd+shift+n", dis: st, group: "Setlist" }),
+      sep(), head("Import"),
+      it("importAbleton", "Ableton project…", () => mod().importAbleton(), { key: "cmd+i", dis: st, group: "Library", help: "Import an Ableton project" }),
+      it("importAudio", "Audio as a new song…", () => mod().importAudioSong ? mod().importAudioSong() : openNewSong(), { dis: st, group: "Library", help: "Import audio as a new song" }),
+      it("importPackage", "set.Line package (.setline)…", () => mod().importPackage(), { dis: st, group: "Library", help: "Import a set.Line package" }),
+      sep(), head("Export"),
+      it("exportSong", "This song…", () => mod().exportSong ? mod().exportSong(s && s.id) : mod().exportSetlist(), { key: "cmd+e", dis: !s, help: "Export this song" }),
+      it("exportSet", "This setlist…", () => mod().exportSetlist(), { key: "cmd+shift+e", help: "Export this setlist" }),
       sep(),
-      it("importAbleton", "Import Ableton project…", () => mod().importAbleton(), { key: "cmd+i", dis: p }),
-      it("importAudio", "Import audio files…", () => openNewSong(), { dis: p }),
-      it("importPackage", "Import .setline package…", () => mod().importPackage(), { dis: p }),
+      it("print", "Print setlist…", () => window.SLPrint && SLPrint.box(), { key: "cmd+p", group: "Setlist" }),
       sep(),
-      it("export", "Export song or setlist…", () => mod().exportSetlist(), { key: "cmd+e" }),
-      it("print", "Print setlist…", () => window.SLPrint && SLPrint.box(), { key: "cmd+p" }),
-      sep(),
-      sub("Libraries", [
-        ...libs.map((l, i) => it("lib" + i, l.name + (l.songs !== undefined ? `  (${l.songs})` : ""), () => mod().switchLibrary(l.name), { check: l.current, dis: p || l.current })),
-        sep(), it("newLibrary", "New library…", () => mod().newLibrary(), { dis: p }), it("renameLibrary", "Rename library…", () => mod().renameLibrary()),
-        it("revealLibrary", MAC ? "Show in Finder" : "Show in Explorer", () => mod().reveal()),
-      ]),
-      sub("Open recent", libs.filter((l) => !l.current).slice(0, 8).map((l, i) => it("recent" + i, l.name, () => mod().switchLibrary(l.name), { dis: p })), libs.filter((l) => !l.current).length === 0),
       it("backups", "Backups…", () => mod().openBackup()),
-      it("cleanUp", "Clean up unused audio…", () => mod().cleanUpAudio(), { dis: p }),
-      ...(MAC ? [] : [sep(), it("checkUpdates", "Check for updates…", () => window.SLUpd && SLUpd.check(true)), it("settings", "Settings…", () => openSettings(), { key: "cmd+comma" }), sep(), it("quit", "Exit", () => mod().quit())]),
+      it("cleanUp", "Clean up unused audio…", () => mod().cleanUpAudio(), { dis: st }),
+      ...(MAC ? [] : [sep(), it("settings", "Settings…", () => openSettings(), { key: "cmd+comma" }), it("prefsAudio", "Audio & outputs…", () => openSettings("audio")), it("prefsMidi", "MIDI & controllers…", () => openSettings("midi")), sep(), it("quit", "Exit", () => mod().quit())]),
     ];
     const edit = [
       it("undo", "Undo", () => undo(), { key: "cmd+z" }), it("redo", "Redo", () => redo(), { key: "cmd+shift+z" }), sep(),
-      it("cut", "Cut", () => typeof doCut === "function" && doCut(), { key: MAC ? "" : "cmd+x" }), it("copy", "Copy", () => typeof doCopy === "function" && doCopy(), { key: MAC ? "" : "cmd+c" }),
-      it("paste", "Paste", () => typeof doPaste === "function" && doPaste(), { key: MAC ? "" : "cmd+v" }),
-      it("delete", "Delete", () => typeof doDelete === "function" && doDelete()),
-      it("selectAll", "Select all", () => { const x = song(); if (x && typeof selectAllIn === "function") selectAllIn(x); }, { key: MAC ? "" : "cmd+a", dis: !s }), sep(),
-      it("selectMode", "Select songs", () => window.SL9 && SL9.select(!SL9.state.sel), { check: !!(window.SL9 && SL9.state.sel) }),
+      it("cut", "Cut", () => doCut(), { key: "cmd+x" }), it("copy", "Copy", () => doCopy(), { key: "cmd+c" }), it("paste", "Paste", () => doPaste(), { key: "cmd+v" }),
+      it("duplicate", "Duplicate", dupAny, { key: "cmd+d" }), it("delete", "Delete", delAny, { key: "backspace", dis: st }), sep(),
+      it("rename", "Rename…", renameAny, { key: "return", dis: !s && !T }),
+      it("selectAll", "Select all", () => { const x = song(); if (x && typeof selectAllIn === "function") selectAllIn(x); }, { key: "cmd+a", dis: !s }),
+      it("selectMode", "Select songs", () => window.SL9 && SL9.select(!SL9.state.sel), { key: "cmd+shift+s", check: !!(window.SL9 && SL9.state.sel) }),
+      sep(), it("palette", "Search or do anything…", () => window.SLix && SLix.palette(), { key: "cmd+k" }),
+    ];
+    const curLib = libs.find((l) => l.current);
+    const sortBy = typeof LIBSORT !== "undefined" ? LIBSORT : "az";
+    const library = [
+      sub("Switch library", libs.map((l, i) => it("lib" + i, l.name + (l.songs !== undefined ? `  (${l.songs})` : ""), () => mod().switchLibrary(l.name), { check: l.current, dis: p || l.current })), !libs.length),
+      sep(),
+      it("newLibrary", "New library…", () => mod().newLibrary(), { dis: p }),
+      it("renameLibrary", "Rename library…", () => mod().renameLibrary(), { dis: !curLib && native() }),
+      it("revealLibrary", reveal, () => mod().reveal()),
+      sep(),
+      it("mergeVersions", "Merge as versions…", () => window.SL10c && SL10c.mergeBox(many.length ? many : s ? [s.id] : []), { dis: !window.SL10c || st }),
+      it("unmergeVersion", "Unmerge version", () => window.SL10c && SL10c.unmerge(s), { dis: !window.SL10c || !s || !(window.SL10c && SL10c.canUnmerge(s)) || st }),
+      sep(),
+      sub("Sort by", [["az", "Name"], ["recent", "Recently added"], ["len", "Length"]].map(([k, n]) => it("sort_" + k, n, () => { LIBSORT = k; if ($("libSort")) $("libSort").value = k; refresh(); }, { check: sortBy === k }))),
+    ];
+    const songM = [
+      it("renameSong", "Rename song…", () => { const x = song(); if (x) renameSong(x.id); }, { dis: !s }),
+      sub("Colour", s ? colourItems(s.col, (c) => { snap(); s.col = c; refresh(); }, "scol") : [], !s),
+      it("dupSong", "Duplicate song", () => dupSong(s.id), { dis: !s || st }),
+      it("deleteSong", "Delete song…", () => deleteSong(s.id), { dis: !s || st, danger: true }),
+      sep(),
+      sub("Versions", verItems(s, "ver"), !s),
+      it("newVersion", "New version", () => { snap(); const v = newVer(s); refresh(); toast(`Added the version “${v.name}”`, undo); }, { dis: !s }),
+      sep(),
+      it("addSection", "Add section", () => { const x = song(); if (x) addSecAt(x, playId === x.id ? barAtTime(x, pos) : 1); }, { key: "cmd+alt+s", dis: !s }),
+      it("addMeter", "Add time signature…", () => { const x = song(); if (x && window.SLMeter) SLMeter.open(x, playId === x.id ? barAtTime(x, pos) : 1, null); }, { key: "cmd+alt+m", dis: !s }),
+      it("addTempo", "Add tempo change…", () => { const x = song(); if (!x) return; const bar = Math.max(2, playId === x.id ? barAtTime(x, pos) : 2); addPoint(x, { bar, bpm: +bpmAt(x, bar).toFixed(3) }); tsel = { song: x.id, i: x.tmap.findIndex((e) => e.bar === bar) }; setTimeout(() => openTpop(true), 30); }, { key: "cmd+alt+t", dis: !s }),
+      it("secsFromCues", "Make sections from cues…", () => secsFromCuesAct(many), { dis: !s && !many.length }),
+      sep(),
+      it("addToSet", "Add to setlist", () => addToSet(many.length ? many : [s.id]), { key: "cmd+shift+a", dis: !s && !many.length }),
+      it("sortMidi", "Sort tracks: MIDI to the bottom", () => window.SL10a && SL10a.sortMidi(many.length ? many : s ? [s.id] : []), { dis: !s && !many.length }),
+    ];
+    const ts = T ? T.s : s;
+    const trackM = [
+      it("addAudio", "Add audio track", () => addTrack(ts, "audio"), { key: "cmd+t", dis: !ts || st }),
+      it("addClick", "Add click track", () => addTrack(ts, "click"), { dis: !ts || st }),
+      it("addMidi", "Add MIDI track", () => addTrack(ts, "midi"), { dis: !ts || st }),
+      sep(),
+      it("renameTrack", "Rename track…", () => renameTrack(T.s, T.t), { dis: !T || fixedT(T.t) }),
+      sub("Colour", T ? colourItems(trackCol(T.s, T.t), (c) => { snap(); (T.s.tcol || (T.s.tcol = {}))[T.t] = c; refresh(); }, "tcol") : [], !T),
+      it("dupTrack", "Duplicate track", () => SL9.dupTrack(T.s, T.t), { dis: !T || fixedT(T.t) || st }),
+      it("deleteTrack", "Delete track", () => SL9.deleteTrack(T.s, T.t), { dis: !T || fixedT(T.t) || st, danger: true }),
+      sep(),
+      it("trackUp", "Move up", () => moveTrack(-1), { key: "alt+up", dis: !T }),
+      it("trackDown", "Move down", () => moveTrack(1), { key: "alt+down", dis: !T }),
+      sub("Height", heights(ts, "th"), !ts),
+      sep(),
+      it("editClick", "Edit click (MIDI clip)", () => window.SL10c && SL10c.openClip(ts), { dis: !ts || !window.SL10c }),
+    ];
+    const L = curSetObj();
+    const setM = [
+      sub("Switch setlist", setlists.map((l, i) => it("set" + i, l.name, () => { if (useSet(l.id) !== false) refresh(); }, { check: l.id === curSet, dis: p && l.id !== curSet }))),
+      sep(),
+      it("addSongToSet", "Add song…", () => { const b = $("addSong9"); if (b) b.click(); }),
+      it("addBreak", "Add break", () => breaks() && breaks().add(), { key: "cmd+b", dis: !breaks() }),
+      sep(),
+      it("setUp", "Move up", () => moveSet(-1), { key: "alt+up", dis: !setOrder.length }),
+      it("setDown", "Move down", () => moveSet(1), { key: "alt+down", dis: !setOrder.length }),
+      it("setRemove", "Remove from setlist", () => { const b = document.querySelector("#songs .brk9.on"); if (b && breaks()) { breaks().del(b.dataset.b); return; } remFromSet(many.length ? many : s ? [s.id] : []); }, { dis: !(s && setOrder.includes(s.id)) && !many.length && !document.querySelector("#songs .brk9.on") }),
+      sep(),
+      it("renameSet", "Rename setlist…", () => setlistCmd("ren")),
+      it("dupSet", "Duplicate setlist", () => setlistCmd("dup"), { dis: p }),
+      it("deleteSet", "Delete setlist…", () => setlistCmd("del"), { dis: st || setlists.length < 2, danger: true }),
     ];
     const v = window.SL9 ? SL9.mode() : "cards";
     const view = [
-      it("tabShow", "Show", () => tab("show"), { key: "cmd+1", check: !document.body.classList.contains("pf") && !(typeof perfOn !== "undefined" && perfOn) && !(typeof bandOn !== "undefined" && bandOn) }),
+      it("tabShow", "Show", () => tab("show"), { key: "cmd+1", check: !(typeof perfOn !== "undefined" && perfOn) && !(typeof bandOn !== "undefined" && bandOn) }),
       it("tabPerform", "Perform", () => tab("perform"), { key: "cmd+2", check: typeof perfOn !== "undefined" && perfOn }),
       it("tabBand", "Band", () => tab("band"), { key: "cmd+3", check: typeof bandOn !== "undefined" && bandOn }), sep(),
-      it("cards", "Cards", () => SL9.setMode("cards"), { check: v === "cards" }), it("folders", "Folders", () => SL9.setMode("folders"), { check: v === "folders" }),
+      it("cards", "Cards", () => SL9.setMode("cards"), { key: "cmd+alt+1", check: v === "cards" }),
+      it("folders", "Folders", () => SL9.setMode("folders"), { key: "cmd+alt+2", check: v === "folders" }),
       it("collapseAll", "Collapse all", () => SL9.collapseAll(), { key: "cmd+alt+left" }), sep(),
-      it("zoomIn", "Zoom in", () => window.SL9 && SL9.zoomBy(1.5)), it("zoomOut", "Zoom out", () => window.SL9 && SL9.zoomBy(1 / 1.5)),
-      it("zoomFit", "Fit the song", () => { const x = song(); if (x && window.SL9) SL9.zoomPreset(x, "song"); }, { dis: !s }), sep(),
-      // 9e: track heights, Fit tracks to window, Fit all (every bar and every track), compact top rows
-      ...(window.TL9 ? (() => { const T = TL9, ts = T.song(), cur = ts ? T.sizeOf(ts) : -1; return [
-        sub("Track height", T.SIZES.map(([n], i) => it("trackSize" + i, n, () => T.setSize(T.song(), i), { check: cur === i })), !ts),
-        it("tracksSmaller", "Shrink tracks", () => T.step(T.song(), -1), { key: "cmd+alt+minus", dis: !ts }),
-        it("tracksBigger", "Grow tracks", () => T.step(T.song(), 1), { key: "cmd+alt+equals", dis: !ts }),
-        it("fitTracks", "Fit tracks to window", () => T.fitTracks(T.song()), { key: "cmd+alt+f", dis: !ts }),
-        it("fitAll", "Fit all", () => T.fitAll(T.song()), { dis: !ts, check: T.fitAllOn() }),
-        it("compactTop", "Compact top rows", () => T.setCompact(!T.compact()), { check: T.compact() }), sep()]; })() : []),
-      it("toggleSetlist", "Show the setlist", () => setPanel("L", !isOpen("L")), { check: isOpen("L") }),
-      it("togglePanel", "Show the side panel", () => setPanel("R", !isOpen("R")), { check: isOpen("R") }),
-    ];
-    const vers = s && typeof versOf === "function" ? versOf(s) : [];
-    const songM = [
-      it("renameSong", "Rename song…", () => { const x = song(); if (x) renameSong(x.id); }, { dis: !s }),
-      it("sortMidi", "Sort tracks: MIDI to the bottom", () => window.SL10a && SL10a.sortMidi(typeof songSel !== "undefined" && songSel.size ? [...songSel] : (song() ? [song().id] : [])), { dis: !s && !(typeof songSel !== "undefined" && songSel.size) }), sep(),
-      it("addTrack", "Add track…", () => { const b = $("newTrackB"); if (b) b.click(); }, { dis: !s }),
-      it("addSection", "Add section", () => { const x = song(); if (x) addSecAt(x, playId === x.id ? barAtTime(x, pos) : 1); }, { dis: !s }),
-      it("addMeter", "Add time signature…", () => { const x = song(); if (x && window.SLMeter) SLMeter.open(x, playId === x.id ? barAtTime(x, pos) : 1, null); }, { dis: !s }),
-      it("addTempo", "Add tempo change…", () => { const x = song(); if (!x) return; const bar = Math.max(2, playId === x.id ? barAtTime(x, pos) : 2); addPoint(x, { bar, bpm: +bpmAt(x, bar).toFixed(3) }); tsel = { song: x.id, i: x.tmap.findIndex((e) => e.bar === bar) }; setTimeout(() => openTpop(true), 30); }, { dis: !s }),
+      sub("Zoom", [
+        it("zoomIn", "Zoom in", () => SL9.zoomBy(1.5), { key: "cmd+equals", dis: !s }), it("zoomOut", "Zoom out", () => SL9.zoomBy(1 / 1.5), { key: "cmd+minus", dis: !s }), sep(),
+        ...[["song", "Whole song"], ["32", "32 bars"], ["8", "8 bars"], ["sec", "Section"]].map(([k, n]) => it("zoom_" + k, n, () => { const x = song(); if (x) SL9.zoomPreset(x, k); }, { dis: !s })),
+      ], !s),
+      ...(window.TL9 ? (() => { const X = TL9, xs = X.song(), cur = xs ? X.sizeOf(xs) : -1; return [
+        sub("Track height", [...X.SIZES.map(([n], i) => it("trackSize" + i, n, () => X.setSize(X.song(), i), { check: cur === i })), sep(),
+          it("tracksSmaller", "Shrink tracks", () => X.step(X.song(), -1), { key: "cmd+alt+minus", dis: !xs }),
+          it("tracksBigger", "Grow tracks", () => X.step(X.song(), 1), { key: "cmd+alt+equals", dis: !xs }),
+          it("fitTracks", "Fit tracks to window", () => X.fitTracks(X.song()), { key: "cmd+alt+shift+f", dis: !xs }),
+          it("compactTop", "Compact top rows", () => X.setCompact(!X.compact()), { check: X.compact() })], !xs),
+        it("fitAll", "Fit all", () => X.fitAll(X.song()), { key: "cmd+alt+f", dis: !xs, check: X.fitAllOn() })]; })() : []),
       sep(),
-      sub("Versions", [...vers.map((x, i) => it("ver" + i, x.name, () => { snap(); showVer(s, x.id); refresh(); }, { check: typeof curVer === "function" && curVer(s) === x })), sep(), it("newVersion", "New version", () => { snap(); newVer(s); refresh(); })], !s),
-    ];
-    const setM = [
-      it("addSongToSet", "Add song…", () => { const b = $("addSong9"); if (b) b.click(); }),
-      it("addBreak2", "Add break", () => breaks() && breaks().add(), { dis: !breaks() }),
-      it("print2", "Print setlist…", () => window.SLPrint && SLPrint.box()), sep(),
-      it("renameSet", "Rename…", () => setlistCmd("ren")), it("dupSet", "Duplicate", () => setlistCmd("dup"), { dis: p }),
+      it("toggleSetlist", "Setlist sidebar", () => setPanel("L", !isOpen("L")), { key: "cmd+alt+l", check: isOpen("L") }),
+      it("togglePanel", "Side panel", () => setPanel("R", !isOpen("R")), { key: "cmd+alt+r", check: isOpen("R") }),
     ];
     const Lk = window.SLLook;
     const cust = Lk ? [
@@ -95,55 +184,186 @@
       sub("Fonts", Lk.PAIRS.map((pr) => it("pair_" + pr.id, pr.name + (pr.id === "round" ? " (default)" : ""), () => Lk.set({ pair: pr.id, ui: "", title: "", nums: "" }), { check: look.pair === pr.id && !look.ui && !look.title && !look.nums }))),
       sub("Text size", [90, 100, 110, 120, 130].map((z) => it("size_" + z, z + "%", () => Lk.set({ size: z }), { check: look.size === z }))),
       sub("Transport style", [["console", "Console"], ["hardware", "Hardware"], ["minimal", "Minimal"]].map(([k, n]) => it("tp_" + k, n, () => Lk.set({ transport: k }), { check: look.transport === k }))),
-      sub("Density", Lk.TRACKS.map(([n], i) => it("dens_" + i, n, () => Lk.set({ track: i }), { check: look.track === i }))),
       sep(),
       it("customize", "Customize the look…", () => Lk.open(), { key: "cmd+alt+comma" }),
       it("lookReset", "Reset to default", () => Lk.reset()),
     ] : [];
     const win = [it("minimise", "Minimise", () => native() && ncall("windowCmd", { what: "minimise" }), { key: MAC ? "cmd+m" : "" }), it("fullscreen", "Full screen", () => native() && ncall("windowCmd", { what: "fullscreen" }), { key: MAC ? "cmd+ctrl+f" : "" })];
     const help = [
-      it("docs", "set.Line documentation", () => { if (native()) ncall("openUrl", { url: "https://github.com/mylesmcneal1/setline-engine/tree/main/docs" }); }),
+      it("quickStart", "Quick start", () => window.SLix && SLix.quickStart()),
+      it("shortcuts", "Keyboard shortcuts", () => window.SLix && SLix.sheet(), { key: "cmd+slash" }),
+      sep(),
       it("diag", "Diagnostics", () => openSettings("diag")),
       it("copyDiag", "Copy diagnostics", () => SLE && SLE.diagnostics && SLE.diagnostics("copy")),
       it("report", "Report a problem…", () => { if (SLE && SLE.diagnostics) SLE.diagnostics("save"); if (native()) ncall("openUrl", { url: "https://github.com/mylesmcneal1/setline-engine/issues/new" }); }),
+      ...(MAC ? [] : [sep(), it("checkUpdates", "Check for updates…", () => window.SLUpd && SLUpd.check(true)), it("aboutWin", "About set.Line", () => mod().about && mod().about())]),
     ];
-    // the macOS app menu: the module already answers these commands (about, checkUpdates, prefs)
-    const app = [{ id: "about", label: "About set.Line" }, { id: "checkUpdates", label: "Check for updates…" }, { id: "prefs", label: "Settings…", key: "cmd+comma" }];
-    return { menus: [{ name: "File", items: file }, { name: "Edit", items: edit }, { name: "View", items: view }, { name: "Song", items: songM }, { name: "Setlist", items: setM }, { name: "Customize", items: cust }, { name: "Window", items: win }, { name: "Help", items: help }], app: MAC ? app : [] };
+    // the macOS app menu (About / Check for updates / Settings are answered by the module: about, checkUpdates, prefs)
+    const app = [{ id: "about", label: "About set.Line" }, { id: "checkUpdates", label: "Check for updates…" }, sep(), { id: "prefs", label: "Settings…", key: "cmd+comma" },
+      it("prefsAudio", "Audio & outputs…", () => openSettings("audio")), it("prefsMidi", "MIDI & controllers…", () => openSettings("midi"))];
+    ACT.about = () => mod().about && mod().about(); ACT.prefs = () => openSettings(); ACT.checkUpdates = () => window.SLUpd && SLUpd.check(true);
+    return { menus: [{ name: "File", items: file }, { name: "Edit", items: edit }, { name: "Library", items: library }, { name: "Song", items: songM }, { name: "Track", items: trackM },
+      { name: "Setlist", items: setM }, { name: "View", items: view }, { name: "Customize", items: cust }, { name: "Window", items: win }, { name: "Help", items: help }], app: MAC ? app : [] };
   }
 
+  // ================================================================ object menus: right-click = ⋯ = the menu bar
+  // items as the page's ctxMenu wants them; a submenu opens as a second menu at the same place
+  const keyText = (k) => { if (!k) return ""; const P = k.split("+"), key = P.pop(), map = { cmd: MAC ? "⌘" : "Ctrl+", ctrl: MAC ? "⌃" : "Ctrl+", alt: MAC ? "⌥" : "Alt+", shift: MAC ? "⇧" : "Shift+" };
+    const K = { comma: ",", minus: "−", equals: "=", slash: "/", left: "←", right: "→", up: "↑", down: "↓", backspace: "⌫", return: "↩", space: "Space" }[key] || key.toUpperCase();
+    const order = MAC ? ["ctrl", "alt", "shift", "cmd"] : ["cmd", "ctrl", "alt", "shift"]; return order.filter((m) => P.includes(m)).map((m) => map[m]).join("") + K; };
+  function toCtx(items, at) {
+    const out = [];
+    for (const x of items) {
+      if (!x) continue;
+      if (x.sep) { if (out.length && out[out.length - 1] !== "-") out.push("-"); continue; }
+      if (x.header) { out.push({ cap: x.header }); continue; }
+      if (x.sub) { out.push({ label: x.label + " ▸", icon: "", dis: x.dis, act: () => ctxMenu(at, toCtx(x.sub, at)) }); continue; }
+      const id = x.id.replace(/^m:/, ""), f = ACT[id];
+      out.push({ label: x.label, icon: x.check ? "✓" : x.icon || "", key: keyText(x.key), dis: x.dis, danger: x.danger, act: () => { if (DRY) { DRY.push(id); return; } if (f) f(); } });
+    }
+    while (out.length && out[out.length - 1] === "-") out.pop();
+    return out;
+  }
+  // the items for one object (they share ACT with the menu bar)
+  function objItems(kind, a, b) {
+    spec(); // fills ACT for the shared ids
+    const st = stage();
+    if (kind === "song") {
+      const s = songOf(a); if (!s) return [];
+      const inSet = setOrder.includes(s.id), many = sel().length > 1 && songSel.has(s.id) ? sel() : null;
+      const nIn = many ? many.filter((x) => setOrder.includes(x)).length : 0, sN = (n) => (n === 1 ? "1 song" : n + " songs");
+      if (many) return [...(nIn < many.length ? [it("oAdd", `Add ${sN(many.length - nIn)} to ${curSetObj().name}`, () => addToSet(many))] : []), ...(nIn ? [it("oRem", `Remove ${sN(nIn)} from ${curSetObj().name}`, () => remFromSet(many))] : []),
+        it("oSecs", "Make sections from cues", () => secsFromCuesAct(many)), it("oMerge", "Merge as versions…", () => window.SL10c && SL10c.mergeBox(many), { dis: !window.SL10c || st }), sep(),
+        it("oDelMany", `Delete ${many.length} songs…`, () => deleteSongs(many, "menu"), { dis: st, danger: true })];
+      const i = setOrder.indexOf(s.id);
+      return [
+        it("oOpen", "Open", () => { if (window.SL9 && SL9.mode() === "folders" && !focusSong()) SL9.toggleRow(s.id, true); else openSong(s.id); }),
+        it("oRename", "Rename…", () => renameSong(s.id), { key: "return" }),
+        sub("Colour", colourItems(s.col, (c) => { snap(); s.col = c; refresh(); toast(`Changed the colour of “${s.name}”`, undo); }, "oc")),
+        it("oDup", "Duplicate", () => dupSong(s.id), { dis: st }),
+        sub("Versions", verItems(s, "ov")),
+        sep(),
+        inSet ? it("oRem1", `Remove from ${curSetObj().name}`, () => remFromSet([s.id])) : it("oAdd1", `Add to ${curSetObj().name}`, () => addToSet([s.id]), { key: "cmd+shift+a" }),
+        ...(inSet ? [it("oUp", "Move up", () => { select(s.id, false); SLDrag.stepSet(-1); }, { key: "alt+up", dis: i === 0 }), it("oDown", "Move down", () => { select(s.id, false); SLDrag.stepSet(1); }, { key: "alt+down", dis: i === setOrder.length - 1 }),
+          it("oAfter", "After this song…", () => afterMenu(b || at0(), s))] : []),
+        it("oSecs1", "Make sections from cues", () => secsFromCuesAct([s.id]), { dis: !(s.cues || []).length }),
+        sep(),
+        it("oDel", "Delete song…", () => deleteSong(s.id), { dis: st, danger: true }),
+      ];
+    }
+    if (kind === "break") {
+      const B = breaks(); const bk = B && B.list().find((x) => x.id === a); if (!bk) return [];
+      return [
+        it("bEdit", "Edit break…", () => { B.select(a); if (typeof setPanel === "function" && !isOpen("R")) setPanel("R", true, true); }),
+        sub("Label", B.LABELS.map((l, i) => it("bLab" + i, l, () => { snap(); bk.label = l; bk.len = B.DEFLEN[l] || bk.len; refresh(); }, { check: bk.label === l }))),
+        sep(),
+        it("bUp", "Move up", () => { B.select(a); SLDrag.stepSet(-1); }, { key: "alt+up" }), it("bDown", "Move down", () => { B.select(a); SLDrag.stepSet(1); }, { key: "alt+down" }),
+        it("bDup", "Duplicate", () => B.dup(a)),
+        sep(),
+        it("bDel", "Remove", () => B.del(a), { danger: true }),
+      ];
+    }
+    if (kind === "track") {
+      const s = a, t = b, fx = fixedT(t), i = s.tracks.indexOf(t);
+      return [
+        it("tRename", "Rename…", () => renameTrack(s, t), { dis: fx, key: "return" }),
+        sub("Colour", colourItems(trackCol(s, t), (c) => { snap(); (s.tcol || (s.tcol = {}))[t] = c; refresh(); toast(`Changed the colour of “${t}”`, undo); }, "otc")),
+        it("tDup", "Duplicate", () => SL9.dupTrack(s, t), { dis: fx || st }),
+        sep(),
+        it("tUp", "Move up", () => SLDrag.stepTrack(s, t, -1), { key: "alt+up", dis: i === 0 }),
+        it("tDown", "Move down", () => SLDrag.stepTrack(s, t, 1), { key: "alt+down", dis: i === s.tracks.length - 1 }),
+        it("tMove", "Move to another song…", () => SL9.trackMenu && SL9.moveTrackMenu ? SL9.moveTrackMenu(at0(), s, t) : null, { dis: fx || songs.length < 2 || !SL9.moveTrackMenu }),
+        sub("Height", heights(s, "oth")),
+        ...(/^Click/.test(t) && window.SL10c ? [it("tClip", "Edit click (MIDI clip)", () => SL10c.openClip(s, t))] : []),
+        sep(),
+        it("tDel", "Delete track", () => SL9.deleteTrack(s, t), { dis: fx || st, danger: true }),
+      ];
+    }
+    if (kind === "section") {
+      const s = a, so = secObj(s, b); if (!so) return [];
+      const nx = s.secs.find((x) => x.start > so.start), room = (nx ? nx.start : s.total + 1) - (so.start + so.bars);
+      const set = (f) => () => { snap(); f(); buildBars(s); refresh(); };
+      return [
+        it("sRename", "Rename…", () => renameSec(s, b), { key: "return" }),
+        sub("Colour", SEC_TYPES.map((k, j) => it("sType" + j, (k === "pre" ? "Pre-chorus" : k[0].toUpperCase() + k.slice(1)), set(() => { so.type = k; }), { check: so.type === k }))),
+        it("sLoop", "Loop until released (vamp)", set(() => { so.end = so.end === "loop" ? "continue" : "loop"; }), { check: so.end === "loop" }),
+        sub("At its end", [["continue", "Play on"], ["hold", "Hold on last bar"], ["stop", "Stop"]].map(([k, l]) => it("sEnd_" + k, l, set(() => { so.end = k; }), { check: so.end === k }))),
+        it("sDup", "Duplicate", set(() => { const c = { ...JSON.parse(JSON.stringify(so)), id: sid++, start: so.start + so.bars }; s.secs.push(c); selSec = { song: s.id, id: c.id }; }), { dis: room < so.bars }),
+        it("sSplit", "Split at playhead", () => splitAt(s, b, nearestBoundary(s, pos)), { dis: !(playId === s.id && barAtTime(s, pos) > so.start && barAtTime(s, pos) < so.start + so.bars) }),
+        sep(),
+        it("sDel", "Delete", () => deleteSec(s, b), { danger: true }),
+      ];
+    }
+    return [];
+  }
+  // open an object's menu at a point (right-click) or under a button (⋯)
+  function obj(kind, at, a, b) {
+    if (at && at.currentTarget && at.currentTarget.getBoundingClientRect && at.type === "click") { const r = at.currentTarget.getBoundingClientRect(); at = { clientX: r.left, clientY: r.bottom + 4 }; }
+    const items = objItems(kind, a, b, at); if (!items.length) return;
+    ctxMenu(at, toCtx(items, at));
+  }
+
+  // ================================================================ sending, running
   let last = "", timer = 0;
   function update() { clearTimeout(timer); timer = setTimeout(send, 80); }
   async function send() {
     try { if (mod().libraries) libs = await mod().libraries(); } catch (e) { libs = []; }
-    const sp = spec(), j = JSON.stringify(sp);
+    // the app shows (and on the Mac answers) only keys with ⌘ / Ctrl, and ⌥↑ / ⌥↓: ↩ and ⌫ depend on what's
+    // selected, so the page alone handles them (the page's menus, ⌘K and the ⌘/ sheet still show them)
+    const sp = spec(), j = JSON.stringify(sp, (k, v) => (k === "key" && v && !/cmd/.test(v) && !/^alt\+(up|down)$/.test(v) ? "" : v));
     if (j === last) return; last = j;
-    if (native()) ncall("setMenus", sp);
+    if (native()) ncall("setMenus", JSON.parse(j));
   }
+  // text editing commands with a text field focused: the field's own (WebView2 and WebKit do these themselves when
+  // the key is pressed; a menu click needs execCommand, and on the Mac the app sends the standard action)
+  const TEXT = { undo: "undo", redo: "redo", cut: "cut", copy: "copy", paste: "paste", selectAll: "selectAll" };
+  const inText = () => { const a = document.activeElement; return !!a && (a.isContentEditable || /^(INPUT|TEXTAREA)$/.test(a.tagName)); };
   function run(cmd) {
     const id = String(cmd).replace(/^m:/, "");
+    if (DRY) { DRY.push(id); return; }
+    if (TEXT[id] && inText()) { try { document.execCommand(TEXT[id]); } catch (e) {} return; }
     if (!ACT[id]) spec();
     const f = ACT[id]; if (f) try { f(); } catch (e) { console.error(e); }
     update();
   }
-  // the state the menus show: checked when something changes (cheap; sends only if the menus differ)
   setInterval(() => { if (!document.hidden) send(); }, 1000);
+  // tell the app when a text field has focus (the Mac's Edit menu then edits text, as in any app)
+  let tf = false; const tfSend = () => { const now = inText(); if (now !== tf) { tf = now; if (native()) ncall("textFocus", { on: now }).catch?.(() => {}); } };
+  document.addEventListener("focusin", tfSend); document.addEventListener("focusout", () => setTimeout(tfSend, 0));
 
-  // the shortcuts the menus show, handled here (where the page didn't already): ⌘N new song (was New setlist),
-  // ⇧⌘N new setlist, ⌘B add break, ⌘I import Ableton, ⌘E export, ⌘P print, ⌘1/2/3 Show / Perform / Band
+  // ================================================================ every shortcut a menu shows works
+  // (keys with ⌘ / Ctrl here; ↩, ⌫ and ⌥↑ / ⌥↓ are the page's own: they depend on what's selected)
+  const CODE = { Comma: "comma", Minus: "minus", Equal: "equals", Slash: "slash", ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down", Backspace: "backspace", Enter: "return", Space: "space" };
+  function comboOf(e) {
+    let k = CODE[e.code] || (/^Key[A-Z]$/.test(e.code) ? e.code.slice(3).toLowerCase() : /^Digit\d$/.test(e.code) ? e.code.slice(5) : (e.key || "").toLowerCase());
+    if (k === "+" || k === "=") k = "equals"; if (k === "-") k = "minus"; if (k === "/") k = "slash"; if (k === ",") k = "comma";
+    const m = []; if (MAC ? e.metaKey : e.ctrlKey) m.push("cmd"); if (MAC && e.ctrlKey) m.push("ctrl"); if (e.altKey) m.push("alt"); if (e.shiftKey) m.push("shift");
+    return [...m, k].join("+");
+  }
+  const norm = (k) => { const P = k.split("+"), key = P.pop(); return [...["cmd", "ctrl", "alt", "shift"].filter((x) => P.includes(x)), key].join("+"); };
+  function keyIndex(sp) { const map = {}; const walk = (items) => (items || []).forEach((x) => { if (x.sub) walk(x.sub); else if (x.key && x.id) { const k = norm(x.key); if (!map[k]) map[k] = x; } }); sp.menus.forEach((m) => walk(m.items)); walk(sp.app); return map; }
   document.addEventListener("keydown", (e) => {
-    if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
-    const t = e.target; if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
-    const k = e.key.toLowerCase(), map = { n: e.shiftKey ? "newSetlist" : "newSong", b: "addBreak", i: "importAbleton", e: "export", p: "print", 1: "tabShow", 2: "tabPerform", 3: "tabBand" };
-    const id = map[k]; if (!id || (k !== "n" && e.shiftKey)) return;
-    const sp = spec(), f = ACT[id]; if (!f) return;
-    const find = (items) => { for (const x of items || []) { if (x.id === "m:" + id) return x; const y = find(x.sub); if (y) return y; } return null; };
-    let item = null; for (const m of sp.menus) item = item || find(m.items);
-    if (item && item.dis) return; // greyed out (e.g. while playing): the key does nothing either
-    e.preventDefault(); e.stopImmediatePropagation(); f();
+    if (!(MAC ? e.metaKey : e.ctrlKey)) return;
+    const t = e.target; const typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
+    const c = comboOf(e);
+    if (typing && !["cmd+k", "cmd+slash", "cmd+comma"].includes(c)) return; // a text field keeps ⌘C, ⌘V, ⌘Z, ⌘A…
+    if (document.querySelector(".cfbg") && !["cmd+z", "cmd+shift+z"].includes(c)) return; // a dialog is open
+    const sp = spec(), item = keyIndex(sp)[c]; if (!item) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    if (item.dis) return; // greyed out (e.g. while playing): the key does nothing either
+    run(item.id);
   }, true);
-  // no in-app menu button: the menus are in the window chrome now
+  // no in-app menu button: the menus are in the window chrome
   const fb = $("fileBtn"); if (fb && fb.parentElement) fb.parentElement.remove();
-  window.SLMenus = { spec, update, run, send, nativeKeys: () => false };
+
+  // every item, flat (⌘K, the ⌘/ sheet, the menu test): {id, label, key, path, dis, group}
+  function flat(sp) {
+    sp = sp || spec(); const out = [];
+    const walk = (items, path) => (items || []).forEach((x) => { if (x.sep || x.header) return; if (x.sub) { walk(x.sub, [...path, x.label]); return; } out.push({ id: x.id.replace(/^m:/, ""), label: x.label, key: x.key, keyText: keyText(x.key), path, dis: x.dis, check: x.check, danger: x.danger, help: x.help }); });
+    sp.menus.forEach((m) => walk(m.items, [m.name])); walk(sp.app, ["set.Line"]);
+    return out;
+  }
+  window.SLMenus = { spec, update, run, send, flat, keyText, obj, objItems, toCtx, nativeKeys: () => false,
+    dry: (on) => { DRY = on ? [] : null; }, fired: () => (DRY ? DRY.slice() : []), clearFired: () => { if (DRY) DRY.length = 0; } };
   update();
 })();

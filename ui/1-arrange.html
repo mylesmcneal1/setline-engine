@@ -1150,13 +1150,14 @@
 <link rel="stylesheet" href="breaks9.css">
 <link rel="stylesheet" href="time9e.css">
 <link rel="stylesheet" href="fix10a.css">
+<link rel="stylesheet" href="ix10.css">
 </head>
 <body>
 
 <header class="top">
   <div class="brand"><span class="slmark"><img src="brand/setline-wordmark-dark-bg.svg" alt="set.Line" style="display:block;height:21px;width:auto" draggable="false"></span></div>
   <button class="ibtn on" id="tglL" title="Setlist  [ "><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M6 2.5v11"/></svg></button>
-  <button class="ibtn on" id="tglR" title="Inspector  ]"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M10 2.5v11"/></svg></button>
+  <button class="ibtn on" id="tglR" title="Side panel  ]"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M10 2.5v11"/></svg></button>
   <div class="filebar"><button class="fbtn" id="fileBtn" title="New, Open, Open Recent, Save, Save As, Close">File ▾</button></div>
   <nav class="tabs">
     <a class="on" href="#show" data-tab="show">Show</a>
@@ -1234,9 +1235,9 @@
   <div class="bd">
     <div class="frow"><div class="fld grow"><label class="l" for="mName">Name</label><input id="mName" placeholder="Song name" autocomplete="off"></div><div class="fld key"><label class="l" for="mKey">Key</label><input id="mKey" placeholder="A min" autocomplete="off"></div></div>
 
-    <div class="fld"><label class="l">Stems</label>
+    <div class="fld"><label class="l">Audio files</label>
       <div class="dz" id="dropZone"><input type="file" id="mFiles" multiple accept="audio/*,.wav,.aif,.aiff,.flac,.mp3" hidden>
-        <div class="dzEmpty" id="dropMsg"><span class="dzi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 12h1.5M6 9v6M9 6v12M12 9.5v5M15 4v16M18 8v8M21 12h-1.5"/></svg></span><b>Drop stem files here</b><span>WAV, AIFF or FLAC · or <button type="button" class="lnk" id="mChoose">choose files…</button></span></div>
+        <div class="dzEmpty" id="dropMsg"><span class="dzi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 12h1.5M6 9v6M9 6v12M12 9.5v5M15 4v16M18 8v8M21 12h-1.5"/></svg></span><b>Drop audio files here</b><span>WAV, AIFF or FLAC · or <button type="button" class="lnk" id="mChoose">choose files…</button></span></div>
         <div class="flist" id="fileList"></div>
       </div>
       <div class="hint" id="stemHint">Each file becomes a track, named after the file by set.Line; change it if it's wrong.</div>
@@ -1248,7 +1249,7 @@
         <button type="button" class="mrow" id="mMidPick"><span class="dzi sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M8 5v8M12 5v8M16 5v8"/></svg></span><span class="mtx"><b id="mMidName">Choose a MIDI file…</b><span id="mMidInfo">Tempo and meter changes come in exactly as written</span></span></button></div>
     </div>
   </div>
-  <footer><label class="chk" id="mCopyL" hidden title="Copy the stem files into the session's Audio folder, so the show folder has everything it needs"><input type="checkbox" id="mCopy" checked><span>Copy into session</span></label><label class="chk"><input type="checkbox" id="mToSet" checked><span id="mToSetL">Add to setlist</span></label><span class="sp"></span><button class="btn" id="mCancel">Cancel</button><button class="btn pri" id="mAdd">Add Song</button></footer>
+  <footer><label class="chk" id="mCopyL" hidden title="Copy the audio files into the library's Audio folder, so the show folder has everything it needs"><input type="checkbox" id="mCopy" checked><span>Copy into session</span></label><label class="chk"><input type="checkbox" id="mToSet" checked><span id="mToSetL">Add to setlist</span></label><span class="sp"></span><button class="btn" id="mCancel">Cancel</button><button class="btn pri" id="mAdd">Add Song</button></footer>
 </div></div>
 <div class="tip" id="tip"></div>
 
@@ -1483,7 +1484,7 @@ function newAlt(s,t,copy,name){ const list=altsOf(s,t), src=curAlt(s,t); const a
 // ---------- song versions (6e): sections of one source arrangement ----------
 // The song's own tracks, clips, tempo map, sections, cues and MIDI are its source arrangement ("Album": everything in
 // order). A version is an ordered list of the source's sections (each on or off) plus optional version-only parts:
-// N bars with their own audio on a track only that version plays (s.vonly[track] = version id). Same stems, no copies.
+// N bars with their own audio on a track only that version plays (s.vonly[track] = version id). Same audio, no copies.
 //   {id, name, def (default in new sets), order: [{k:'sec', id, on} | {k:'x', id, on}], extras: [{id, name, bars, track}]}
 // Versions from before 6e kept whole copies of the song's fields; one that can't be said as sections of the source
 // stays a "custom" version {id, name, custom: true, state} and plays exactly as it did (its sections can't be edited).
@@ -1668,7 +1669,7 @@ function dupSong(id){ const s=songs.find(x=>x.id===id), n=JSON.parse(JSON.string
   n.id=freshSongId(); n.name=s.name+' (copy)'; n.origMap=JSON.stringify(n.tmap); Object.keys(n.malts||{}).forEach(t=>{ const a=n.malts[t].find(x=>x.id===n.muse[t])||n.malts[t][0]; n.midi[t]=a.events; });
   buildBars(n); songs.push(n); open.add(n.id); select(n.id,false); refresh(); document.querySelector(`.folder[data-id="${n.id}"]`)?.scrollIntoView({block:'center',behavior:'smooth'}); toast(`Duplicated as “${n.name}”`); }
 function deleteSong(id){ const s=songs.find(x=>x.id===id), inLists=setlists.filter(l=>l.order.includes(id));
-  confirmBox(`Delete “${esc(s.name)}”?`,`Removes the song with all its versions, sections, MIDI and audio edits from this session${inLists.length?`, and from ${inLists.map(l=>'“'+esc(l.name)+'”').join(', ')}`:''}. The stem files on disk aren’t touched.`,'Delete song',()=>{
+  confirmBox(`Delete “${esc(s.name)}”?`,`Removes the song with all its versions, sections, MIDI and audio edits from this session${inLists.length?`, and from ${inLists.map(l=>'“'+esc(l.name)+'”').join(', ')}`:''}. The audio files on disk aren’t touched.`,'Delete song',()=>{
     syncSet(); const idx=songs.indexOf(s), where=setlists.map(l=>[l,l.order.indexOf(id)]).filter(x=>x[1]>=0);
     songs.splice(idx,1); setlists.forEach(l=>{ const k=l.order.indexOf(id); if(k>=0) l.order.splice(k,1); }); open.delete(id);
     if(playId===id){ if(NATIVE&&window.SLE) SLE.stop(); playing=false; playId=null; pos=0; $('playBtn').classList.remove('on'); }
@@ -1728,7 +1729,7 @@ function saveBox(title,body,choice){ const bg=document.createElement('div'); bg.
   bg.querySelector('[data-a=discard]').onclick=()=>{ close(); choice('discard'); }; bg.querySelector('[data-a=save]').onclick=()=>{ close(); choice('save'); }; bg.querySelector('[data-a=save]').focus(); }
 // About set.Line: the wordmark, the build ("Beta 0.1.<n>"), where it runs.
 function aboutBox(info){ const bg=document.createElement('div'); bg.className='cfbg'; const v=String(info.version||''), beta=/\.0$/.test(v)?v.replace(/\.0$/,'')+' (dev build)':v;
-  bg.innerHTML=`<div class="cfbox about" style="text-align:center"><img src="brand/setline-wordmark-dark-bg.svg" alt="set.Line" style="height:46px;width:auto;display:block;margin:6px auto 14px" draggable="false"><b id="aboutVer">Beta ${esc(beta)}</b><p>${esc(info.platform||'')}<br>Third-party licences: THIRD_PARTY.md and the licenses folder next to the app.</p><div class="cfa"><button class="btn line" data-a="copy">Copy diagnostics</button><button class="btn line" data-a="save">Save diagnostics…</button><button class="btn pri" data-a="ok">OK</button></div></div>`;
+  bg.innerHTML=`<div class="cfbox about" style="text-align:center"><img src="brand/setline-wordmark-dark-bg.svg" alt="set.Line" style="height:46px;width:auto;display:block;margin:6px auto 14px" draggable="false"><b id="aboutVer">Beta ${esc(beta)}</b><p>${esc(info.platform||'')}<br>Third-party licences: THIRD_PARTY.md and the licenses folder next to the app.</p><div class="cfa"><button class="btn line" data-a="copy">Copy diagnostics</button><button class="btn line" data-a="save">Save diagnostics…</button><button class="btn pri" data-a="ok">Close</button></div></div>`;
   document.body.appendChild(bg); const close=()=>{ bg.remove(); document.removeEventListener('keydown',key,true); }; const key=e=>{ if(e.key==='Escape'||e.key==='Enter'){ e.stopPropagation(); close(); } };
   bg.querySelector('[data-a=copy]').onclick=()=>{ if(window.SLE) SLE.diagnostics('copy'); }; bg.querySelector('[data-a=save]').onclick=()=>{ if(window.SLE) SLE.diagnostics('save'); };
   document.addEventListener('keydown',key,true); bg.onclick=e=>{ if(e.target===bg) close(); }; bg.querySelector('[data-a=ok]').onclick=close; }
@@ -2122,7 +2123,7 @@ function renderFolders(listIn,into){
   if(!into){ $('sessCount').textContent=`${songs.length} song${songs.length===1?'':'s'}`;
   renderHero(); sc.classList.toggle('focus',!!focusSong()); $('crumbSong').innerHTML=focusSong()?`<i>›</i>${esc(focusSong().name)}`:''; $('crumb').classList.toggle('in',!!focusSong());
   }
-  if(!into&&!songs.length){ sc.innerHTML=`<div class="emptyarr"><div class="blank"><div class="bt">No songs yet</div><div class="bs">Add a song from its stems. Each song gets its own tempo map, sections, tracks and MIDI.</div><button class="btn pri" id="firstSong">＋ Add your first song</button></div></div>`; $('firstSong').onclick=()=>openNewSong(); return; }
+  if(!into&&!songs.length){ sc.innerHTML=`<div class="emptyarr"><div class="blank"><div class="bt">No songs yet</div><div class="bs">Add a song from its audio files. Each song gets its own tempo map, sections, tracks and MIDI.</div><button class="btn pri" id="firstSong">＋ Add your first song</button></div></div>`; $('firstSong').onclick=()=>openNewSong(); return; }
   const FS=focusSong(), list=listIn||(FS?[FS]:[...songs].sort(byName));
   const W=Math.max(...list.map(x=>Math.ceil(Math.max(x.len,x.audio)*PXS)+40)), LP=lanePos(); // 9e: every lane at the one sideways position
   list.forEach(s=>{
@@ -2142,7 +2143,7 @@ function renderFolders(listIn,into){
     // 9a: markers (from Live's locators, or added here)
     const r=labs.map(l=>`<span style="left:${l.x}px">${l.bar}</span>`).join('')
       +(s.marks||[]).filter(m=>m.bar<=s.total).map((m,i)=>`<i class="mkr" data-i="${i}" style="left:${evTime(s,m)*PXS}px" title="${esc(m.name)} · bar ${m.bar}"><u>${esc(m.name)}</u></i>`).join('');
-    const cy=loopRange(s), RH=top9c()?18:24; h+=`<div class="row ruler"><div class="lh"><span class="rl9">Bar</span><span class="rt9" data-song="${id}"><button data-a="fitTracks" title="Fit tracks to window  ⌥⌘F" aria-label="Fit tracks to window"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5v13M5.5 4 8 1.5 10.5 4M5.5 12 8 14.5 10.5 12"/></svg></button><button data-a="fitAll" class="${window.TL9&&TL9.fitAllOn(id)?'on':''}" title="Fit all: every bar and every track on one screen (again: back)">Fit all</button><button data-a="size" title="Track height" aria-label="Track height"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2.5 3.5h11M2.5 8h11M2.5 12.5h11"/></svg></button></span></div><div class="lane" data-song="${id}" style="width:${W}px;${LP}"><canvas class="rcv" data-song="${id}" data-w="${W}" width="1" height="${RH}"></canvas>${r}${cy?`<i class="cyc" style="left:${cy[0]*PXS}px;width:${(cy[1]-cy[0])*PXS}px"></i>`:''}<i class="rph" data-ph="${id}"></i></div></div>`;
+    const cy=loopRange(s), RH=top9c()?18:24; h+=`<div class="row ruler"><div class="lh"><span class="rl9">Bar</span><span class="rt9" data-song="${id}"><button data-a="fitTracks" title="Fit tracks to window  ⇧⌥⌘F" aria-label="Fit tracks to window"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5v13M5.5 4 8 1.5 10.5 4M5.5 12 8 14.5 10.5 12"/></svg></button><button data-a="fitAll" class="${window.TL9&&TL9.fitAllOn(id)?'on':''}" title="Fit all: every bar and every track on one screen (again: back)  ⌥⌘F">Fit all</button><button data-a="size" title="Track height" aria-label="Track height"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2.5 3.5h11M2.5 8h11M2.5 12.5h11"/></svg></button></span></div><div class="lane" data-song="${id}" style="width:${W}px;${LP}"><canvas class="rcv" data-song="${id}" data-w="${W}" width="1" height="${RH}"></canvas>${r}${cy?`<i class="cyc" style="left:${cy[0]*PXS}px;width:${(cy[1]-cy[0])*PXS}px"></i>`:''}<i class="rph" data-ph="${id}"></i></div></div>`;
     h+=meterRowHTML(s,W);
     // tempo lane
     const samp=[]; s.bars.slice(0,s.total).forEach(b=>b.beatT.forEach((bt,k)=>samp.push([bt*PXS,bpmAt(s,b.bar+k/b.sig[0])]))); samp.push([s.len*PXS,bpmAt(s,s.total+.999)]);
@@ -2197,7 +2198,7 @@ function renderFolders(listIn,into){
   sc.querySelectorAll('.trk .lh').forEach(lh=>lh.oncontextmenu=e=>{ e.preventDefault(); const cv=lh.parentElement.querySelector('canvas'); const s=songs.find(x=>x.id===cv.dataset.song), i=+cv.dataset.t, t=s.tracks[i];
     ctxMenu(e,[{label:'Rename…',icon:'✎',dis:['Click','Cues'].includes(t),act:()=>{ const r=lh.querySelector('.tn').getBoundingClientRect(); floatInput(r.left,r.top-2,160,24,t,v=>{ if(!v||v===t||s.tracks.includes(v)) return; snap(); renameTrack(s,t,v); refresh(); }); }},
       {label:'Move up',icon:'↑',dis:i===0,act:()=>{ snap(); s.tracks.splice(i,1); s.tracks.splice(i-1,0,t); refresh(); }},{label:'Move down',icon:'↓',dis:i===s.tracks.length-1,act:()=>{ snap(); s.tracks.splice(i,1); s.tracks.splice(i+1,0,t); refresh(); }},'-',
-      {label:'Delete track…',icon:'⌫',danger:true,act:()=>confirmBox(`Delete the “${esc(t)}” track?`,`Removes it from ${esc(s.name)} (all versions). ${isAudio(s,t)?'The stem file on disk isn’t touched.':''}`,'Delete track',()=>{ snap(); s.tracks.splice(i,1); refresh(); toast(`Deleted “${t}”`,undo); })}]); });
+      {label:'Delete track…',icon:'⌫',danger:true,act:()=>confirmBox(`Delete the “${esc(t)}” track?`,`Removes it from ${esc(s.name)} (all versions). ${isAudio(s,t)?'The audio file on disk isn’t touched.':''}`,'Delete track',()=>{ snap(); s.tracks.splice(i,1); refresh(); toast(`Deleted “${t}”`,undo); })}]); });
   sc.querySelectorAll('.edm').forEach(b=>b.onclick=()=>openMidi(b.dataset.song,b.dataset.track));
 
   sc.querySelectorAll('canvas[data-t]').forEach(drawLane);
@@ -2597,7 +2598,7 @@ function midiMenu(at,s,t){ const c=s.midiCfg[t], set=f=>{ snap(); f(); refresh()
   ctxMenu(at,[{cap:'Port'},...ports.map(p=>({label:p,icon:p===c.port?'✓':'',act:()=>set(()=>c.port=p)})),{cap:'Channel'},...Array.from({length:16},(_,i)=>({label:'Channel '+(i+1),icon:+c.ch===i+1?'✓':'',act:()=>set(()=>c.ch=i+1)}))]); }
 // + Audio / Click / MIDI / Cues track (the row under the last track, and + Track in the toolbar)
 function addTrack(s,k){ if(!s) return;
-  if(k==='audio'){ if(NATIVE&&window.SLE) SLE.addStems(s); else toast('In the app this opens a file picker; stems land on new audio tracks'); return; }
+  if(k==='audio'){ if(NATIVE&&window.SLE) SLE.addStems(s); else toast('In the app this opens a file picker; the files land on new audio tracks'); return; }
   snap();
   if(k==='midi'){ newMidiTrack(s.id); return; }
   if(k==='cues'){ if(s.tracks.includes('Cues')) return; s.tracks.splice(s.tracks.includes('Click')?1:0,0,'Cues'); s.cues=s.cues||[]; buildBars(s); refresh(); toast('Cues track added. Double-click it to place a cue.'); return; }
@@ -3078,7 +3079,7 @@ function renderInsp0(){
   $('insp').innerHTML=`<div class="rh"><span class="sq" style="background:${s.col}"></span><h2 title="${esc(s.name)}">${esc(V.name)}</h2><small>${vs.length>1?`Version ${vi} of ${vs.length}`:esc(s.name)}</small></div>${vh}
     <details class="rcard rsong" ${songCardOpen?'open':''} id="songCard"><summary><h3 style="display:inline">Song</h3> <span class="faint" style="font-size:11px">${esc(s.name)} · ${s.total} bars · ${fmt(s.audio)}</span></summary>
     <div class="sect"><div class="kv" style="margin:0"><label>Key</label><input id="sKey" value="${esc(s.key)}"></div></div>
-    <div class="sect" style="margin-top:12px"><h3><span data-tip="Moves the grid only (click, cues, jumps, MIDI). Stems never change. Ramp = glide from the previous tempo to this one. Arrow keys nudge BPM (Shift ±10, Alt ±0.1).">Tempo map</span><button id="addRow" title="Add change">＋</button></h3>
+    <div class="sect" style="margin-top:12px"><h3><span data-tip="Moves the grid only (click, cues, jumps, MIDI). The audio never changes. Ramp = glide from the previous tempo to this one. Arrow keys nudge BPM (Shift ±10, Alt ±0.1).">Tempo map</span><button id="addRow" title="Add change">＋</button></h3>
       <table class="tmap"><tr><th>Bar</th><th>BPM</th><th>Meter</th><th></th><th></th><th></th></tr>${rows}</table>
       <div class="acts"><button class="btn line">Import MIDI file…</button><button class="btn" id="resetMap">Revert</button></div></div>
     <div class="acts" style="margin-top:10px"><button class="btn line" id="sDup">Duplicate song</button><button class="btn danger" id="sDelSong">Delete song…</button></div></details>
@@ -3320,6 +3321,12 @@ function addNative(list){ list.forEach(x=>{ if(picked.some(p=>p.path===x.path)) 
     picked.push({f:null,path:x.path,info:x,err:x.ok?'':(x.error||'Can’t import this file'),name:x.name,role:x.ok?(g?g[1]:x.name.replace(/\.[^.]+$/,'')):'__skip',len:x.seconds||null}); });
   if(!$('mName').value&&picked.some(p=>!p.err)){ const base=picked.find(p=>!p.err).name.replace(/\.[^.]+$/,'').split(/\s*[-_]\s*/)[0]; if(base) $('mName').value=base; }
   drawFiles(); }
+// 10b: File › Import › Audio as a new song…: one song from the files (named after the first one, tracks by role)
+function songFromAudio(list,refs){ const base=stripNum(list[0].name.replace(/\.[^.]+$/,'').split(/\s*[-_]\s*/)[0])||'New song', id=freshSongId();
+  const so={id,name:base,key:'—',col:nextSongCol(),trans:'stop',tmap:[{bar:1,bpm:120,sig:[4,4]}],secs:[],tracks:[],audio:0,added:Date.now()};
+  attachStems(so,list.map(info=>{ const g=ROLE_GUESS.find(([re])=>re.test(info.name)); return {role:g?g[1]:info.name.replace(/\.[^.]+$/,''),info}; }),refs,true); if(!so.audio) so.audio=210;
+  snap(); normSecs(so); buildBars(so); seedMidi(so); songs.push(so); selId=id; refresh();
+  toast(`Added the song “${so.name}” from ${list.length} audio file${list.length>1?'s':''}`,undo); return so; }
 // Adds imported stems to song s as audio tracks. list: [{role, info}], refs: {file path: session reference}.
 function attachStems(s,list,refs,copy){ s.files=s.files||{}; s.troles=s.troles||{};
   list.forEach(x=>{ const base=x.info.name.replace(/\.[^.]+$/,'').trim()||'Audio'; let name=x.role&&x.role!=='__skip'&&!s.tracks.includes(x.role)?x.role:base; const b0=name; let n=2; while(s.tracks.includes(name)) name=b0+' '+(n++);
@@ -3568,7 +3575,7 @@ function ableBox(data,ctx,host){ return new Promise(res=>{ const bg=host||docume
           ${open.has(i)?`<div class="abd"><table>${[...(m.extra||[]),...m.rows].map(r=>`<tr><td>${r.kind==='midi'?'MIDI':r.kind==='click'?'Click':r.kind==='cues'?'Cues':'Audio'}</td><td>${esc(r.name)}</td><td class="abo">${esc(r.out)}</td><td>${r.missing?'<span class="abw">missing: '+esc(r.file&&r.file.name||'')+'</span>':r.stretched?'<span class="abw">time-stretched in Ableton</span>':''}</td></tr>`).join('')}</table>${warn.map(w=>`<p class="abw">${esc(w)}</p>`).join('')}</div>`:''}</div>`; }).join('')}</div>
       ${miss.length?`<div class="abmiss"><span class="abw">${miss.length} sample${miss.length===1?'':'s'} not found: ${esc(miss.slice(0,4).join(', '))}${miss.length>4?'…':''}</span><button class="btn line" id="abLocate">Locate…</button></div>`:''}
       ${(data.ignored||[]).length?`<details class="abign"><summary>Not imported: ${(data.ignored||[]).length} device${data.ignored.length===1?'':'s'}, plug-in${data.ignored.length===1?'':'s'} and return track${data.ignored.length===1?'':'s'} (set.Line plays audio and MIDI only)</summary><p>${esc(data.ignored.join(' · '))}</p></details>`:''}
-      ${pads.length?`<div class="abcues"><b>Cues from Live</b> <span class="faint">(${esc([...new Set(pads.map(x=>x.track))].join(', '))}: a cue for every note; the words come from the pads)</span>
+      ${pads.length?`<div class="abcues"><b>Cues from Live</b> <span class="faint">(${esc([...new Set(pads.map(x=>x.track))].join(', '))}: a cue for every note; the words come from Live’s drum-rack pads)</span>
         <label class="abset"><input type="checkbox" id="abRec" ${opt.recCues?'checked':''} ${anyRec?'':'disabled'}> Use your recorded cue audio <span class="faint">${anyRec?'(each pad’s own sample: the same voice as in Live)':'(no pad samples found: cues use the current voice)'}</span></label>
         <button class="linkb" id="abPads">${padOpen?'Hide':'Edit'} pad / note → cue words (${pads.length})</button>
         ${padOpen?`<div class="abpads"><table><tr><th>Note</th><th>Pad in Live</th><th>Cue words</th><th>Sample</th></tr>${pads.map(x=>{ const k=x.track+'|'+x.note; return `<tr><td class="mono">${x.note>=0?noteName(x.note)+' ('+x.note+')':'any'}</td><td>${esc(x.name||'–')}</td><td><input data-pad="${esc(k)}" value="${esc(opt.padWords[k]!==undefined?opt.padWords[k]:x.word)}" spellcheck="false"></td><td class="faint">${x.file&&x.file.found?(COUNT_WORD.test(opt.padWords[k]||x.word)?'count-in · ':'')+'recorded':'voice'}</td></tr>`; }).join('')}</table></div>`:''}</div>`:''}
@@ -3792,7 +3799,7 @@ function newField(name){ let id; do{ id='f'+Date.now().toString(36)+Math.floor(M
 
 // ---- curfew: each setlist has a "finish by" time ----
 function finishByBox(){ const L=curSetObj(); const bg=document.createElement('div'); bg.className='cfbg';
-  bg.innerHTML=`<div class="cfbox"><b>Finish “${esc(L.name)}” by</b><p>The Curfew clock on the band’s screens counts the rest of the set against it.</p><input id="fbT" type="time" value="${esc(L.finishBy||'')}" style="margin-top:10px;font-size:15px"><div class="cfa"><button class="btn line" data-a="clear" style="margin-right:auto">No curfew</button><button class="btn line" data-a="no">Cancel</button><button class="btn pri" data-a="ok">OK</button></div></div>`;
+  bg.innerHTML=`<div class="cfbox"><b>Finish “${esc(L.name)}” by</b><p>The Curfew clock on the band’s screens counts the rest of the set against it.</p><input id="fbT" type="time" value="${esc(L.finishBy||'')}" style="margin-top:10px;font-size:15px"><div class="cfa"><button class="btn line" data-a="clear" style="margin-right:auto">No curfew</button><button class="btn line" data-a="no">Cancel</button><button class="btn pri" data-a="ok">Set curfew</button></div></div>`;
   document.body.appendChild(bg); const close=()=>bg.remove(); bg.onclick=e=>{ if(e.target===bg) close(); };
   bg.querySelector('[data-a=no]').onclick=close; bg.querySelector('[data-a=clear]').onclick=()=>{ snap(); delete L.finishBy; close(); refresh(); };
   bg.querySelector('[data-a=ok]').onclick=()=>{ const v=$('fbT').value; snap(); if(v) L.finishBy=v; else delete L.finishBy; close(); refresh(); }; }
@@ -4144,7 +4151,7 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
     if(!cueOpen) return; if(was==='downloading'&&VMODEL.state==='downloading'&&$('cvDlBar')){ const pct=VMODEL.total?Math.floor(100*VMODEL.done/VMODEL.total):0; $('cvDlBar').style.width=pct+'%'; $('cvDlText').textContent=`Downloading better voices… ${pct}% (${Math.round(VMODEL.done/1e6)} of ${KOKORO_MB()} MB)`; return; }
     if(was!==VMODEL.state) renderInsp(); }, setUnknownWords:l=>{ const k=JSON.stringify(l); if(k===JSON.stringify(UNKNOWN)) return; UNKNOWN=l; if(cueOpen) renderInsp(); }, setVoices:l=>{ VOICES=l; if(cueOpen) renderInsp(); renderFolders(); }, pickCue:(s,id)=>{ const t=s.tracks.find(x=>ROLE[x]==='cues'); if(t) setPick({kind:'cue',song:s.id,track:t,id}); }, openCuePanel:s=>openCuePanel(s), newVer:(s,n)=>newVer(s,n), switchVer:(s,id)=>{ switchVer(s,id); refresh(); }, newAlt:(s,t,copy,n)=>newAlt(s,t,copy,n), buildBars:s=>buildBars(s), rerender:()=>refresh(), redrawTrack:(s,t)=>redrawTrack(s,t), colourOf:t=>TCOL[t]||'#9aa0aa', roleOf:t=>ROLE[t]||'',
   guessRole:n=>{ const g=ROLE_GUESS.find(([re])=>re.test(n)); return g&&g[1]!=="__skip"?g[1]:""; },
-  addNative, openNewSong, modalOpen:()=>modal.classList.contains('show'), dropZone:()=>dz,
+  addNative, songFromAudio, openNewSong, modalOpen:()=>modal.classList.contains('show'), dropZone:()=>dz,
   addStems(s,list,refs,copy){ snap(); const a=s.audio; attachStems(s,list,refs,copy); if(s.audio!==a) buildBars(s); refresh(); } };
 const isOff=(s,t)=>!!(s.mute||{})[t]||(Object.values(s.solo||{}).some(Boolean)&&!(s.solo||{})[t]);
 function loopRange(s){ if(!loopOn||s.id!==(playId||selId)) return sectionLoopRange(s); if(selSec&&selSec.song===s.id){ const p=s.secPos.find(x=>x.id===selSec.id); if(p) return [s.bars[p.start-1].t,s.bars[p.start-1+p.bars].t]; } return [0,s.audio]; }
@@ -4691,5 +4698,6 @@ try{ const q=new URLSearchParams(location.search).get('settings'); if(q) setTime
 <script src="breaks9.js"></script>
 <script src="time9e.js"></script>
 <script src="fix10a.js"></script>
+<script src="ix10.js"></script>
 </body>
 </html>

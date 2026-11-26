@@ -5,6 +5,7 @@
 // tells it which range to loop.
 import { startBandHost } from "../band/host";
 import { SL } from "../bridge";
+import "../words"; // 10b: the glossary (window.SLWords)
 
 interface Bar { bar: number; t: number; dur: number; sig: [number, number]; beatT: number[] }
 interface Song { id: string; name: string; tracks: string[]; bars: Bar[]; total: number; audio: number; [k: string]: any }
@@ -458,7 +459,7 @@ const SLE = {
   call: <T = any>(name: string, args?: unknown) => SL.call<T>(name, args),
   fileMenu: (at: { clientX: number; clientY: number }) => fileMenu(at),
   // 9c: the module's commands for the menus in the window chrome (ui/public/menus9.js)
-  mod: { exportSetlist: () => exportSetlist(), importPackage: () => importPackage(), importAbleton: () => importAbleton().catch((e) => page().toast(String(e))), cleanUpAudio: () => cleanUpAudio(), openBackup: () => openBackup(),
+  mod: { exportSetlist: () => exportSetlist(), exportSong: (id: string) => exportSetlist(undefined, undefined, id), importAudioSong: () => importAudioSong().catch((e) => page().toast(String(e))), about: () => showAbout(), importPackage: () => importPackage(), importAbleton: () => importAbleton().catch((e) => page().toast(String(e))), cleanUpAudio: () => cleanUpAudio(), openBackup: () => openBackup(),
     switchLibrary: (n: string) => switchLibrary(n), newLibrary: () => newLibrary(), renameLibrary: () => renameLibrary(), reveal: () => SL.call("libraryReveal"), quit: () => quitApp(),
     libraries: () => SL.call<{ name: string; current: boolean; songs: number }[]>("libraryList").catch(() => []), currentLibrary: () => (lib ? lib.name : "") },
   // ---- step 2: stems ----
@@ -743,9 +744,11 @@ async function openLibrary(name = "", startEmpty?: boolean): Promise<string> {
 // ---- Export / Import (.setline packages) ----
 // A setlist with every song it uses (all versions), only the audio those need, the song fields, dashboards, patch
 // name lists, presets and cue words they use.
-function exportText(listId: string): { text: string; audio: string[]; name: string } {
+function exportText(listId: string, songId?: string): { text: string; audio: string[]; name: string } {
   const o = JSON.parse(sessionText());
-  const L = o.setlists.find((l: any) => l.id === listId) || o.setlists[0];
+  // 10b: File › Export › This song… is a package with one song (in a setlist of its own name)
+  const one = songId ? o.songs.find((x: any) => x.id === songId) : null;
+  const L = one ? { id: "L1", name: one.name, order: [one.id] } : o.setlists.find((l: any) => l.id === listId) || o.setlists[0];
   const songs = o.songs.filter((s: any) => L.order.includes(s.id));
   const audio = new Set<string>();
   for (const s of songs) for (const f of Object.values(s.files || {}) as any[]) if (f && f.path) audio.add(f.path);
@@ -756,9 +759,9 @@ function exportText(listId: string): { text: string; audio: string[]; name: stri
     fields: o.fields || [], dashboards: o.dashboards || [], patchLists: o.patchLists || [], phrases: o.phrases };
   return { text: JSON.stringify(pkg, null, 1), audio: [...audio], name: L.name };
 }
-async function exportSetlist(listId?: string, to?: string) {
+async function exportSetlist(listId?: string, to?: string, songId?: string) {
   await libSave();
-  const e = exportText(listId || page().curSetId());
+  const e = exportText(listId || page().curSetId(), songId);
   const r = await SL.call<{ path?: string; cancelled?: boolean; error?: string }>("exportSetlist", { name: e.name, text: e.text, audio: e.audio, to: to || "" });
   if (r.error) page().toast(r.error); else if (r.path) page().toast(`Exported “${e.name}” to ${r.path}`);
   return r;
@@ -1334,6 +1337,18 @@ async function importStems(infos: AudioInfo[], copy: boolean): Promise<Record<st
   return refs;
 }
 
+// 10b: File › Import › Audio as a new song…: pick audio files, they become one new song (named after the first
+// file), straight into the library, with Undo; no New song sheet in between.
+async function importAudioSong() {
+  if (!(await needLibrary("Import audio"))) return;
+  const list = await pickStems(); if (!list) return;
+  const bad = list.filter((x) => !x.ok), good = list.filter((x) => x.ok);
+  if (bad.length) page().toast(`${bad[0].name}: ${bad[0].error}` + (bad.length > 1 ? `  (+${bad.length - 1} more not imported)` : ""));
+  if (!good.length) return;
+  const refs = await importStems(good, copyPref()); if (!refs) return;
+  (page() as any).songFromAudio(good, refs);
+  loadedKey = null;
+}
 // "+ Track > Audio" (and files dropped on a song): new audio tracks on song s.
 async function addStemsFrom(s: Song, list: AudioInfo[]) {
   const bad = list.filter((x) => !x.ok), good = list.filter((x) => x.ok);

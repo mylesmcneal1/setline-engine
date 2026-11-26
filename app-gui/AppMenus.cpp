@@ -97,6 +97,7 @@ juce::PopupMenu AppMenus::build(const juce::var& items)
     if (auto* a = items.getArray())
         for (auto& it : *a) {
             if ((bool) it["sep"]) { m.addSeparator(); continue; }
+            if (it.hasProperty("header")) { m.addSectionHeader(it["header"].toString()); continue; } // 10b: File › Import / Export
             if (it.hasProperty("sub")) { m.addSubMenu(it["label"].toString(), build(it["sub"]), ! (bool) it["dis"]); continue; }
             const auto f = idToCmd.find(it["id"].toString()); if (f == idToCmd.end()) continue;
             juce::PopupMenu::Item item(it["label"].toString());

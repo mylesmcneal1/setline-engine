@@ -232,20 +232,21 @@
     snap(); if (e.altKey) { delete s.trkH; delete s.trkHs; } else if (s.trkHs) { delete s.trkHs[lh.dataset.track]; if (!Object.keys(s.trkHs).length) delete s.trkHs; } refresh();
   }, true);
 
-  // ⌥⌘− / ⌥⌘= shrink / grow every track, ⌥⌘F fit tracks to window
+  // ⌥⌘− / ⌥⌘= shrink / grow every track, ⌥⌘F Fit all, ⇧⌥⌘F fit tracks to window (10b: as the View menu shows)
   document.addEventListener("keydown", (e) => {
-    if (!(e.metaKey || e.ctrlKey) || !e.altKey || e.shiftKey) return;
+    if (!(e.metaKey || e.ctrlKey) || !e.altKey) return;
     const tg = e.target; if (tg && (tg.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(tg.tagName))) return;
     const s = curSong(); if (!s) return;
+    if (e.code === "KeyF") { e.preventDefault(); if (e.shiftKey) fitTracks(s); else fitAll(s); return; }
+    if (e.shiftKey) return;
     if (e.code === "Minus" || e.key === "-" || e.key === "–") { e.preventDefault(); step(s, -1); }
     else if (e.code === "Equal" || e.key === "=" || e.key === "≠" || e.key === "+") { e.preventDefault(); step(s, 1); }
-    else if (e.code === "KeyF") { e.preventDefault(); fitTracks(s); }
   });
 
   // the ruler's header cell: ↕ fit tracks · Fit all · track height (each song's own, in Folders too)
   function sizeMenu(s, at) { const cur = sizeOf(s);
     ctxMenu(at, [{ cap: "Track height · " + s.name }, ...SIZES.map(([n], i) => ({ label: n + (cur === i ? "  ✓" : ""), act: () => setSize(s, i) })), "-",
-      { label: "Fit tracks to window  ⌥⌘F", act: () => fitTracks(s) }, { label: (fitAllOn(s.id) ? "✓ " : "") + "Fit all", act: () => fitAll(s) }, { label: (compact() ? "✓ " : "") + "Compact top rows", act: () => setCompact(!compact()) }]); }
+      { label: "Fit tracks to window  ⇧⌥⌘F", act: () => fitTracks(s) }, { label: (fitAllOn(s.id) ? "✓ " : "") + "Fit all  ⌥⌘F", act: () => fitAll(s) }, { label: (compact() ? "✓ " : "") + "Compact top rows", act: () => setCompact(!compact()) }]); }
   document.addEventListener("click", (e) => {
     const b = e.target.closest && e.target.closest(".rt9 button"); if (!b) return;
     e.stopPropagation(); const s = songs.find((x) => x.id === b.parentElement.dataset.song); if (!s) return;

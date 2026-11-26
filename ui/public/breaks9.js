@@ -88,7 +88,8 @@
     el.querySelectorAll(".brk9").forEach((r) => {
       const id = r.dataset.b;
       r.onclick = (e) => { e.stopPropagation(); SELB = id; renderSetlist(); renderInsp(); if (typeof NARROW === "function" && NARROW() && !isOpen("R")) setPanel("R", true, true); };
-      r.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); SELB = id; renderSetlist(); renderInsp(); ctxMenu(e, [{ label: "Duplicate break", icon: "dup", act: () => dup(id) }, { label: "Skip it now", icon: "open", dis: !(BRK && BRK.b.id === id), act: () => skip() }, "-", { label: "Delete break", icon: "del", danger: true, act: () => del(id) }]); };
+      // 10b: the same menu as ⋯ and the Setlist menu (SLMenus.obj); Skip it now while it runs
+      r.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); SELB = id; renderSetlist(); renderInsp(); if (BRK && BRK.b.id === id) { ctxMenu(e, [{ label: "Skip it now", icon: "open", act: () => skip() }]); return; } if (window.SLMenus && SLMenus.obj) SLMenus.obj("break", e, id); };
     });
     // 10a: dragging a break (and songs) within the setlist: SLDrag (fix10a.js)
     // the footer: "11 songs · 2 breaks · 52:40"

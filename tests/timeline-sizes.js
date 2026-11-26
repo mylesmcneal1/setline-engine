@@ -97,7 +97,8 @@ async function timelineSizes() {
   }
 
   // ---- the View menu
-  const view = SLMenus.spec().menus.find((m) => m.name === "View").items.map((x) => x.label).filter(Boolean);
+  // (10b: the sizes, Shrink / Grow, Fit tracks and Compact top rows are in View › Track height)
+  const view = SLMenus.flat ? SLMenus.flat().filter((x) => x.path[0] === "View").flatMap((x) => [...x.path.slice(1), x.label]) : SLMenus.spec().menus.find((m) => m.name === "View").items.map((x) => x.label).filter(Boolean);
   ok(["Track height", "Shrink tracks", "Grow tracks", "Fit tracks to window", "Fit all", "Compact top rows"].every((l) => view.includes(l)), "View menu: " + view.join(" · "));
 
   // ---- macOS 12's WebKit (no color-mix()): the overview strip's sections keep their colours

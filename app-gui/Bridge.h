@@ -42,6 +42,8 @@ public:
     // The page reports the session's name and whether it has unsaved changes (window title, quit check).
     std::function<void(const juce::String& name, bool dirty)> onDocument;
     std::function<void(const juce::var& spec)> onMenus; // 9c: the page's menus for the window chrome
+    std::function<bool(const juce::String& id)> onMenuChoose; // 10b tests: choose an item as the menu bar does
+    std::function<void(bool on)> onTextFocus; // 10b: a text field has focus (the Mac's Edit menu edits text then)
     bool isDirty() const { return dirty; }
     bool copyingAudio() const { return media.copying(); }
     void cancelAudioCopies() { media.cancelCopies(); }

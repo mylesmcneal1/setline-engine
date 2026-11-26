@@ -20,6 +20,17 @@ void stopWebViewFileDrops(juce::Component& browser)
 }
 
 
+// 10b: the Edit menu's text commands, sent to the first responder (the web view) as any Mac app does
+bool setlineMacEditAction(const juce::String& what)
+{
+    SEL sel = nil;
+    if (what == "undo") sel = @selector(undo:); else if (what == "redo") sel = @selector(redo:);
+    else if (what == "cut") sel = @selector(cut:); else if (what == "copy") sel = @selector(copy:);
+    else if (what == "paste") sel = @selector(paste:); else if (what == "selectAll") sel = @selector(selectAll:);
+    if (sel == nil) return false;
+    return [NSApp sendAction:sel to:nil from:nil];
+}
+
 // The loading window honours System Settings > Accessibility > Display > Reduce motion (Splash.cpp).
 bool setlineReduceMotionMac()
 {

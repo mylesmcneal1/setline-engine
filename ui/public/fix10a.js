@@ -402,6 +402,6 @@
     if (i >= k && k < L.length) { L.splice(i, 1); L.splice(k, 0, name); }
   }
 
-  window.SLDrag = { add: addDrag, active: () => !!D, items, moveItems, insertSongs, moveTrackTo, stepTrack, stepSet, moveSel, setArea: (a) => { area = a; } };
+  window.SLDrag = { add: addDrag, active: () => !!D, items, moveItems, insertSongs, moveTrackTo, stepTrack, stepSet, moveSel, area: () => area, setArea: (a) => { area = a; } };
   window.SL10a = { renameSong, editInline, nameEl, midiLast, sortMidi, aboveMidi, isMidi };
 })();

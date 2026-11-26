@@ -450,7 +450,9 @@
   }, true);
 
   // ---------------------------------------------------------------- the track menu (Delete track ⌫, Duplicate ⌘D…)
+  // 10b: right-click = ⋯ = the Track menu (SLMenus.obj); this list stays for a page without the menus
   function trackMenu(e, s, t) {
+    if (window.SLMenus && SLMenus.obj) { if (window.SLDrag) SLDrag.setArea("track"); SLMenus.obj("track", e, s, t); return; }
     const i = s.tracks.indexOf(t), fixed = ["Click", "Cues"].includes(t);
     const rec = !!(s.files && s.files[t] && s.files[t].rec); // audio recorded in set.Line: ask before deleting
     ctxMenu(e, [
@@ -465,6 +467,7 @@
     ]);
   }
   function deleteTrack(s, t, rec) {
+    if (rec === undefined) rec = !!(s.files && s.files[t] && s.files[t].rec);
     const go = () => { snap(); s.tracks.splice(s.tracks.indexOf(t), 1); refresh(); toast(`Deleted “${t}”`, undo); };
     if (rec) confirmBox(`Delete the “${esc(t)}” track?`, "It has audio you recorded in set.Line. Undo brings it back while this session is open.", "Delete track", go); else go();
   }
@@ -524,7 +527,7 @@
   }
 
   // ---------------------------------------------------------------- exports (tests, the menus, Diagnostics)
-  window.SL9 = { mode: () => S9.view, setMode: setView, draw, toggleRow, collapseAll, zoomTo, zoomBy, zoomPreset, fitSpan, glideTo, settled, zoomNow, zoomTarget: target, select: setSelect, act, timings: () => S9.timings.slice(), summary, state: S9, trackMenu, deleteTrack, dupTrack, tuningOf, firstPreset };
+  window.SL9 = { mode: () => S9.view, setMode: setView, draw, toggleRow, collapseAll, zoomTo, zoomBy, zoomPreset, fitSpan, glideTo, settled, zoomNow, zoomTarget: target, select: setSelect, act, timings: () => S9.timings.slice(), summary, state: S9, trackMenu, moveTrackMenu, deleteTrack, dupTrack, tuningOf, firstPreset };
   buildSide();
   // the library changed (switch / open): its own view
   const ssn = window.SLPage && Object.getOwnPropertyDescriptor(window.SLPage, "setSessionName");

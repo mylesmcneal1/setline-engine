@@ -199,7 +199,8 @@
     $("lkSave").onclick = () => { const r = $("lkSave").getBoundingClientRect(); floatInput(r.left - 40, r.top - 34, 200, 26, "My theme", (n) => { n = (n || "").trim().slice(0, 30); if (!n) return; const look = { ...LOOK }; delete look.themes; const themes = LOOK.themes.filter((t) => t.name !== n).concat([{ name: n, look }]); set({ themes }); toast(`Saved “${n}”: it’s in Customize › Theme`); }); };
   }
   document.addEventListener("keydown", (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.altKey && (e.key === "," || e.code === "Comma")) { if (window.SLMenus && SLMenus.nativeKeys && SLMenus.nativeKeys()) return; e.preventDefault(); openBox(); }
+    // ⌥⌘, (Customize the look…) comes through the menus' key dispatcher (menus9.js), once
+    if ((e.metaKey || e.ctrlKey) && e.altKey && (e.key === "," || e.code === "Comma") && !window.SLMenus) { e.preventDefault(); openBox(); }
     if (e.key === "Escape" && $("lookBox")) { e.stopPropagation(); $("lookBox").remove(); }
   }, true);
 

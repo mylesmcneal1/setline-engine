@@ -18,6 +18,10 @@
 
 namespace setline::gui {
 
+#if JUCE_MAC
+bool setlineMacEditAction(const juce::String& what); // MacDrop.mm (10b)
+#endif
+
 void setWindowIcon(void* nativeHandle); // WinIcon.cpp (Windows); nothing elsewhere
 
 static juce::PropertiesFile::Options settingsOptions()
@@ -253,6 +257,8 @@ public:
         }
         menus->attach(window.get());
         bridge->onMenus = [this](const juce::var& v) { if (menus) menus->setMenus(v); };
+        bridge->onMenuChoose = [this](const juce::String& id) { return menus != nullptr && menus->invokeLikeMenu(id); };
+        bridge->onTextFocus = [this](bool on) { textFocus = on; };
     }
 
     // The show couldn't be opened: the page has started an empty session; the user picks what's next.
@@ -265,6 +271,7 @@ public:
               { "Empty setlist", [this] { showError = false; if (! bridge) openMain(startPage); sendMenu("new"); finishLoading(); } } });
     }
     // 9e: build menus like the page's, choose items the way the menu bar does, and check each one is sent on, once
+    bool textFocus = false; // 10b: the page has a text field focused
     void menuTest()
     {
         auto got = std::make_shared<juce::StringArray>();
@@ -295,6 +302,11 @@ public:
     void sendMenu(const juce::String& cmd)
     {
         if (! bridge) return;
+       #if JUCE_MAC
+        // 10b: Edit › Cut / Copy / Paste / Select all / Undo / Redo with a text field focused: the text field's own,
+        // as in any Mac app (the standard actions, sent to the web view)
+        if (textFocus && setlineMacEditAction(cmd.fromFirstOccurrenceOf("m:", false, false))) { applog::line("Menu: " + cmd + " (text field)"); return; }
+       #endif
         applog::line("Menu: " + cmd); // 9e: menu received -> (Dialogs) requested -> opened -> result
         auto* o = new juce::DynamicObject(); o->setProperty("cmd", cmd);
         bridge->emit("menu", juce::var(o));
