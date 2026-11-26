@@ -180,6 +180,7 @@ if(SETLINE_WITH_JUCE)
       app-gui/LibraryStore.cpp
       app-gui/AbletonImport.cpp
       app-gui/Updater.cpp
+      app-gui/AppMenus.cpp
       app-gui/MidiControl.cpp
       app-gui/RigLink.cpp
       app-gui/AbletonTest.cpp

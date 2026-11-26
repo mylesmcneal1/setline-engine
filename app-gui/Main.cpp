@@ -13,6 +13,7 @@
 #include "Folders.h"
 #include "AbletonImport.h"
 #include "Updater.h"
+#include "AppMenus.h"
 
 namespace setline::gui {
 
@@ -236,16 +237,17 @@ public:
             static const juce::String dot = juce::CharPointer_UTF8("\xe2\x80\xa2 "), dash = juce::CharPointer_UTF8(" \xe2\x80\x94 set.Line");
             if (window) window->setName((dirty ? dot : juce::String()) + (name.isEmpty() ? juce::String("Library") : name) + dash);
         };
-       #if JUCE_MAC
-        menu = std::make_unique<MacMenu>(*bridge);
+        // 9c: the menus in the window chrome (macOS menu bar / the Windows window's menu bar), described by the page
+        menus = std::make_unique<AppMenus>([this](const juce::String& cmd) { sendMenu(cmd); });
         {
-            juce::PopupMenu apple; // set.Line > About set.Line (the page shows the build)
-            apple.addItem(juce::PopupMenu::Item("About set.Line").setID(9).setAction([this] { sendMenu("about"); }));
-            apple.addSeparator();
-            apple.addItem(juce::PopupMenu::Item(juce::String::fromUTF8("Settings\xe2\x80\xa6")).setID(10).setAction([this] { sendMenu("prefs"); }));
-            juce::MenuBarModel::setMacMainMenu(menu.get(), &apple);
+            const auto ell = juce::String::fromUTF8("â¦");
+            auto item = [](const char* id, const juce::String& label, const char* key = "") { auto* o = new juce::DynamicObject(); o->setProperty("id", id); o->setProperty("label", label); o->setProperty("key", key); return juce::var(o); };
+            juce::Array<juce::var> app { item("about", "About set.Line"), item("checkUpdates", "Check for Updates" + ell), item("prefs", "Settings" + ell, "cmd+comma") };
+            auto* spec = new juce::DynamicObject(); spec->setProperty("app", app); spec->setProperty("menus", juce::Array<juce::var> {});
+            menus->setMenus(juce::var(spec)); // until the page sends the full menus
         }
-       #endif
+        menus->attach(window.get());
+        bridge->onMenus = [this](const juce::var& v) { if (menus) menus->setMenus(v); };
     }
 
     // The show couldn't be opened: the page has started an empty session; the user picks what's next.
@@ -257,7 +259,7 @@ public:
             { { "Retry", [this] { showError = false; splash->setStep(Splash::show, Splash::State::running); sendMenu("retryShow"); } },
               { "Empty setlist", [this] { showError = false; if (! bridge) openMain(startPage); sendMenu("new"); finishLoading(); } } });
     }
-    void sendMenu(const char* cmd)
+    void sendMenu(const juce::String& cmd)
     {
         if (! bridge) return;
         auto* o = new juce::DynamicObject(); o->setProperty("cmd", cmd);
@@ -276,10 +278,8 @@ public:
         splash.reset();
         if (testThread.joinable()) testThread.join();
         testCues.reset();
-       #if JUCE_MAC
-        juce::MenuBarModel::setMacMainMenu(nullptr);
-        menu.reset();
-       #endif
+        if (bridge) bridge->onMenus = nullptr;
+        menus.reset();
         window.reset();   // the web view goes first: nothing may call the bridge after this
         bridge.reset();
         audio.reset();
@@ -314,39 +314,7 @@ public:
     }
 
 private:
-   #if JUCE_MAC
-    // macOS menu bar: File > Open / Save / Save As with the usual ⌘ shortcuts (the page does the work).
-    struct MacMenu : juce::MenuBarModel {
-        explicit MacMenu(Bridge& b) : bridge(b) {}
-        juce::StringArray getMenuBarNames() override { return { "File", "Help" }; }
-        juce::PopupMenu getMenuForIndex(int index, const juce::String&) override
-        {
-            juce::PopupMenu m;
-            if (index == 1) { // Help
-                m.addItem(juce::PopupMenu::Item("Copy diagnostics").setID(21).setAction([this] { send("copyDiagnostics"); }));
-                m.addItem(juce::PopupMenu::Item("Save diagnostics...").setID(22).setAction([this] { send("saveDiagnostics"); }));
-                m.addSeparator();
-                m.addItem(juce::PopupMenu::Item("Check for Updates...").setID(23).setAction([this] { send("checkUpdates"); })); // 8d
-                return m;
-            }
-            // 6f: there is no Open or Save: the Library saves itself
-            m.addItem(juce::PopupMenu::Item("New Setlist").setID(4).setAction([this] { send("new"); }));
-            m.addItem(juce::PopupMenu::Item("Duplicate Setlist").setID(1).setAction([this] { send("dupSetlist"); }));
-            m.addSeparator();
-            m.addItem(juce::PopupMenu::Item("Export Setlist...").setID(2).setAction([this] { send("export"); }));
-            m.addItem(juce::PopupMenu::Item("Import...").setID(3).setAction([this] { send("import"); }));
-            m.addItem(juce::PopupMenu::Item("Import Ableton Project...").setID(7).setAction([this] { send("importAbleton"); }));
-            m.addSeparator();
-            m.addItem(juce::PopupMenu::Item("Backups...").setID(6).setAction([this] { send("openBackup"); }));
-            m.addItem(juce::PopupMenu::Item("Clean Up Unused Audio...").setID(5).setAction([this] { send("cleanUp"); }));
-            return m;
-        }
-        void menuItemSelected(int, int) override {}
-        void send(const char* cmd) { auto* o = new juce::DynamicObject(); o->setProperty("cmd", cmd); bridge.emit("menu", juce::var(o)); }
-        Bridge& bridge;
-    };
-    std::unique_ptr<MacMenu> menu;
-   #endif
+    std::unique_ptr<AppMenus> menus; // 9c
     // --speech-test <dir>: lists the installed voices, speaks a cue with each (at 48 kHz, through the same
     // render + cache path as the show), writes <dir>/<voice>.wav and <dir>/speech-test.txt, then quits
     // (exit code 1 if nothing could be spoken). No window or audio device: CI runs it on Windows and macOS.

@@ -157,6 +157,10 @@ function frame() {
   requestAnimationFrame(frame);
   if (!screen) return;
   const st = live(), songId = st.cur, song = show && songId ? show.songs[songId] : null;
+  // 9c: the band screens use the app's title font for song names (their own look otherwise)
+  { const tf = (st as any).tf as string | undefined; if (tf && document.documentElement.dataset.tf !== tf) { document.documentElement.dataset.tf = tf; document.documentElement.style.setProperty("--title", `"${tf}", -apple-system, sans-serif`); } }
+  // 9c: the show is playing on the host computer's own outputs: a small red chip on every screen
+  { let c = document.getElementById("pcChip"); const on = !!(st as any).pc; if (on && !c) { c = document.createElement("div"); c.id = "pcChip"; c.textContent = "computer outputs"; c.style.cssText = "position:fixed;top:6px;right:8px;z-index:50;padding:2px 8px;border-radius:7px;border:1px solid #ff453a;background:rgba(255,69,58,.18);color:#ff8a82;font:600 12px system-ui,sans-serif;pointer-events:none"; document.body.appendChild(c); } if (c) c.style.display = on ? "" : "none"; }
   const hn = hostNow(), pos = state ? L.predictPos(state, hn) : 0;
   const bb = song ? L.barBeatAt(song, pos) : null, sec = song ? L.sectionAt(song, pos) : null, nsec = song ? L.nextSection(song, pos) : null;
   if (songId !== checklistSong) { checklist = {}; checklistSong = songId; }
@@ -175,7 +179,7 @@ function frame() {
     const fieldOf = (sid: string | null | undefined, f: string) => (sid && show ? L.fieldValue(show, sid, f) : "");
     const fname = (f: string) => ((show && show.fields) || []).find((x: any) => x.id === f)?.name || "Field";
     switch (w.type) {
-      case "song": h = big(song ? song.name : "No song", "", song && song.ver ? song.ver : ""); break;
+      case "song": h = big(song ? song.name : "No song", "", song && song.ver ? song.ver : "").replace("class=\"big\"", "class=\"big stitle\""); break; // 9c: the app's title font
       case "bpm": h = bb ? big(`${+bb.bpm.toFixed(2)}`, "BPM", `${bb.num}/${bb.den}`) : big("–", "BPM"); break;
       case "next": { const n = st.next, a = show && st.idx >= 0 ? (show.setlist.order[st.idx] || {}).after : null;
         h = big(n ? n.name : "End of set", "Next", n ? [n.vname, a ? (a.mode === "segue" ? "segue" : a.mode === "auto" ? `auto after ${a.sec || 0} s` : "stop") : ""].filter(Boolean).join(" · ") : ""); break; }
@@ -206,7 +210,7 @@ function frame() {
       case "status": { const labels = cfg.labels && cfg.labels.length ? cfg.labels : ["Ready", "Need 30 s", "Problem"]; box.style.padding = "0"; box.style.background = "transparent"; h = `<div class="stl">${labels.map((l: string) => `<button data-l="${esc(l)}" class="${myStatus[l] ? "on" : ""}">${esc(l)}</button>`).join("")}</div>`; break; }
       case "statusShow": h = statuses.length ? `<div class="list">${statuses.map((s) => `<div><span>${esc(s.from)}</span><span style="color:var(--accent)">${esc(s.label)}</span></div>`).join("")}</div>` : big("All quiet", "Status"); break;
       case "checklist": { const items: string[] = cfg.items && cfg.items.length ? cfg.items : ["Ready"]; h = `<div class="ck">${items.map((x, i) => `<label data-i="${i}"><input type="checkbox" ${checklist[i] ? "checked" : ""} tabindex="-1">${esc(x)}</label>`).join("")}</div>`; box.style.justifyContent = "flex-start"; break; }
-      case "conn": h = `<div><span class="light ${connected ? "on" : ""}"></span>${connected ? `${Math.round(clock.rtt())} ms` : "offline"}</div>`; break;
+      case "conn": h = `<div><span class="light ${connected ? "on" : ""}"></span>${connected ? `${Math.round(clock.rtt())} ms` : "offline"}${(st as any).pc ? ` <b style="color:#ff453a;border:1px solid #ff453a;border-radius:6px;padding:1px 6px;font-size:.8em">computer outputs</b>` : ""}</div>`; break;
       case "playStop": h = ctl(cfg.label && cfg.label !== "Play / Stop" ? cfg.label : st.playing ? "Stop" : "Play", st.soundcheck ? "soundcheck" : "", st.playing); break;
       case "nextSong": h = ctl(cfg.label || "Next song", st.next ? st.next.name : ""); break;
       case "prevSong": h = ctl(cfg.label || "Previous song"); break;

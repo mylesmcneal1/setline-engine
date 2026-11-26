@@ -1146,6 +1146,7 @@
 <script src="ui.js"></script>
 <script src="modeler.js"></script>
 <link rel="stylesheet" href="show9.css">
+<link rel="stylesheet" href="look9.css">
 </head>
 <body>
 
@@ -3840,7 +3841,7 @@ const SLBandMerge=(a,b)=>{ const o={...(a||{})}; Object.entries(b||{}).forEach((
 // what changes 15 times a second (the transport comes from the engine, added by the app)
 function bandLive(){ const s=songs.find(x=>x.id===(playId||selId)), L=curSetObj(), i=s?L.order.indexOf(s.id):-1, n=s?nextInSet(s):null;
   return {cur:s?s.id:null,idx:i,playing,soundcheck:SOUNDCHECK?SOUNDCHECK.songId:null,vamp:VAMP?VAMP.secId:null,loop:!!(s&&playing&&sectionLoopRange(s)),jumpQ:jumpQueuedSec,
-    next:n?{id:n.song.id,ver:n.ver.id,name:n.song.name,vname:versOf(n.song).length>1?n.ver.name:''}:null,pos:s&&s.id===playId?pos:0}; }
+    next:n?{id:n.song.id,ver:n.ver.id,name:n.song.name,vname:versOf(n.song).length>1?n.ver.name:''}:null,pos:s&&s.id===playId?pos:0,pc:!!(LISTEN&&LISTEN.on),tf:window.SLLook?SLLook.fonts().title:''}; } // 9c: pc = playing on the computer's outputs
 
 // ---- the Band view: the screens and their dashboards (drag-and-drop widgets on a 12 x 9 grid) ----
 let bandOn=false, BSEL=null, BWID=null, BORI='land', BINFO=null, BONLINE={}, BDEVS=[];
@@ -4491,7 +4492,8 @@ async function settingsHTML(tab){
     let cm='auto', rm=false; try{ cm=localStorage.getItem('setline.compact')||'auto'; rm=localStorage.getItem('setline.reduceMotion')==='1'; }catch(e){}
     return `<h3>Appearance</h3><p class="d">For this computer only.</p>${sgrp([sf('Theme<div class="sub">Darker suits dark stages.</div>',segm('stLook',[['dark','Dark'],['darker','Darker']],ap)),
       sf('Compact layout<div class="sub">Icon-only top bar buttons, and the right panel as a drawer over the timeline. Automatic on screens narrower than 1400 px, like a 13″ MacBook.</div>',segm('stCompact',[['auto','Automatic'],['on','Always'],['off','Never']],cm)),
-      sf('Reduce animations<div class="sub">Panels and menus appear without sliding.</div>',tog('stCalm',rm))])}`; }
+      sf('Reduce animations<div class="sub">Panels and menus appear without sliding.</div>',tog('stCalm',rm)),
+      sf('Theme, fonts, colours, transport<div class="sub">Customize › Customize the look… (⌥⌘,)</div>','<button class="sel2" id="stLook">Customize the look…</button>')])}`; }
   if(tab==='diag'){ const d=await ncall('diagnostics'), txt=d&&d.text||'', pick=k=>{ const m=txt.match(new RegExp('^'+k+': (.*)$','m')); return m?m[1]:''; };
     const ua=navigator.userAgent, os=pick('OS')||(/Mac OS X ([d_]+)/.test(ua)?'macOS '+RegExp.$1.replace(/_/g,'.'):/Windows/.test(ua)?'Windows':navigator.platform);
     const rows=[['Version',pick('Version')||'Browser preview (not the app)'],['Computer',os],['Audio',pick('Audio')||'No device open'],['MIDI outputs',pick('MIDI outputs')||'none'],['Startup',pick('Startup')||'Measured in the app']];
@@ -4544,6 +4546,7 @@ function wireSettings(tab){ const q=id=>$(id), re=()=>renderSettings();
     q('stLib').onclick=()=>ncall('libraryReveal'); q('stLogs').onclick=()=>ncall('revealFolder',{which:'logs'}); }
   if(tab==='look'){ q('stLook').querySelectorAll('button').forEach(b=>b.onclick=()=>{ if(window.SLAppearance) SLAppearance.set(b.dataset.v); re(); });
     q('stCompact').querySelectorAll('button').forEach(b=>b.onclick=()=>{ try{ localStorage.setItem('setline.compact',b.dataset.v); }catch(e){} applyCompact(); if(NARROW()) setPanel('R',false,true); re(); });
+    if(q('stLook')) q('stLook').onclick=()=>{ if(window.SLLook) SLLook.open(); };
     q('stCalm').onclick=()=>{ const on=localStorage.getItem('setline.reduceMotion')!=='1'; try{ localStorage.setItem('setline.reduceMotion',on?'1':'0'); }catch(x){} applyCompact(); re(); }; }
   if(q('stFmt')) q('stFmt').onclick=e=>infoPop(e.currentTarget,`<b>Message formats</b><table class="fmt"><tr><td>PC 12</td><td>Program 12</td></tr><tr><td>PC 1:0:12</td><td>Bank 1 (MSB), bank 0 (LSB), then program 12</td></tr><tr><td>CC 7 100</td><td>Controller 7 (volume) to 100</td></tr><tr><td>raw B0 07 64</td><td>Any message, as hex bytes (up to 3)</td></tr></table><p>The channel is the one chosen for the device.</p>`);
   if(tab==='diag'){ q('stDcopy').onclick=()=>{ if(window.SLE) SLE.diagnostics('copy'); else toast('In the app this copies the diagnostics'); }; q('stDsave').onclick=()=>{ if(window.SLE) SLE.diagnostics('save'); }; } }
@@ -4657,5 +4660,7 @@ try{ const q=new URLSearchParams(location.search).get('settings'); if(q) setTime
 </script>
 <script src="modeler-ui.js"></script>
 <script src="show9.js"></script>
+<script src="look9.js"></script>
+<script src="menus9.js"></script>
 </body>
 </html>

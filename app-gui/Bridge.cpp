@@ -385,6 +385,25 @@ Bridge::Options Bridge::addTo(Options o)
     o = add(o, "sendMidiNow", [this](const juce::var& a) { return audio.sendMidiNow(a["port"].toString(), a["msgs"]); });
     // Listen on this computer (AudioHost.h): the state, change it, the computer's output devices at a rate.
     // Diagnostics (About / Help): text only, no audio or show contents.
+    // 9c: the look (Customize), per computer: kept with the app's preferences as well as in the page
+    o = add(o, "lookSet", [this](const juce::var& a) { settings.setValue("look", a["look"].toString().substring(0, 20000)); settings.saveIfNeeded(); return juce::var(true); });
+    o = add(o, "lookGet", [this](const juce::var&) { return juce::var(settings.getValue("look", {})); });
+    o = add(o, "openUrl", [](const juce::var& a) { // 9c: Help › documentation / report a problem (the project's own pages only)
+        const auto u = a["url"].toString();
+        if (! u.startsWith("https://github.com/mylesmcneal1/setline-engine")) return juce::var(false);
+        return juce::var(juce::URL(u).launchInDefaultBrowser());
+    });
+    o = add(o, "setMenus", [this](const juce::var& a) { if (onMenus) onMenus(a); return juce::var(true); }); // 9c
+    o = add(o, "windowCmd", [](const juce::var& a) { // 9c: Window › Minimise / Full screen
+        const auto what = a["what"].toString();
+        for (int i = 0; i < juce::TopLevelWindow::getNumTopLevelWindows(); ++i)
+            if (auto* w = dynamic_cast<juce::DocumentWindow*>(juce::TopLevelWindow::getTopLevelWindow(i)); w && w->isVisible() && w->getName().contains("set.Line")) {
+                if (what == "minimise") w->setMinimised(true);
+                else if (what == "fullscreen") w->setFullScreen(! w->isFullScreen());
+                return juce::var(true);
+            }
+        return juce::var(false);
+    });
     o = add(o, "uiTiming", [this](const juce::var& a) { uiTiming = a["text"].toString().substring(0, 400); return juce::var(true); }); // 9b: folder open / close, zoom frames
     o = add(o, "diagnostics", [this](const juce::var&) { auto* r = new juce::DynamicObject(); r->setProperty("text", diagnostics()); return juce::var(r); });
     o = add(o, "copyDiagnostics", [this](const juce::var&) {

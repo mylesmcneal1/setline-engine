@@ -41,6 +41,7 @@ public:
 
     // The page reports the session's name and whether it has unsaved changes (window title, quit check).
     std::function<void(const juce::String& name, bool dirty)> onDocument;
+    std::function<void(const juce::var& spec)> onMenus; // 9c: the page's menus for the window chrome
     bool isDirty() const { return dirty; }
     bool copyingAudio() const { return media.copying(); }
     void cancelAudioCopies() { media.cancelCopies(); }

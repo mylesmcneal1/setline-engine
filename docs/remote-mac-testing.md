@@ -14,13 +14,13 @@ Mac through GitHub:
    - release notes: the version and the commits since the previous `latest`.
 
    Every build is version **0.1.<CI run number>**. It's shown on the loading window ("Beta 0.1.<n>"), in
-   File ▾ > About set.Line (on the Mac also set.Line > About set.Line), and in the release title.
+   set.Line > About set.Line in the Mac menu bar (Windows: Help menu shows the build in Diagnostics), and in the release title.
    The `mac-update` job then runs the update command against that release on a CI Mac, so a broken update
    never reaches you silently.
 3. **On the Mac, run `setline-update`.** It downloads `latest`, checks the SHA-256, asks you to quit set.Line if
    it's running, installs it in `/Applications`, and prints the old and new version and the release notes.
 
-   **From 8d on, no Terminal is needed.** In set.Line, use **File › Check for updates…**: it shows the release
+   **From 8d on, no Terminal is needed.** In set.Line, use **set.Line › Check for updates…** (Mac menu bar; Windows: File › Check for updates…): it shows the release
    notes, then downloads, checks the SHA-256 and installs the same way (the build before is kept as
    "set.Line (previous).app"), and restarts. It never installs while playing; it waits until you stop.
    **Roll back to the previous version…** is in the same dialog. set.Line also checks quietly once a day, a few

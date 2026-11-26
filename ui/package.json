@@ -14,8 +14,32 @@
     "vite": "^8.3.8"
   },
   "dependencies": {
+    "@fontsource/anton": "^5.3.0",
+    "@fontsource/archivo-black": "^5.3.0",
+    "@fontsource/big-shoulders-display": "^5.3.0",
+    "@fontsource/boldonse": "^5.3.0",
+    "@fontsource/bricolage-grotesque": "^5.3.0",
+    "@fontsource/dm-mono": "^5.3.0",
+    "@fontsource/dm-sans": "^5.3.0",
+    "@fontsource/erica-one": "^5.3.0",
+    "@fontsource/fira-sans": "^5.3.0",
+    "@fontsource/geist-mono": "^5.3.0",
+    "@fontsource/gloock": "^5.3.0",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "@fontsource/instrument-sans": "^5.3.0",
     "@fontsource/inter": "^5.3.0",
     "@fontsource/jetbrains-mono": "^5.3.0",
+    "@fontsource/jura": "^5.3.0",
+    "@fontsource/montserrat": "^5.3.0",
+    "@fontsource/national-park": "^5.3.0",
+    "@fontsource/outfit": "^5.3.0",
+    "@fontsource/pixelify-sans": "^5.3.0",
+    "@fontsource/poppins": "^5.3.0",
+    "@fontsource/red-hat-mono": "^5.3.0",
+    "@fontsource/silkscreen": "^5.3.0",
+    "@fontsource/smooch-sans": "^5.3.0",
+    "@fontsource/tektur": "^5.3.0",
+    "@fontsource/work-sans": "^5.3.0",
     "qrcode-generator": "^1.4.4"
   }
 }

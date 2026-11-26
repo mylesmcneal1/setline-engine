@@ -1,0 +1,107 @@
+/* set.Line 9c: the look (loaded after the page's styles and show9.css) */
+:root{--title:"Outfit",var(--sf);--title-w:700;--nums:"Outfit",ui-monospace,monospace;--ui:"Outfit",system-ui,sans-serif;--zoom:1;--accent-glow:color-mix(in srgb,var(--accent) 45%,transparent)}
+body,button,input,select,textarea{font-family:var(--sf)}
+/* titles: song names in headers, rows, cards, the setlist and the display */
+.hero h2,.r9n,.c9h b,.tabs9 button,#setHead,.lsn,#lcdSong,.lk-title,.perf h1,.perf .pfname,.abwiz .abwh b{font-family:var(--title);font-weight:var(--title-w)}
+/* numbers: tabular everywhere they change */
+.lcd,.lcd b,.mono,.r9m,.c9n,.song .d,.song .n,#setLen,.hmeta b,.ruler span,.lhv,.tp b,.abfs,.abprog .abph span{font-family:var(--nums);font-variant-numeric:tabular-nums}
+body.zoomed9 .main,body.zoomed9 .perf,body.zoomed9 .bandv{zoom:var(--zoom)}
+
+/* ---------------- themes ---------------- */
+body.th-black{--bg:#000;--s1:#050505;--s2:#0e0e0f;--s3:#161617;--hair:rgba(255,255,255,.07);background:#000}
+body.th-black .top{background:#000!important} body.th-black .side,body.th-black .insp,body.th-black .etool{background:#030303!important}
+body.th-black .card9,body.th-black .row9{background:#0c0c0d}
+body.th-dim{--bg:#24272d;--s1:#2b2f36;--s2:#353a42;--s3:#3f454e;--text:#f1f3f6;--muted:rgba(240,242,246,.68);--faint:rgba(240,242,246,.4);background:#24272d}
+body.th-dim .top{background:#2b2f36!important} body.th-dim .side,body.th-dim .insp,body.th-dim .etool{background:#292d33!important}
+body.th-dim .card9,body.th-dim .row9{background:#30343b} body.th-dim .scroller{background:#24272d}
+body.th-stage{--text:#fff;--muted:rgba(255,255,255,.86);--faint:rgba(255,255,255,.62);--hair:rgba(255,255,255,.22)}
+body.th-stage .btn,body.th-stage .card9,body.th-stage .row9 .r9h,body.th-stage .lcd,body.th-stage .opill{border-width:2px!important;border-style:solid;border-color:rgba(255,255,255,.3)}
+body.th-stage .lcd .cap,body.th-stage .faint,body.th-stage .c9m,body.th-stage .r9t{font-size:calc(1em + 1px)}
+
+/* ---------------- the transport: Console (default) ---------------- */
+.transport{position:relative;gap:2px!important;padding:5px 8px!important;border-radius:22px!important;background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,.02))!important;border:1px solid rgba(255,255,255,.08)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 6px 18px rgba(0,0,0,.45)}
+.transport .tb{width:30px;height:30px;border-radius:50%;color:#d9dce2}
+.transport .tb svg{width:14px;height:14px}
+.transport .tb:hover{background:rgba(255,255,255,.08)}
+.transport #playBtn{position:relative;width:40px;height:40px;margin:0 4px;background:#e9ebef;color:#111;border-radius:50%}
+.transport #playBtn svg:first-child{width:15px;height:15px}
+.transport #playBtn.on{background:#30d158;color:#062b12;box-shadow:0 0 0 3px rgba(48,209,88,.18),0 0 18px rgba(48,209,88,.55)}
+.transport .pring{position:absolute;inset:0;width:100%!important;height:100%!important;pointer-events:none;transform:rotate(-90deg)}
+.transport .pring circle{fill:none;stroke:#30d158;stroke-width:2.2;stroke-dasharray:100;stroke-dashoffset:calc(100 - var(--pr,0));stroke-linecap:round;opacity:.95}
+.transport #playBtn:not(.on) .pring circle{stroke:rgba(255,255,255,.55)}
+.transport #clickBtn.on{background:color-mix(in srgb,var(--accent) 22%,transparent);color:var(--accent)}
+.transport #loopBtn.on{color:var(--accent)}
+/* the display: recessed, cells with the same caption style on one baseline */
+.lcd{position:relative;display:flex!important;align-items:stretch;gap:0!important;padding:5px 4px 8px!important;border-radius:12px!important;background:#07080a!important;border:1px solid rgba(255,255,255,.06)!important;box-shadow:inset 0 2px 6px rgba(0,0,0,.7);overflow:hidden;height:46px}
+.lcd .lc{display:flex;flex-direction:column;justify-content:center;gap:1px;padding:0 11px;border-right:1px solid rgba(255,255,255,.07);flex:none;min-width:0}
+.lcd .lc:last-of-type{border-right:0}
+.lcd .lc>b,.lcd .lsn{font-size:19px;line-height:21px;font-weight:500;color:#f2f3f5;white-space:nowrap;letter-spacing:.01em}
+.lcd #lcdBar{font-size:19px;font-weight:500} .lcd #lcdBar b{font-weight:700;font-size:inherit}
+.lcd .lpos{width:104px} .lcd .lbpm{width:68px} .lcd .lsig{width:58px}
+.lcd .lsong{flex:0 1 230px!important;min-width:80px!important}
+.lcd .lsn{font-family:var(--title);font-weight:var(--title-w);overflow:hidden;text-overflow:ellipsis;font-size:15px}
+.lcd .lsn .lsec{font-family:var(--ui);font-style:normal;font-weight:600;font-size:12.5px;margin-left:4px}
+.lcd .cap{display:flex;align-items:center;gap:6px;font:600 9.5px/11px var(--ui);letter-spacing:.09em;text-transform:uppercase;color:rgba(235,235,245,.45);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lcd .lsong .cap{display:block}
+.lcd #lcdTime{font:500 10px var(--nums);letter-spacing:.02em;text-transform:none;color:rgba(235,235,245,.5)}
+.lcd .beats{display:inline-flex;gap:3px} .lcd .beats i{width:6px;height:6px;border-radius:2px;background:rgba(255,255,255,.14)}
+.lcd .beats i.on{background:var(--accent);box-shadow:0 0 5px var(--accent-glow)} .lcd .beats i.on.one{background:#fff;box-shadow:0 0 5px rgba(255,255,255,.6)}
+.lcd .lstrip{position:absolute;left:0;right:0;bottom:0;height:3px;background:rgba(255,255,255,.06)}
+.lcd .lstrip b{position:absolute;top:0;bottom:0;opacity:.9} .lcd .lstrip i{position:absolute;top:-2px;bottom:0;width:2px;margin-left:-1px;background:#fff;box-shadow:0 0 4px #fff}
+/* Hero: big numbers, the song and its caption stacked to the same height */
+body.tl-hero .lcd .lc>b{font-size:24px;line-height:26px} body.tl-hero .lcd .lpos{width:118px} body.tl-hero .lcd .lbpm{width:76px} body.tl-hero .lcd .lsig{width:64px}
+body.tl-hero .lcd .lbpm .cap,body.tl-hero .lcd .lsig .cap{display:none} body.tl-hero .lcd .lsn{font-size:15px;line-height:17px}
+/* One line: one baseline, units small; no captions under the numbers */
+body.tl-line .lcd{height:40px;padding-bottom:6px!important} body.tl-line .lcd .lc{flex-direction:row;align-items:baseline;gap:5px}
+body.tl-line .lcd .lpos .cap,body.tl-line .lcd .lsig .cap,body.tl-line .lcd .lsong .cap{display:none}
+body.tl-line .lcd .lbpm .cap{font-size:9px;letter-spacing:.06em} body.tl-line .lcd .lpos{width:auto} body.tl-line .lcd .lbpm{width:auto}
+/* Hardware: lit keys and an amber display */
+body.tp-hardware .transport{border-radius:10px!important;gap:5px!important;padding:5px!important;background:#151619!important}
+body.tp-hardware .transport .tb{border-radius:7px;width:36px;height:32px;background:linear-gradient(180deg,#2c2f35,#1d1f24);box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 2px 0 #08090b}
+body.tp-hardware .transport #playBtn{width:52px;height:32px;border-radius:7px;background:linear-gradient(180deg,#2c2f35,#1d1f24);color:#e9ebef}
+body.tp-hardware .transport #playBtn.on{background:linear-gradient(180deg,#34d860,#1fa845);color:#06200e}
+body.tp-hardware .transport .pring{display:none}
+body.tp-hardware .lcd{background:#120b02!important;border-color:rgba(255,159,10,.25)!important}
+body.tp-hardware .lcd .lc>b,body.tp-hardware .lcd .lsn{color:#ffb340;text-shadow:0 0 8px rgba(255,159,10,.45)} body.tp-hardware .lcd .cap,body.tp-hardware .lcd #lcdTime{color:rgba(255,179,64,.55)}
+/* Minimal: light numerals, no capsule */
+body.tp-minimal .transport{background:none!important;border:0!important;box-shadow:none} body.tp-minimal .transport #loopBtn,body.tp-minimal .transport #rtz,body.tp-minimal .transport #fwdBtn{display:none}
+body.tp-minimal .transport #playBtn{background:#fff} body.tp-minimal .transport #playBtn.on{background:#fff;color:#111;box-shadow:none}
+body.tp-minimal .lcd{background:none!important;border:0!important;box-shadow:none} body.tp-minimal .lcd .lc{border-right:0} body.tp-minimal .lcd .lc>b{font-weight:300;font-size:22px}
+body.tp-minimal .lcd .lstrip{display:none}
+/* 1280: the transport fits with the tabs and the pill; the "left · next" caption gives way first */
+body.narrow .lcd .lsong{display:flex!important} body.narrow .lcd .lpos{min-width:0!important} body.narrow .lcd .lpos b{font-size:inherit}
+@media (max-width:1400px){ .lcd .lsong{flex-basis:170px!important} .transport .tb{width:27px} .lcd .lc{padding:0 8px} .lcd .lpos{width:104px} .lcd .lbpm{width:60px} .lcd .lsig{width:56px} }
+
+/* ---------------- the outputs pill (the orange banner is gone) ---------------- */
+.listenc,#listenBar,.listenbar{display:none!important}
+.status.opill{display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 12px!important;border-radius:999px!important;background:rgba(255,255,255,.07)!important;border:1px solid rgba(255,255,255,.06)!important;color:#e6e8ec;font:500 12.5px var(--ui);white-space:nowrap;max-width:240px}
+.status.opill #statusTxt{display:none!important} .status.opill #pillTxt{overflow:hidden;text-overflow:ellipsis}
+.status.opill .dot{width:8px;height:8px;border-radius:50%;flex:none}
+.status.opill.pc{background:rgba(255,69,58,.16)!important;border-color:rgba(255,69,58,.75)!important;color:#ffb3ad}
+.status.opill.pc .dot{background:#ff453a!important;box-shadow:0 0 8px #ff453a}
+.status.opill.none{color:var(--muted)} .status.opill.none .dot{background:#6d727c!important}
+body.narrow .status.opill #pillTxt{max-width:140px}
+
+/* ---------------- Customize the look ---------------- */
+.cfbox.lk-box{width:min(1100px,96vw);height:min(680px,92vh);max-height:none;padding:0;display:flex;flex-direction:column;text-align:left;overflow:hidden}
+.lk-in{flex:1;min-height:0;display:grid;grid-template-columns:minmax(300px,400px) 1fr}
+.lk-set{overflow:auto;padding:20px 22px;border-right:1px solid rgba(255,255,255,.07)} .lk-set h3{font-size:18px;margin-bottom:6px}
+.lk-l{display:block;margin:14px 0 6px;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.lk-seg{display:flex;flex-wrap:wrap;gap:5px} .lk-seg button{padding:5px 10px;border-radius:8px;background:rgba(255,255,255,.06);color:#d8dbe0;font-size:12.5px;white-space:nowrap}
+.lk-seg button.on{background:#f0f2f5;color:#111;font-weight:600}
+.lk-pairs{display:grid;grid-template-columns:repeat(3,1fr);gap:5px} .lk-pairs button{display:flex;flex-direction:column;align-items:flex-start;gap:1px;padding:7px 9px;border-radius:9px;background:rgba(255,255,255,.05);border:1px solid transparent;text-align:left;min-width:0}
+.lk-pairs button b{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%} .lk-pairs button span{font-size:12px;color:var(--muted)} .lk-pairs button.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.lk-acc{display:flex;align-items:center;gap:8px;flex-wrap:wrap} .lk-acc button{width:26px;height:26px;border-radius:50%;border:2px solid transparent} .lk-acc button.on{box-shadow:0 0 0 2px #111,0 0 0 4px #fff}
+.lk-custom{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)} .lk-custom input{width:28px;height:26px;padding:0;border:0;background:none}
+.lk-set input[type=range]{width:100%}
+.lk-prev{padding:20px 22px;overflow:hidden;min-width:0;display:flex;flex-direction:column;gap:10px}
+.lk-cap{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.lk-tr{display:flex;align-items:center;gap:10px;padding:10px;border-radius:14px;background:rgba(255,255,255,.03);pointer-events:none;overflow:hidden;min-width:0}
+.lk-tr .lcd{flex:1 1 auto;min-width:0} .lk-tr .transport{margin-left:0!important;flex:none}
+.lk-song{display:flex;align-items:center;gap:8px;margin-top:6px} .lk-title{font-size:22px;letter-spacing:.01em} .lk-chip{font:500 12px var(--nums);padding:3px 8px;border-radius:var(--r);background:rgba(255,255,255,.07)}
+.lk-secs{display:flex;gap:3px} .lk-secs i{flex:1;font:600 11px var(--ui);font-style:normal;padding:4px 6px;border-radius:calc(var(--r) * .6);color:#111;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lk-lane{display:grid;grid-template-columns:130px 1fr;gap:6px;height:var(--th,50px)} .lk-lane>span{display:flex;align-items:center;padding-left:10px;border-left:3px solid var(--c);border-radius:var(--r);background:rgba(255,255,255,.05);font-weight:600;font-size:13px}
+.lk-lane>div{border-radius:var(--r);background:color-mix(in srgb,var(--c) 10%,transparent);display:flex;align-items:center;gap:30px;padding:0 8px;overflow:hidden} .lk-lane svg{width:100%;height:70%}
+.lk-lane em{font:600 11px var(--ui);font-style:normal;padding:2px 6px;border-left:2px solid var(--c);background:rgba(255,255,255,.06)}
+.lk-foot{display:flex;justify-content:flex-end;gap:8px;padding:12px 22px;border-top:1px solid rgba(255,255,255,.07)}
+.lk-tr .lcd .lc{flex:none} .lk-tr .lcd .lpos{width:104px} .lk-tr .lcd .lpos>b{font-size:19px} .lk-tr .lcd .lsong{flex:1 1 auto!important}

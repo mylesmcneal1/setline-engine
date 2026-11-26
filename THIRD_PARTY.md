@@ -11,7 +11,7 @@ by the app. Each entry gives the licence and where the exact version is pinned.
 | ONNX Runtime (runs the Kokoro voice model) | **1.19.2** | MIT. Its own notices ship as `licenses/onnxruntime-ThirdPartyNotices.txt` | `cmake/OnnxRuntime.cmake` (NuGet package, SHA-512 checked) |
 | Microsoft WebView2 SDK (Windows) | 1.0.3485.44 | Microsoft's BSD-style WebView2 SDK licence | `.github/workflows/build.yml`, `docs/building-the-app.md` |
 | Steinberg ASIO SDK (Windows, optional) | user-supplied | Steinberg proprietary licence or GPLv3 (see README "Shipping note") | not in git |
-| Inter, JetBrains Mono fonts (web UI) | see `ui/package.json` | SIL Open Font License 1.1 | `ui/package-lock.json` |
+| Fonts (web UI, 9c): Inter, JetBrains Mono, Outfit, Big Shoulders Display, Geist Mono, Bricolage Grotesque, Instrument Sans, IBM Plex Mono, Archivo Black, Work Sans, DM Mono, Tektur, Jura, Anton, DM Sans, National Park, Fira Sans, Red Hat Mono, Boldonse, Smooch Sans, Poppins, Montserrat, Gloock, Pixelify Sans, Silkscreen, Erica One (via @fontsource; latin subsets only) | see `ui/package.json` | SIL Open Font License 1.1 (each package's LICENSE file, bundled with the app's fonts) | `ui/package-lock.json` |
 | CivetWeb (the band server: HTTP + WebSocket for the band's phones and tablets) | 1.16 | MIT | `CMakeLists.txt` (`FetchContent_Declare(civetweb`, tag v1.16) |
 | qrcode-generator (the join QR code on the Band page) | 1.4.4 | MIT | `ui/package.json`, `ui/package-lock.json` |
 

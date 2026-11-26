@@ -455,6 +455,10 @@ const SLE = {
   // Settings (6d) asks the app directly: audio setup, listen devices, MIDI outputs, folders...
   call: <T = any>(name: string, args?: unknown) => SL.call<T>(name, args),
   fileMenu: (at: { clientX: number; clientY: number }) => fileMenu(at),
+  // 9c: the module's commands for the menus in the window chrome (ui/public/menus9.js)
+  mod: { exportSetlist: () => exportSetlist(), importPackage: () => importPackage(), importAbleton: () => importAbleton().catch((e) => page().toast(String(e))), cleanUpAudio: () => cleanUpAudio(), openBackup: () => openBackup(),
+    switchLibrary: (n: string) => switchLibrary(n), newLibrary: () => newLibrary(), renameLibrary: () => renameLibrary(), reveal: () => SL.call("libraryReveal"), quit: () => quitApp(),
+    libraries: () => SL.call<{ name: string; current: boolean; songs: number }[]>("libraryList").catch(() => []), currentLibrary: () => (lib ? lib.name : "") },
   // ---- step 2: stems ----
   pickStems: () => pickStems(),
   importStems: (infos: AudioInfo[], copy: boolean) => importStems(infos, copy),
@@ -1491,6 +1495,7 @@ async function main() {
   });
   SL.on("menu", (m: { cmd: string }) => {
     if (m.cmd === "checkUpdates") { (window as any).SLUpd.check(true); return; } // 8d
+    if (m.cmd.startsWith("m:")) { (window as any).SLMenus && (window as any).SLMenus.run(m.cmd); return; } // 9c: the menus in the window chrome
     if (m.cmd === "export") exportSetlist(); else if (m.cmd === "import") importPackage(); else if (m.cmd === "importAbleton") importAbleton().catch((e) => page().toast(String(e)));
     else if (m.cmd === "dupSetlist") page().setlistCmd("dup"); else if (m.cmd === "cleanUp") cleanUpAudio();
     else if (m.cmd === "about") showAbout();
