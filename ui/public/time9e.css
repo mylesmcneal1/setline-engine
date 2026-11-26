@@ -1,0 +1,65 @@
+/* set.Line 9e: the song timeline as one grid (time9e.js). */
+
+/* One sideways position: the scroller only scrolls up / down. Each row clips its lane; every lane (and the song
+   header strip) is moved left by the same amount (time9e.js). Headers never move sideways. */
+#scroller{overflow-x:hidden}
+.folder{width:auto!important;min-width:0}
+.row9{width:auto!important}
+.row,.fhead{grid-template-columns:var(--head) minmax(0,1fr);overflow:hidden}
+.lh,.fh{position:relative;left:auto}
+.add{position:relative;left:auto;width:auto}
+.vstrip{position:relative;left:auto;width:auto}
+
+/* the pinned rows: ruler · time signature · tempo · sections, always at the top while the tracks scroll */
+.pin9{position:sticky;top:0;z-index:7;background:var(--s1,#111317);box-shadow:0 1px 0 rgba(0,0,0,.6),0 6px 10px -8px rgba(0,0,0,.8)}
+.folder.open .pin9{top:64px} .scroller.focus .folder.open .pin9,.row9 .folder.open .pin9,.scroller.focus .pin9,.row9 .pin9{top:0}
+.pin9 .row.ruler,.folder.open .pin9 .row.ruler,.scroller.focus .pin9 .row.ruler{position:relative;top:auto}
+
+/* the Time signature row (styled like Tempo): a badge at bar 1 and at every change; the meter in force sticks */
+.meter9 .lane{height:22px;border-bottom:1px solid var(--line,#1d2026);background:#0d0f12;cursor:copy}
+.meter9 .msig9,.meter9 .mstk9{position:absolute;top:3px;height:16px;padding:0 6px;border-radius:4px;background:rgba(100,210,255,.16);color:var(--cyan,#64d2ff);font:600 10.5px/16px var(--nums,var(--mono,monospace));white-space:nowrap;cursor:pointer;z-index:2}
+.meter9 .msig9:hover,.meter9 .mstk9:hover{background:rgba(100,210,255,.32)}
+.meter9 .msig9::before{content:"";position:absolute;left:0;top:-3px;bottom:-3px;width:1.5px;background:var(--cyan,#64d2ff);opacity:.55}
+.meter9 .mstk9{background:#16323d;box-shadow:4px 0 8px rgba(0,0,0,.6);z-index:3}
+.meter9 .mstk9[hidden]{display:none}
+
+/* compact top rows (Fit all, or View › Compact top rows): ruler 18, meter 16, tempo 26, sections 22 */
+body.top9c .ruler .lane{height:18px} body.top9c .ruler span{top:1px;font-size:9.5px} body.top9c .ruler .mkr u{top:6px}
+body.top9c .meter9 .lane{height:16px} body.top9c .meter9 .msig9,body.top9c .meter9 .mstk9{top:1px;height:14px;line-height:14px;font-size:9.5px}
+body.top9c .tempo .lane{height:26px!important} body.top9c .tempo .tp b{font-size:9.5px}
+body.top9c .secs .lane{height:22px} body.top9c .sec{top:2px!important;bottom:2px!important;font-size:10px}
+body.top9c .pin9 .lh{font-size:9.5px}
+
+/* track heights: the header loses the fader, the output chip and the meter when small; at Mini only the colour
+   and the name stay */
+.trk .lh .rsz9{position:absolute;left:0;right:0;bottom:-3px;height:7px;cursor:ns-resize;z-index:6}
+.trk .lh .rsz9:hover,body.rsz9on .trk .lh .rsz9{background:linear-gradient(transparent 2px,rgba(255,159,10,.7) 2px 4px,transparent 4px)}
+body.rsz9on{cursor:ns-resize!important;user-select:none}
+.trk.sz-small .lh .hf,.trk.sz-small .lh .hm,.trk.sz-small .lh .ochip,.trk.sz-small .lh .modst,.trk.sz-small .lh .tdel9{display:none!important}
+.trk.sz-small .lh{gap:5px}
+.trk.sz-mini .lh .hf,.trk.sz-mini .lh .hm,.trk.sz-mini .lh .ochip,.trk.sz-mini .lh .ms,.trk.sz-mini .lh .tico,.trk.sz-mini .lh .modst,.trk.sz-mini .lh .tdel9,.trk.sz-mini .lh>:not(.ctab):not(.tn):not(.rsz9){display:none!important}
+.trk.sz-mini .lh .tn{font-size:10.5px;line-height:1}
+.trk.sz-mini .lh .ctab{height:calc(var(--th) - 4px)}
+.scroller .row.trk.sz-mini,.scroller .row.trk.sz-small{padding-bottom:1px}
+
+/* the scrollbar under the lanes (the scroller itself doesn't scroll sideways any more) */
+.hb9{position:absolute;height:10px;z-index:9;border-radius:5px;background:rgba(255,255,255,.04)}
+.hb9 i{position:absolute;left:0;top:2px;height:6px;border-radius:3px;background:rgba(255,255,255,.28);cursor:grab}
+.hb9:hover i,.hb9 i:active{background:rgba(255,255,255,.5)}
+.hb9[hidden]{display:none}
+
+
+/* the ruler's header cell was see-through (8a): now it covers the bar numbers sliding under it */
+.pin9 .row.ruler .lh{opacity:1;color:var(--faint,#6d727c)}
+
+/* the ruler's header cell: ↕ fit tracks · Fit all · track height */
+.pin9 .row.ruler .lh{gap:6px;padding-right:6px}
+.pin9 .rl9{flex:1}
+.rt9{display:flex;gap:3px;flex:none}
+.rt9 button{height:18px;min-width:22px;padding:0 6px;border:0;border-radius:4px;background:rgba(255,255,255,.06);color:var(--muted,#9aa0aa);font:600 10px/18px var(--ui,inherit);letter-spacing:0;text-transform:none;cursor:pointer;display:inline-grid;place-items:center}
+.rt9 button:hover{background:rgba(255,255,255,.13);color:var(--text,#e8eaed)}
+.rt9 button.on{background:rgba(255,159,10,.22);color:#ffb340}
+body.top9c .rt9 button{height:15px;line-height:15px;min-width:20px}
+.pin9 .row.ruler .lh .rl9,.pin9 .row.ruler .lh .rt9{position:static;top:auto;padding:0;white-space:nowrap;pointer-events:auto}
+.pin9 .row.ruler .lh .rl9{font:inherit;color:inherit}
+.scroller.rows9 .folder.open .pin9,.scroller.rows9 .pin9{top:-10px} /* the Folders view has 10 px padding at the top: flush with the edge */

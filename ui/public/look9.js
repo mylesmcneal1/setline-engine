@@ -28,7 +28,8 @@
   const SINGLE = new Set(["Archivo Black", "Anton", "Boldonse", "Gloock", "Erica One"]); // one weight: never synthetic bold
   const ACCENTS = [["Orange", "#ff9f0a"], ["Blue", "#64d2ff"], ["Green", "#30d158"], ["Red", "#ff453a"], ["Purple", "#bf5af2"], ["Yellow", "#ffd60a"], ["White", "#f2f2f7"]];
   const THEMES = [["dark", "Dark"], ["black", "Black (OLED)"], ["dim", "Dim"], ["stage", "Stage"]];
-  const TRACKS = [["Compact", 36], ["Small", 44], ["Normal", 50], ["Large", 62], ["Tall", 76]];
+  // 9e: the same five sizes as View › Track height; this one is the default for songs without their own size
+  const TRACKS = [["Mini", 18], ["Small", 32], ["Medium", 50], ["Large", 76], ["Huge", 120]];
   const DEF = { theme: "dark", pair: "round", ui: "", title: "", nums: "", accent: "#ff9f0a", size: 100, track: 2, transport: "console", layout: "even", corners: "rounded", themes: [] };
   let LOOK = { ...DEF };
   try { LOOK = { ...DEF, ...JSON.parse(localStorage.getItem("setline.look") || "{}") }; } catch (e) { /* default */ }
@@ -170,7 +171,7 @@
       <label class="lk-l">Numbers font</label>${seg("nums", NUM_FONTS.map((x) => [x, `<span style="font-family:'${x}';font-variant-numeric:tabular-nums">${x} 37.2.1</span>`]), f.nums)}
       <label class="lk-l">Accent colour</label><div class="lk-acc">${ACCENTS.map(([n, c]) => `<button data-acc="${c}" title="${n}" style="background:${c}" class="${LOOK.accent.toLowerCase() === c ? "on" : ""}"></button>`).join("")}<label class="lk-custom" title="Your own colour"><input type="color" id="lkAcc" value="${LOOK.accent}"><span>Custom</span></label></div>
       <label class="lk-l">Text size · ${LOOK.size}%</label><input type="range" id="lkSize" min="90" max="130" step="5" value="${LOOK.size}">
-      <label class="lk-l">Track height · ${TRACKS[LOOK.track][0]}</label><input type="range" id="lkTrack" min="0" max="4" step="1" value="${LOOK.track}">
+      <label class="lk-l">Track height · ${TRACKS[LOOK.track][0]} <span class="faint">(songs without their own size)</span></label><input type="range" id="lkTrack" min="0" max="4" step="1" value="${LOOK.track}">
       <label class="lk-l">Transport style</label>${seg("transport", [["console", "Console"], ["hardware", "Hardware"], ["minimal", "Minimal"]], LOOK.transport)}
       <label class="lk-l">Transport text layout</label>${seg("layout", [["even", "Even"], ["hero", "Hero"], ["line", "One line"]], LOOK.layout)}
       <label class="lk-l">Corners</label>${seg("corners", [["square", "Square"], ["rounded", "Rounded"], ["xround", "Extra round"]], LOOK.corners)}

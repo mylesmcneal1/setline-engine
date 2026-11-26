@@ -91,7 +91,6 @@ private:
     void rigMute();
     std::thread exporter;                    // writing a .setline package (one at a time)
     std::shared_ptr<std::atomic<bool>> exportCancel = std::make_shared<std::atomic<bool>>(false);
-    std::unique_ptr<juce::FileChooser> packChooser;
     juce::var libraryOpened(const juce::var& r);
     std::map<juce::String, juce::String> cueErrors; // from the last song load: cue text -> why it couldn't be spoken
     void withCues(const juce::var& payload, std::function<void()> then);
@@ -99,7 +98,6 @@ private:
     void syncShow();
     juce::String diagnostics();
     double cueRate() const;
-    std::unique_ptr<juce::FileChooser> diagChooser, folderChooser, pdfChooser;
     Options addRest(Options o);
     void preparePeaks(const juce::var& refs, const juce::File& sessionFile);
     bool dirty = false;

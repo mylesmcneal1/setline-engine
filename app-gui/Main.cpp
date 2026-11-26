@@ -14,6 +14,7 @@
 #include "AbletonImport.h"
 #include "Updater.h"
 #include "AppMenus.h"
+#include "Dialogs.h"
 
 namespace setline::gui {
 
@@ -93,6 +94,10 @@ public:
             std::printf("%s\n", lines.joinIntoString("\n").toRawUTF8());
             setApplicationReturnValue(lines[lines.size() - 1] == "ABLETON OK" ? 0 : 1);
             quit();
+            return;
+        }
+        if (args.contains("--menu-test")) { // 9e: an item chosen in the menu bar reaches the page
+            menuTest();
             return;
         }
         if (const int ut = args.indexOf("--update-test"); ut >= 0 && ut + 1 < args.size()) { // 8d: in-app updates on fake apps
@@ -259,9 +264,38 @@ public:
             { { "Retry", [this] { showError = false; splash->setStep(Splash::show, Splash::State::running); sendMenu("retryShow"); } },
               { "Empty setlist", [this] { showError = false; if (! bridge) openMain(startPage); sendMenu("new"); finishLoading(); } } });
     }
+    // 9e: build menus like the page's, choose items the way the menu bar does, and check each one is sent on, once
+    void menuTest()
+    {
+        auto got = std::make_shared<juce::StringArray>();
+        auto m = std::make_shared<AppMenus>([got](const juce::String& cmd) { got->add(cmd); });
+        auto item = [](const char* id, const char* label, const char* key) { auto* o = new juce::DynamicObject(); o->setProperty("id", id); o->setProperty("label", label); o->setProperty("key", key); return juce::var(o); };
+        auto menu = [](const char* name, juce::Array<juce::var> items) { auto* o = new juce::DynamicObject(); o->setProperty("name", name); o->setProperty("items", items); return juce::var(o); };
+        juce::Array<juce::var> sub { item("trackMini", "Mini", ""), item("trackHuge", "Huge", "") };
+        auto* tm = new juce::DynamicObject(); tm->setProperty("label", "Track height"); tm->setProperty("sub", sub);
+        auto* spec = new juce::DynamicObject();
+        spec->setProperty("menus", juce::Array<juce::var> { menu("File", { item("importAbleton", "Import Ableton project...", "cmd+i"), item("importPackage", "Import .setline package...", "") }),
+                                                            menu("View", { juce::var(tm) }) });
+        spec->setProperty("app", juce::Array<juce::var> { item("about", "About set.Line", "") });
+        m->setMenus(juce::var(spec));
+        juce::StringArray out;
+        const juce::StringArray want { "importAbleton", "importAbleton", "importPackage", "trackHuge", "about" };
+        for (auto& id : want) if (! m->invokeLikeMenu(id)) out.add("FAIL no menu item " + id);
+        m->setMenus(juce::var(spec)); // the page sends its menus again while the commands are on their way
+        juce::Timer::callAfterDelay(400, [this, m, got, want, out]() mutable {
+            out.add("chosen: " + want.joinIntoString(", "));
+            out.add("sent:   " + got->joinIntoString(", "));
+            const bool ok = *got == want && ! out.joinIntoString("\n").contains("FAIL");
+            out.add(ok ? "MENU OK" : "MENU FAILED");
+            std::printf("%s\n", out.joinIntoString("\n").toRawUTF8());
+            setApplicationReturnValue(ok ? 0 : 1);
+            quit();
+        });
+    }
     void sendMenu(const juce::String& cmd)
     {
         if (! bridge) return;
+        applog::line("Menu: " + cmd); // 9e: menu received -> (Dialogs) requested -> opened -> result
         auto* o = new juce::DynamicObject(); o->setProperty("cmd", cmd);
         bridge->emit("menu", juce::var(o));
     }
@@ -274,6 +308,7 @@ public:
     void shutdown() override
     {
         applog::line("Quit");
+        dialogs::closeAll();
         if (bridge) bridge->markStopped(); // 8d: a normal quit: nothing to resume next time
         splash.reset();
         if (testThread.joinable()) testThread.join();

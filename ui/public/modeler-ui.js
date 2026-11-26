@@ -56,7 +56,7 @@
     // the preset bar on top
     const py = 3, ph = 15;
     g.font = "600 10.5px Inter, sans-serif";
-    if (!ps.length) { g.fillStyle = "#4f555f"; g.fillText("No preset yet · drag one from the right panel onto this bar", 8, py + 11); }
+    if (!ps.length) { g.fillStyle = "#4f555f"; g.fillText("No preset yet · drag one from the right panel onto this bar", (+cv.dataset.vx || 0) + 8, py + 11); } // 9e: hints at the visible left edge
     ps.forEach((e, i) => { const x0 = P(e) * PXS, x1 = (i + 1 < ps.length ? P(ps[i + 1]) : end) * PXS, pi = info(d, e.preset);
       g.fillStyle = "#24272d"; g.beginPath(); g.roundRect(x0 + 1, py, Math.max(4, x1 - x0 - 2), ph, 4); g.fill();
       g.strokeStyle = SEL && SEL.preset === e.id ? "#fff" : "#3a3f48"; g.lineWidth = 1; g.stroke();
@@ -67,7 +67,7 @@
     // scene blocks
     const by = py + ph + 4, bh = Math.max(14, H - by - 4);
     const bl = M.blocks(evs, P, end);
-    if (!bl.length) { g.fillStyle = "#4f555f"; g.font = "11px Inter, sans-serif"; g.fillText("Double-click to drop a scene, or drag one in from the right panel", 8, by + bh / 2 + 4); }
+    if (!bl.length) { g.fillStyle = "#4f555f"; g.font = "11px Inter, sans-serif"; g.fillText("Double-click to drop a scene, or drag one in from the right panel", (+cv.dataset.vx || 0) + 8, by + bh / 2 + 4); }
     bl.forEach((b) => { const x0 = b.start * PXS, x1 = b.end * PXS, pr = presetAt(s, t, b.start), sc = info(d, pr ? pr.preset : -1).scenes[b.e.scene] || info(d, -1).scenes[0];
       g.fillStyle = sc.col; g.beginPath(); g.roundRect(x0 + 1, by, Math.max(3, x1 - x0 - 2), bh, 5); g.fill();
       if (selIds.includes(b.e.id)) { g.strokeStyle = "#fff"; g.lineWidth = 2; g.stroke(); }

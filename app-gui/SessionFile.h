@@ -60,7 +60,6 @@ private:
 
     juce::PropertiesFile& settings;
     juce::File current;
-    std::unique_ptr<juce::FileChooser> chooser;
 };
 
 } // namespace setline::gui

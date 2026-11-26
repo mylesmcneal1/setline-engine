@@ -60,6 +60,14 @@
       it("collapseAll", "Collapse all", () => SL9.collapseAll(), { key: "cmd+alt+left" }), sep(),
       it("zoomIn", "Zoom in", () => window.SL9 && SL9.zoomBy(1.5)), it("zoomOut", "Zoom out", () => window.SL9 && SL9.zoomBy(1 / 1.5)),
       it("zoomFit", "Fit the song", () => { const x = song(); if (x && window.SL9) SL9.zoomPreset(x, "song"); }, { dis: !s }), sep(),
+      // 9e: track heights, Fit tracks to window, Fit all (every bar and every track), compact top rows
+      ...(window.TL9 ? (() => { const T = TL9, ts = T.song(), cur = ts ? T.sizeOf(ts) : -1; return [
+        sub("Track height", T.SIZES.map(([n], i) => it("trackSize" + i, n, () => T.setSize(T.song(), i), { check: cur === i })), !ts),
+        it("tracksSmaller", "Shrink tracks", () => T.step(T.song(), -1), { key: "cmd+alt+minus", dis: !ts }),
+        it("tracksBigger", "Grow tracks", () => T.step(T.song(), 1), { key: "cmd+alt+equals", dis: !ts }),
+        it("fitTracks", "Fit tracks to window", () => T.fitTracks(T.song()), { key: "cmd+alt+f", dis: !ts }),
+        it("fitAll", "Fit all", () => T.fitAll(T.song()), { dis: !ts, check: T.fitAllOn() }),
+        it("compactTop", "Compact top rows", () => T.setCompact(!T.compact()), { check: T.compact() }), sep()]; })() : []),
       it("toggleSetlist", "Show the setlist", () => setPanel("L", !isOpen("L")), { check: isOpen("L") }),
       it("togglePanel", "Show the side panel", () => setPanel("R", !isOpen("R")), { check: isOpen("R") }),
     ];

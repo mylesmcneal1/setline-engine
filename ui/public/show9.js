@@ -101,6 +101,7 @@
     renderHero(); // hides the hero
     if (S9.view === "cards") drawCards(); else drawRows();
     markSel();
+    if (window.TL9) TL9.after();
   }
   window.renderFolders = function (listIn, into) { if (into) return R0(listIn, into); draw(); };
 
@@ -196,7 +197,7 @@
     const r = document.querySelector(`.row9[data-row="${id}"]`); if (!r) return;
     const s = songs.find((x) => x.id === id), body = r.querySelector(".r9b");
     r.classList.toggle("open", open.has(id));
-    if (!open.has(id) || !s) { body.innerHTML = ""; return; }
+    if (!open.has(id) || !s) { body.innerHTML = ""; if (window.TL9) TL9.after(); return; }
     R0([s], body);
   }
   // opening / closing one row touches only that row (and, with one song open at a time, the one it closes)
@@ -337,6 +338,9 @@
   // PXS (pixels per second) changes continuously, centred on the pointer; only the open song(s) are drawn again,
   // once per animation frame.
   let zq = null;
+  // 9e: the lanes' visible width and their left edge on screen (measured: the Folders rows have padding)
+  const LV = () => (window.TL9 ? TL9.viewW() : $("scroller").clientWidth - headW());
+  const LX = () => (window.TL9 ? TL9.laneLeft() : $("scroller").getBoundingClientRect().left + headW());
   function openIds() { const FS = focusSong(); return FS ? [FS.id] : S9.view === "folders" ? [...open] : []; }
   function redrawOpen() {
     const FS = focusSong();
@@ -347,34 +351,37 @@
   function zoomTo(z, ax) {
     const sc = $("scroller"); z = Math.max(ZMIN, Math.min(ZMAX, z));
     if (Math.abs(z - PXS) < 1e-4) return;
-    if (ax == null) ax = (sc.clientWidth - headW()) / 2;
-    const tAt = (sc.scrollLeft + ax) / PXS;
+    if (ax == null) ax = LV() / 2;
+    // 9e: one gesture keeps its exact anchor time (the position is whole pixels, so recomputing it each step drifts)
+    const g = zoomTo.g, tAt = g && Math.abs(g.ax - ax) < 0.5 && g.hx === sc.scrollLeft ? g.tAt : (sc.scrollLeft + ax) / PXS;
     zq = { z, ax, tAt };
     if (zoomTo.raf) return;
     zoomTo.raf = requestAnimationFrame(() => {
       zoomTo.raf = 0; const q = zq; zq = null; if (!q) return;
       const t0 = performance.now();
       PXS = q.z; if ($("zoom")) $("zoom").value = zToSlider(q.z);
+      const nx = Math.max(0, q.tAt * PXS - q.ax); if (window.TL9) TL9.preset(nx); // 9e: drawn at the new position at once
       redrawOpen();
-      sc.scrollLeft = Math.max(0, q.tAt * PXS - q.ax);
+      sc.scrollLeft = nx;
+      zoomTo.g = { ax: q.ax, tAt: q.tAt, hx: sc.scrollLeft };
       syncZoomBar();
       timing("zoom frame", t0);
     });
   }
   // the page's buttons and hooks: at once (wheel, pinch and the slider go through zoomTo: one draw per frame)
-  window.setZoom = function (z, ax) { const sc = $("scroller"); z = Math.max(ZMIN, Math.min(ZMAX, z)); if (Math.abs(z - PXS) < 1e-4) return; if (ax == null) ax = (sc.clientWidth - headW()) / 2; const tAt = (sc.scrollLeft + ax) / PXS; PXS = z; if ($("zoom")) $("zoom").value = zToSlider(z); redrawOpen(); sc.scrollLeft = Math.max(0, tAt * PXS - ax); syncZoomBar(); };
-  const zoomBy = (f, axFrac) => { const sc = $("scroller"); zoomTo((zq ? zq.z : PXS) * f, axFrac == null ? null : (sc.clientWidth - headW()) * axFrac); };
+  window.setZoom = function (z, ax) { const sc = $("scroller"); z = Math.max(ZMIN, Math.min(ZMAX, z)); if (Math.abs(z - PXS) < 1e-4) return; if (ax == null) ax = LV() / 2; const tAt = (sc.scrollLeft + ax) / PXS; PXS = z; if ($("zoom")) $("zoom").value = zToSlider(z); const nx = Math.max(0, tAt * PXS - ax); if (window.TL9) TL9.preset(nx); redrawOpen(); sc.scrollLeft = nx; syncZoomBar(); };
+  const zoomBy = (f, axFrac) => { const sc = $("scroller"); zoomTo((zq ? zq.z : PXS) * f, axFrac == null ? null : LV() * axFrac); };
   // ⌥ + wheel, Ctrl/⌘ + wheel and trackpad pinch (a wheel with ctrlKey): exponential, so it feels continuous
   $("scroller").addEventListener("wheel", (e) => {
     if (!(e.altKey || e.ctrlKey || e.metaKey)) return;
     e.preventDefault(); e.stopImmediatePropagation();
-    const sc = $("scroller"), ax = e.clientX - sc.getBoundingClientRect().left - headW();
+    const sc = $("scroller"), ax = e.clientX - LX();
     const d = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
     zoomTo((zq ? zq.z : PXS) * Math.exp(-d * (e.ctrlKey && !e.altKey ? 0.01 : 0.0025)), Math.max(0, ax));
   }, { capture: true, passive: false });
   // the visible span of the open song: [t0, t1] seconds
-  function visSpan() { const sc = $("scroller"), w = sc.clientWidth - headW(); return [sc.scrollLeft / PXS, (sc.scrollLeft + w) / PXS]; }
-  function fitSpan(s, a, b) { const sc = $("scroller"), w = sc.clientWidth - headW() - 24; if (b - a < 0.05) return; const z = Math.max(ZMIN, Math.min(ZMAX, w / (b - a))); PXS = z; if ($("zoom")) $("zoom").value = zToSlider(z); redrawOpen(); sc.scrollLeft = Math.max(0, a * PXS - 12); syncZoomBar(); }
+  function visSpan() { const sc = $("scroller"), w = LV(); return [sc.scrollLeft / PXS, (sc.scrollLeft + w) / PXS]; }
+  function fitSpan(s, a, b) { const sc = $("scroller"), w = LV() - 24; if (b - a < 0.05) return; const z = Math.max(ZMIN, Math.min(ZMAX, w / (b - a))); PXS = z; if ($("zoom")) $("zoom").value = zToSlider(z); const nx = Math.max(0, a * PXS - 12); if (window.TL9) TL9.preset(nx); redrawOpen(); sc.scrollLeft = nx; syncZoomBar(); }
   function zoomPreset(s, k) {
     if (k === "song") { fitSpan(s, 0, s.len); return; }
     const at = typeof pos === "number" && playId === s.id ? pos : visSpan()[0];
@@ -401,7 +408,7 @@
         const W = strip.getBoundingClientRect().width, x0 = e.clientX, [a0, b0] = visSpan(), edge = e.target.classList.contains("l") ? "l" : e.target.classList.contains("r") ? "r" : "";
         f.onpointermove = (m) => { const dt = (m.clientX - x0) / W * s.len, sc = $("scroller");
           if (!edge) sc.scrollLeft = Math.max(0, (a0 + dt) * PXS);
-          else { let a = a0, b = b0; if (edge === "l") a = Math.min(b0 - 0.5, Math.max(0, a0 + dt)); else b = Math.max(a0 + 0.5, Math.min(s.len, b0 + dt)); const w = sc.clientWidth - headW(); zoomTo(w / (b - a), 0); zq && (zq.tAt = a); }
+          else { let a = a0, b = b0; if (edge === "l") a = Math.min(b0 - 0.5, Math.max(0, a0 + dt)); else b = Math.max(a0 + 0.5, Math.min(s.len, b0 + dt)); const w = LV(); zoomTo(w / (b - a), 0); zq && (zq.tAt = a); }
           syncZoomBar(); };
         f.onpointerup = () => { f.onpointermove = null; };
       };

@@ -1,4 +1,5 @@
 #include "Bridge.h"
+#include "Dialogs.h"
 #include "AudioHost.h"
 #include "Log.h"
 #include "Package.h"
@@ -283,8 +284,7 @@ Bridge::Options Bridge::addTo(Options o)
     });
     o = add(o, "showTarget", [this](const juce::var& a) { return session.inShows(a["name"].toString(), (bool) a["create"]); });
     o = addAsync(o, "chooseShowsFolder", [this](const juce::var&, auto done) {
-        folderChooser = std::make_unique<juce::FileChooser>("Where new shows are saved", folders::shows(settings));
-        folderChooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories, [this, done](const juce::FileChooser& fc) {
+        dialogs::open("Shows folder", std::make_unique<juce::FileChooser>("Where new shows are saved", folders::shows(settings)), juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories, [this, done](const juce::FileChooser& fc) {
             auto* r = new juce::DynamicObject();
             const auto f = fc.getResult();
             if (f == juce::File() || ! f.isDirectory()) r->setProperty("cancelled", true);
@@ -414,9 +414,8 @@ Bridge::Options Bridge::addTo(Options o)
     });
     o = addAsync(o, "saveDiagnostics", [this](const juce::var&, auto done) {
         auto text = diagnostics();
-        diagChooser = std::make_unique<juce::FileChooser>("Save diagnostics", juce::File::getSpecialLocation(juce::File::userDesktopDirectory)
-                                                              .getChildFile("set.Line diagnostics " + juce::Time::getCurrentTime().formatted("%Y-%m-%d %H-%M") + ".txt"), "*.txt");
-        diagChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles | juce::FileBrowserComponent::warnAboutOverwriting,
+        dialogs::open("Save diagnostics", std::make_unique<juce::FileChooser>("Save diagnostics", juce::File::getSpecialLocation(juce::File::userDesktopDirectory)
+                                                              .getChildFile("set.Line diagnostics " + juce::Time::getCurrentTime().formatted("%Y-%m-%d %H-%M") + ".txt"), "*.txt"), juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles | juce::FileBrowserComponent::warnAboutOverwriting,
                                  [done, text](const juce::FileChooser& fc) {
             auto* r = new juce::DynamicObject();
             const auto f = fc.getResult();
@@ -459,8 +458,7 @@ Bridge::Options Bridge::addTo(Options o)
         };
         if (a["to"].toString().isNotEmpty()) { done(write(juce::File(a["to"].toString()))); return; }
         const auto name = juce::File::createLegalFileName(a["name"].toString().isNotEmpty() ? a["name"].toString() : juce::String("Patch sheet")) + ".pdf";
-        pdfChooser = std::make_unique<juce::FileChooser>("Export patch sheet", juce::File::getSpecialLocation(juce::File::userDesktopDirectory).getChildFile(name), "*.pdf");
-        pdfChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles | juce::FileBrowserComponent::warnAboutOverwriting,
+        dialogs::open("Export patch sheet", std::make_unique<juce::FileChooser>("Export patch sheet", juce::File::getSpecialLocation(juce::File::userDesktopDirectory).getChildFile(name), "*.pdf"), juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles | juce::FileBrowserComponent::warnAboutOverwriting,
                                 [done, write](const juce::FileChooser& fc) { done(write(fc.getResult())); });
     });
     // ---- the band screens (6g): the server, its address, messages both ways ----
@@ -557,8 +555,7 @@ Bridge::Options Bridge::addTo(Options o)
         };
         if (a["to"].toString().isNotEmpty()) { go(juce::File(a["to"].toString())); return; }
         const auto name = juce::File::createLegalFileName(a["name"].toString().isNotEmpty() ? a["name"].toString() : juce::String("Setlist")) + ".setline";
-        packChooser = std::make_unique<juce::FileChooser>("Export setlist", juce::File::getSpecialLocation(juce::File::userDesktopDirectory).getChildFile(name), "*.setline");
-        packChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles | juce::FileBrowserComponent::warnAboutOverwriting,
+        dialogs::open("Export setlist", std::make_unique<juce::FileChooser>("Export setlist", juce::File::getSpecialLocation(juce::File::userDesktopDirectory).getChildFile(name), "*.setline"), juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles | juce::FileBrowserComponent::warnAboutOverwriting,
                                  [go](const juce::FileChooser& fc) { auto f = fc.getResult(); if (f != juce::File() && ! f.hasFileExtension("setline")) f = f.withFileExtension("setline"); go(f); });
     });
     o = add(o, "cancelExport", [this](const juce::var&) { exportCancel->store(true); return juce::var(true); });
@@ -581,8 +578,7 @@ Bridge::Options Bridge::addTo(Options o)
             done(rv);
         };
         if (a["path"].toString().isNotEmpty()) { read(juce::File(a["path"].toString())); return; }
-        packChooser = std::make_unique<juce::FileChooser>("Import a setlist", juce::File::getSpecialLocation(juce::File::userDesktopDirectory), "*.setline");
-        packChooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [read](const juce::FileChooser& fc) { read(fc.getResult()); });
+        dialogs::open("Import .setline", std::make_unique<juce::FileChooser>("Import a setlist", juce::File::getSpecialLocation(juce::File::userDesktopDirectory), "*.setline"), juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [read](const juce::FileChooser& fc) { read(fc.getResult()); });
     });
     // {path} -> the package's audio this library doesn't have yet into Audio/, its cues into Cues/ -> {copied} | {error}
     o = addAsync(o, "importPackageAudio", [this](const juce::var& a, auto done) {
@@ -671,8 +667,7 @@ Bridge::Options Bridge::addTo(Options o)
     });
     o = addAsync(o, "exportMappings", [this](const juce::var& a, auto done) {
         const auto text = a["text"].toString();
-        packChooser = std::make_unique<juce::FileChooser>("Export MIDI mappings", juce::File::getSpecialLocation(juce::File::userDesktopDirectory).getChildFile("set.Line controls.json"), "*.json");
-        packChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting, [text, done](const juce::FileChooser& fc) {
+        dialogs::open("Export MIDI mappings", std::make_unique<juce::FileChooser>("Export MIDI mappings", juce::File::getSpecialLocation(juce::File::userDesktopDirectory).getChildFile("set.Line controls.json"), "*.json"), juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting, [text, done](const juce::FileChooser& fc) {
             auto* r = new juce::DynamicObject(); const auto f = fc.getResult();
             if (f == juce::File()) r->setProperty("cancelled", true); else if (f.replaceWithText(text)) r->setProperty("path", f.getFullPathName()); else r->setProperty("error", "Couldn't save " + f.getFileName());
             done(juce::var(r)); });
@@ -680,8 +675,7 @@ Bridge::Options Bridge::addTo(Options o)
     o = addAsync(o, "importMappings", [this](const juce::var& a, auto done) {
         auto read = [done](const juce::File& f) { auto* r = new juce::DynamicObject(); if (f == juce::File()) r->setProperty("cancelled", true); else r->setProperty("text", f.loadFileAsString()); done(juce::var(r)); };
         if (a["path"].toString().isNotEmpty()) { read(juce::File(a["path"].toString())); return; }
-        packChooser = std::make_unique<juce::FileChooser>("Import MIDI mappings", juce::File::getSpecialLocation(juce::File::userDesktopDirectory), "*.json");
-        packChooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [read](const juce::FileChooser& fc) { read(fc.getResult()); });
+        dialogs::open("Import MIDI mappings", std::make_unique<juce::FileChooser>("Import MIDI mappings", juce::File::getSpecialLocation(juce::File::userDesktopDirectory), "*.json"), juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [read](const juce::FileChooser& fc) { read(fc.getResult()); });
     });
     // ---- 7b: Ableton Live projects (read only; the project and its files are never changed) ----
     // {path ('' = choose), mode, ports} -> the songs found (AbletonImport.h) | {cancelled} | {error}
@@ -704,8 +698,7 @@ Bridge::Options Bridge::addTo(Options o)
             }).detach();
         };
         if (a["path"].toString().isNotEmpty()) { read(juce::File(a["path"].toString())); return; }
-        packChooser = std::make_unique<juce::FileChooser>("Import an Ableton Live project", juce::File::getSpecialLocation(juce::File::userMusicDirectory), "*.als");
-        packChooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [read](const juce::FileChooser& fc) { read(fc.getResult()); });
+        dialogs::open("Import Ableton project", std::make_unique<juce::FileChooser>("Import an Ableton Live project", juce::File::getSpecialLocation(juce::File::userMusicDirectory), "*.als"), juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [read](const juce::FileChooser& fc) { read(fc.getResult()); });
     });
     // "Locate…": {names, folder ('' = choose)} -> {found: {name: path}} | {cancelled}
     o = addAsync(o, "ableLocate", [this](const juce::var& a, auto done) {
@@ -719,8 +712,7 @@ Bridge::Options Bridge::addTo(Options o)
             }).detach();
         };
         if (a["folder"].toString().isNotEmpty()) { go(juce::File(a["folder"].toString())); return; }
-        packChooser = std::make_unique<juce::FileChooser>("Find the missing samples in…", juce::File::getSpecialLocation(juce::File::userMusicDirectory));
-        packChooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories, [go](const juce::FileChooser& fc) { go(fc.getResult()); });
+        dialogs::open("Find missing samples", std::make_unique<juce::FileChooser>("Find the missing samples in…", juce::File::getSpecialLocation(juce::File::userMusicDirectory)), juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories, [go](const juce::FileChooser& fc) { go(fc.getResult()); });
     });
     // {paths} -> {path: content hash} (the Library stores audio by it: Audio/<hash>.<ext>), on a thread
     o = addAsync(o, "hashFiles", [this](const juce::var& a, auto done) {

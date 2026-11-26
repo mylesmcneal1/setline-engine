@@ -2,7 +2,12 @@
 
 namespace setline::gui {
 
-AppMenus::AppMenus(std::function<void(const juce::String&)> s) : send(std::move(s)) {}
+AppMenus::AppMenus(std::function<void(const juce::String&)> s) : send(std::move(s))
+{
+    // 9e: the menus' commands come here. Without this JUCE looks for a target from the focused component (the web
+    // view), finds none, and a chosen menu item silently does nothing.
+    commands.setFirstCommandTarget(this);
+}
 
 AppMenus::~AppMenus()
 {
@@ -124,6 +129,28 @@ bool AppMenus::perform(const InvocationInfo& info)
     auto f = byCmd.find(info.commandID); if (f == byCmd.end()) return false;
     if (send) send(f->second.id);
     return true;
+}
+
+bool AppMenus::invokeLikeMenu(const juce::String& id)
+{
+    const auto f = idToCmd.find(id); if (f == idToCmd.end()) return false;
+    std::function<bool(const juce::PopupMenu&)> walk = [&](const juce::PopupMenu& m) {
+        for (juce::PopupMenu::MenuItemIterator it(m); it.next();) {
+            auto& item = it.getItem();
+            if (item.subMenu != nullptr && walk(*item.subMenu)) return true;
+            if (item.itemID == f->second && item.commandManager != nullptr) {
+                // what JUCE's menu bars (the Mac main menu, the Windows MenuBarComponent) do with a chosen item
+                juce::ApplicationCommandTarget::InvocationInfo info(item.itemID);
+                info.invocationMethod = juce::ApplicationCommandTarget::InvocationInfo::fromMenu;
+                item.commandManager->invoke(info, true);
+                return true;
+            }
+        }
+        return false;
+    };
+    const auto names = getMenuBarNames();
+    for (int i = 0; i < names.size(); ++i) if (walk(getMenuForIndex(i, names[i]))) return true;
+    return walk(build(spec["app"]));
 }
 
 } // namespace setline::gui

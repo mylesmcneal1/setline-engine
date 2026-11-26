@@ -88,7 +88,6 @@ private:
 
     juce::PropertiesFile& settings;
     juce::AudioFormatManager formats;
-    std::unique_ptr<juce::FileChooser> chooser;
     std::unique_ptr<juce::Thread> worker;
     std::shared_ptr<std::atomic<bool>> cancel = std::make_shared<std::atomic<bool>>(false);
     std::shared_ptr<bool> alive = std::make_shared<bool>(true);

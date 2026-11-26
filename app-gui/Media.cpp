@@ -1,4 +1,5 @@
 #include "Media.h"
+#include "Dialogs.h"
 #include "Folders.h"
 #include <map>
 #include <set>
@@ -317,10 +318,9 @@ void Media::pick(const juce::var& arg, Done done)
     const bool multiple = arg.hasProperty("multiple") ? (bool) arg["multiple"] : true;
     // recorded cue words start in the Library (Documents/set.Line/Library/Cue Words)
     const auto start = arg["from"].toString() == "cueWords" ? folders::libraryCueWords() : startFolder();
-    chooser = std::make_unique<juce::FileChooser>(arg["from"].toString() == "cueWords" ? "Choose recorded cue words" : multiple ? "Choose stem files" : "Choose an audio file", start, audioWildcard);
     auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
     if (multiple) flags |= juce::FileBrowserComponent::canSelectMultipleItems;
-    chooser->launchAsync(flags, [this, rate, done](const juce::FileChooser& fc) {
+    dialogs::open("Choose audio", std::make_unique<juce::FileChooser>(arg["from"].toString() == "cueWords" ? "Choose recorded cue words" : multiple ? "Choose stem files" : "Choose an audio file", start, audioWildcard), flags, [this, rate, done](const juce::FileChooser& fc) {
         const auto files = fc.getResults();
         if (files.isEmpty()) { done(obj({ { "cancelled", true } })); return; }
         settings.setValue("audioFolder", files[0].getParentDirectory().getFullPathName());
@@ -650,8 +650,7 @@ void Media::locate(const juce::var& arg, Done done)
     if (auto* m = arg["missing"].getArray()) for (auto& r : *m) missing.add(r.toString());
     if (missing.isEmpty()) { done(obj({ { "cancelled", true } })); return; }
     const auto firstName = missing[0].fromLastOccurrenceOf("/", false, false).fromLastOccurrenceOf("\\", false, false);
-    chooser = std::make_unique<juce::FileChooser>("Locate \"" + firstName + "\"", startFolder(), audioWildcard);
-    chooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+    dialogs::open("Locate audio", std::make_unique<juce::FileChooser>("Locate \"" + firstName + "\"", startFolder(), audioWildcard), juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
                          [this, session, missing, done](const juce::FileChooser& fc) {
         const auto picked = fc.getResult();
         if (picked == juce::File()) { done(obj({ { "cancelled", true } })); return; }

@@ -75,6 +75,11 @@ jobs:
       - name: UI layout at 1280x800
         run: node tests/ui-layout.mjs --shots ui-layout-shots
 
+      # 9e: the song timeline as one grid: scroll down 3 screens and sideways 50 bars, zoom at the pointer; the ruler,
+      # time signature, tempo, sections and every lane line up (±1 px), headers never move; track sizes, Fit all
+      - name: UI timeline (one song, and two open in Folders)
+        run: node tests/ui-timeline.mjs --shots ui-layout-shots
+
       - name: Upload UI layout screenshots
         if: always()
         uses: actions/upload-artifact@v7
@@ -147,6 +152,14 @@ jobs:
           if [ -d "$APP/Contents/MacOS" ]; then EXE="$APP/Contents/MacOS/set.Line"; else EXE="$APP"; fi
           "$EXE" --ableton-test ableton-test | tee ableton-test.txt
           grep -q "ABLETON OK" ableton-test.txt
+
+      # 9e: items chosen in the menu bar (Mac main menu / Windows window menu) reach the page, once each
+      - name: Menu bar test
+        shell: bash
+        run: |
+          if [ -d "$APP/Contents/MacOS" ]; then EXE="$APP/Contents/MacOS/set.Line"; else EXE="$APP"; fi
+          "$EXE" --menu-test | tee menu-test.txt
+          grep -q "MENU OK" menu-test.txt
 
       # 8d: in-app updates on fake apps: version compare, SHA-256 verify (good / damaged), unpack next to the app,
       # install (the old one kept as "(previous)"), roll back and forward again (the real swap scripts)

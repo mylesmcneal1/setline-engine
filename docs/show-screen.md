@@ -35,7 +35,7 @@ the songs; Delete with setlist rows selected only takes them out of the setlist.
 Right-click a track header: Rename · Colour › · Duplicate track (⌘D) · Move to another song… · Move up / down ·
 **Delete track** (⌫). A trash button shows on hover. It asks only for audio recorded in set.Line; undo restores.
 
-## Zoom
+## Zoom (see also docs/timeline.md: one sideways position, track sizes, Fit all)
 ⌥ + scroll (or Ctrl/⌘ + scroll, or a trackpad pinch) zooms around the pointer, continuously (one draw per frame).
 The song header: **Song · 32 bars · 8 bars · Section**, − slider +, **Fit**. Drag across the ruler to zoom to those
 bars (a click still moves the playhead). The section strip in the song header is the overview: a white frame shows

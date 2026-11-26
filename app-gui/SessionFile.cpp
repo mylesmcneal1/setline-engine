@@ -1,4 +1,5 @@
 #include "SessionFile.h"
+#include "Dialogs.h"
 #include "Media.h"
 #include "Folders.h"
 
@@ -21,8 +22,7 @@ juce::File SessionFile::startFolder() const
 
 void SessionFile::open(Done done)
 {
-    chooser = std::make_unique<juce::FileChooser>("Open a set.Line session", startFolder(), juce::String("*") + extension);
-    chooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+    dialogs::open("Open session", std::make_unique<juce::FileChooser>("Open a set.Line session", startFolder(), juce::String("*") + extension), juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
                          [this, done](const juce::FileChooser& fc) {
         const auto f = fc.getResult();
         if (f == juce::File()) { done(result({ { "cancelled", true } })); return; }
@@ -78,8 +78,7 @@ void SessionFile::save(const juce::String& text, Done done)
 void SessionFile::saveAs(const juce::String& text, Done done)
 {
     const auto suggested = current != juce::File() ? current : startFolder().getChildFile(juce::String("Untitled session") + extension);
-    chooser = std::make_unique<juce::FileChooser>("Save the set.Line session", suggested, juce::String("*") + extension);
-    chooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles
+    dialogs::open("Save session as", std::make_unique<juce::FileChooser>("Save the set.Line session", suggested, juce::String("*") + extension), juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles
                              | juce::FileBrowserComponent::warnAboutOverwriting,
                          [this, text, done](const juce::FileChooser& fc) {
         auto f = fc.getResult();
@@ -104,8 +103,7 @@ void SessionFile::chooseLocation(Done done)
     // Suggest next to the current session's folder (or in the last folder used).
     const auto base = current != juce::File() ? current.getParentDirectory().getParentDirectory() : startFolder();
     const auto name = current != juce::File() ? current.getFileNameWithoutExtension() : juce::String("Untitled session");
-    chooser = std::make_unique<juce::FileChooser>("Save the set.Line session", base.getChildFile(name + extension), juce::String("*") + extension);
-    chooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles
+    dialogs::open("Save session", std::make_unique<juce::FileChooser>("Save the set.Line session", base.getChildFile(name + extension), juce::String("*") + extension), juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles
                              | juce::FileBrowserComponent::warnAboutOverwriting,
                          [this, done](const juce::FileChooser& fc) {
         auto f = fc.getResult();

@@ -26,6 +26,9 @@ public:
 
     // "cmd+shift+n" -> a KeyPress (cmd = ⌘ on the Mac, Ctrl on Windows); exposed for tests
     static juce::KeyPress parseKey(const juce::String& key);
+    // 9e: runs the item with this id the way a click in the menu bar does (the item's command manager, async);
+    // false if no item has that id. For the --menu-test self-test.
+    bool invokeLikeMenu(const juce::String& id);
 
 private:
     juce::ApplicationCommandTarget* getNextCommandTarget() override { return nullptr; }
