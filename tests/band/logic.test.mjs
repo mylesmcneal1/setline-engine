@@ -58,6 +58,13 @@ const show = {
   const mid2 = JSON.parse(JSON.stringify(show)); mid2.songs.b.fchg = [{ t: 60, f: { tun: "Drop C" } }];
   const m3 = untilNextChange(mid2, 0, 50, "tun");
   check("Until next change: a change inside a later song counts its time into that song (150 + 60 s)", m3 && m3.value === "Drop C" && m3.songName === "B" && near(m3.inSec, 210), m3);
+  // 9d: breaks between songs add their time; one that waits for Play makes it "after <song>"
+  const br = JSON.parse(JSON.stringify(show)); br.setlist.order[0].brk = [{ label: "Gear change", len: 45, wait: false }];
+  const b1 = untilNextChange(br, 0, 50, "tun");
+  check("Until next change: a timed break after A adds its 45 s", b1 && near(b1.inSec, 150 + 45 + 180) && b1.after === null, b1);
+  br.setlist.order[0].brk[0].wait = true;
+  const b2 = untilNextChange(br, 0, 50, "tun");
+  check("Until next change: a Wait-for-Play break makes it “after A”", b2 && b2.inSec === null && b2.after === "A", b2);
   check("mergeFields: empty version values don't override", mergeFields({ a: "1", b: "2" }, { a: "", b: "3" }).a === "1" && mergeFields({ a: "1", b: "2" }, { a: "", b: "3" }).b === "3");
 }
 

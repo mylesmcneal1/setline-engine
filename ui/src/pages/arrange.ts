@@ -295,6 +295,7 @@ function cancelAuto() { if (autoTimer) { clearInterval(autoTimer); autoTimer = 0
 function songEnded(s: Song) {
   const p = page(), n = p.ver.nextOf(s), a = p.ver.after(s);
   p.setPlaying(false);
+  const B = (window as any).SLBreaks; if (B && B.songEnded(s.id)) return; // 9d: a break follows this song: it becomes current
   if (!n) return;
   p.readySong(n.song.id);
   if (a.mode === "auto") {
@@ -359,7 +360,8 @@ let nativeDid: { action: string; result: any; at: number } | null = null, lastAr
 const took = (action: string | RegExp) => { const d = nativeDid; if (!d || Date.now() - d.at > 1500 || !(typeof action === "string" ? d.action === action : action.test(d.action))) return null; nativeDid = null; return d; };
 function pedalArmNow() {
   const p = page() as any, s = p.songs.find((x: Song) => x.id === loadedSongId), sel = p.playId || p.selId;
-  const arm: any = { songId: loadedSongId || "", ready: !!s && sel === loadedSongId && !busy && !pending, when: p.jumpWhen ? p.jumpWhen() : "bar",
+  const brk = (window as any).SLBreaks && (window as any).SLBreaks.holdsPedals(); // 9d: around a break the page decides
+  const arm: any = { songId: loadedSongId || "", ready: !!s && sel === loadedSongId && !busy && !pending && !brk, when: p.jumpWhen ? p.jumpWhen() : "bar",
     nextId: nextMeta && nextMeta.ready ? nextMeta.songId : "", looping: p.looping ? !!p.looping() : false, vamp: p.vampOn ? !!p.vampOn() : false, sync: p.syncMsgs ? p.syncMsgs() : [] };
   if (s) {
     if (!p.playing) { const at = toBarBeat(s, p.pos); arm.bar = at.bar; arm.beat = at.beat; }

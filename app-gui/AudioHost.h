@@ -16,6 +16,8 @@ namespace setline::gui {
 
 class AudioHost : private juce::ChangeListener, private juce::AudioIODeviceCallback, private juce::Timer {
 public:
+    // 9d: a silent break: the MIDI clock stops until the next song starts
+    void holdClock(bool on) { if (clockHeld != on) { clockHeld = on; refreshClock(); } }
     explicit AudioHost(juce::PropertiesFile& settings);
     ~AudioHost() override;
 
@@ -162,6 +164,7 @@ private:
     std::array<float*, scratchOuts> scratchPtrs {};
     std::atomic<int> listenOut1 { -1 }, listenOut2 { -1 }; // audio thread reads; -1 = not in "one output" mode
     std::atomic<bool> midiOn { true };
+    bool clockHeld = false;
     void refreshClock();   // the engine's clock / transport ports from this computer's settings
     void scanMidiPorts();  // opens clock ports, reopens ports that came back (every 2 s)
     juce::StringArray connectedPorts; int scanTick = 0; int lateSeen[2] = { 0, 0 };

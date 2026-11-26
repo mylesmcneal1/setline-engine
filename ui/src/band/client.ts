@@ -157,6 +157,22 @@ function frame() {
   requestAnimationFrame(frame);
   if (!screen) return;
   const st = live(), songId = st.cur, song = show && songId ? show.songs[songId] : null;
+  // 9d: a break: the countdown, the note and the next song over the whole screen
+  { const b = (st as any).brk; let o = document.getElementById("brkOv");
+    if (b && !o) { o = document.createElement("div"); o.id = "brkOv"; o.style.cssText = "position:fixed;inset:0;z-index:40;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2vh;text-align:center;padding:4vw"; document.body.appendChild(o); }
+    if (o) {
+      o.style.display = b ? "flex" : "none";
+      if (b) {
+        const l = b.paused ? b.left : b.left - Math.max(0, (hostNow() - (state ? state.h : hostNow())) / 1000);
+        const m = (t: number) => { const n = t < 0; t = Math.abs(Math.round(t)); return (n ? "+" : "") + Math.floor(t / 60) + ":" + String(t % 60).padStart(2, "0"); };
+        const pct = Math.max(0, Math.min(100, (1 - l / Math.max(1, b.len)) * 100)), over = l < 0;
+        put("brkOv", o, `<div style="color:var(--accent);font:700 4vh system-ui;letter-spacing:.14em;text-transform:uppercase">⏸ ${esc(b.label)}</div>
+          <div style="font:800 28vh/1 ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;color:${over ? "#ff453a" : "#fff"}">${m(l)}</div>${over ? '<div style="color:#ff453a;font:600 3vh system-ui">over</div>' : ""}
+          <div style="width:60vw;height:1.2vh;border-radius:1vh;background:#222;overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--accent)"></div></div>
+          ${b.note ? `<div style="font:500 4vh system-ui;color:#eee">${esc(b.note)}</div>` : ""}
+          <div style="font:500 3vh system-ui;color:#aaa">${b.next ? `Next: <b style="color:#fff;font-family:var(--title,inherit)">${esc(b.next.name)}</b> · ${esc(b.next.bpm)} BPM${b.next.tun ? " · " + esc(b.next.tun) : ""} · ${b.auto && l > 0 ? "starts automatically" : "when ready"}` : "The end of the set"}</div>`);
+      }
+    } }
   // 9c: the band screens use the app's title font for song names (their own look otherwise)
   { const tf = (st as any).tf as string | undefined; if (tf && document.documentElement.dataset.tf !== tf) { document.documentElement.dataset.tf = tf; document.documentElement.style.setProperty("--title", `"${tf}", -apple-system, sans-serif`); } }
   // 9c: the show is playing on the host computer's own outputs: a small red chip on every screen
@@ -202,7 +218,7 @@ function frame() {
         const also = cfg.also ? fieldOf(u.songId, cfg.also) : "";
         h = `<div class="cap">${esc(fname(cfg.field))} → ${esc(u.value)}${also ? " · " + esc(also) : ""}</div>${(() => { const txt = u.inSec === null ? "after " + u.after : L.fmtTime(u.inSec); return `<div class="big" style="font-size:${fit(u.inSec === null ? txt : "00:00", r.width - 20, r.height - 60, 1, u.inSec === null ? 72 : 400)}px">${esc(txt)}</div>`; })()}<div class="sub">for “${esc(u.songName)}”</div><div class="bar"><i style="width:${(u.progress * 100).toFixed(1)}%"></i></div>`; break; }
       case "setlist": { if (!show) break; const u = cfg.field ? L.untilNextChange(show, st.idx, 0, cfg.field) : null;
-        h = `<div class="list">${show.setlist.order.map((o: any, i: number) => { const s = show.songs[o.id]; if (!s) return ""; return `<div class="${i === st.idx ? "cur" : ""} ${u && u.index === i ? "chg" : ""}"><span>${i + 1}. ${esc(s.name)}</span><span>${cfg.field ? esc(fieldOf(o.id, cfg.field)) : L.fmtTime(s.len)}</span></div>`; }).join("")}</div>`; box.style.justifyContent = "flex-start"; break; }
+        h = `<div class="list">${show.setlist.order.map((o: any, i: number) => { const s = show.songs[o.id]; if (!s) return ""; return `<div class="${i === st.idx ? "cur" : ""} ${u && u.index === i ? "chg" : ""}"><span>${i + 1}. ${esc(s.name)}</span><span>${cfg.field ? esc(fieldOf(o.id, cfg.field)) : L.fmtTime(s.len)}</span></div>` + (o.brk || []).map((b: any) => `<div style="opacity:.75;font-style:italic"><span>⏸ ${esc(b.label)}</span><span>${L.fmtTime(b.len)}</span></div>`).join(""); }).join("")}</div>`; box.style.justifyContent = "flex-start"; break; }
       case "notes": { const role = cfg.role || "drums", t = sec && sec.notes ? sec.notes[role] || "" : ""; h = `<div class="cap">${esc(sec ? sec.name : "")} · ${esc(role)}</div><div class="big" style="white-space:normal;font-size:${fit(t || "–", (r.width - 20) * 3, r.height - 20, 3, 48)}px">${esc(t || "–")}</div>`; break; }
       case "cueFeed": { const c = song ? [...song.cues].reverse().find((x: any) => x.t <= pos && pos - x.t < 4) : null; h = big(c && st.playing ? c.text : "", "Cue"); break; }
       case "patch": { const l = song && cfg.track ? song.patches[cfg.track] || [] : []; const p = [...l].reverse().find((x: any) => x.t <= pos + 1e-3) || l[0]; h = big(p ? p.name : "–", cfg.track || "Patch"); break; }

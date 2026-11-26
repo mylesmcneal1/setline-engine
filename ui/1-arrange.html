@@ -1147,6 +1147,7 @@
 <script src="modeler.js"></script>
 <link rel="stylesheet" href="show9.css">
 <link rel="stylesheet" href="look9.css">
+<link rel="stylesheet" href="breaks9.css">
 </head>
 <body>
 
@@ -3443,7 +3444,8 @@ function setlistPdf(L,opt){ L=L||curSetObj(); opt=opt||PRINT_OPT; const rows=set
   const XL=opt.size==='XL', nameSz=XL?34:26, infoSz=XL?17:13, numW=XL?52:40, PW=612, PH=792, M=36, gap=24, cols=Math.max(1,Math.min(2,+opt.cols||1)), colW=(PW-2*M-(cols-1)*gap)/cols;
   // Helvetica-Bold widths are roughly 0.6 em on average: long names get smaller to fit their column
   const fit=(t,sz,w)=>{ let z=sz; while(z>10&&String(t).length*z*0.58>w) z-=1; return z; };
-  const blocks=rows.map(r=>{ const info=[r.ver,r.key?'Key '+r.key:'',r.bpm+' BPM',r.len].filter(Boolean).join('  ·  '), fl=r.fields.map(([k,v])=>k+': '+v).join('  ·  ');
+  const blocks=rows.map(r=>{ if(r.brk){ const info='— '+r.label+'  '+r.len+(r.note?'  ·  '+r.note:''); return {r,info,fl:'',h:infoSz*1.7}; } // 9d: a break: one thin row
+    const info=[r.ver,r.key?'Key '+r.key:'',r.bpm+' BPM',r.len].filter(Boolean).join('  ·  '), fl=r.fields.map(([k,v])=>k+': '+v).join('  ·  ');
     const h=nameSz*1.15+infoSz*1.35+(fl?infoSz*1.3:0)+(r.then?infoSz*1.3:0)+(XL?14:10); return {r,info,fl,h}; });
   // two columns on one page: split the songs evenly between them (else fill a column, then the next)
   const avail=PH-M-60-M, totalH=blocks.reduce((a,b)=>a+b.h,0), half=cols===2&&totalH<=2*avail?totalH/2:Infinity;
@@ -3452,11 +3454,12 @@ function setlistPdf(L,opt){ L=L||curSetObj(); opt=opt||PRINT_OPT; const rows=set
   if(page.length||!pages.length) pages.push(page);
   const objs=[], add=o=>{ objs.push(o); return objs.length; };
   const F1=add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>'), F2=add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>');
+  const nSongs=rows.filter(r=>!r.brk).length, nBrk=rows.length-nSongs;
   const pagesId=objs.length+pages.length*2+1, kids=[], total=fmt(rows.reduce((a,r)=>a+(+r.len.split(':')[0])*60+(+r.len.split(':')[1]||0),0));
   const T=(f,sz,x,yy,t)=>`BT /${f} ${sz} Tf ${x.toFixed(1)} ${yy.toFixed(1)} Td (${enc(t)}) Tj ET\n`;
-  pages.forEach((pg,pi)=>{ let c=T('F2',22,M,PH-M-22,L.name)+T('F1',11,M,PH-M-40,new Date().toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'})+'   ·   '+rows.length+' songs   ·   '+total+(L.finishBy?'   ·   finish by '+L.finishBy:'')+(rows.some(r=>String(r.bpm).endsWith('*'))?'   ·   * tempo changes':'')+(pages.length>1?'   ·   page '+(pi+1)+' of '+pages.length:''));
+  pages.forEach((pg,pi)=>{ let c=T('F2',22,M,PH-M-22,L.name)+T('F1',11,M,PH-M-40,new Date().toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'})+'   ·   '+nSongs+' songs'+(nBrk?'   ·   '+nBrk+' break'+(nBrk===1?'':'s'):'')+'   ·   '+total+(L.finishBy?'   ·   finish by '+L.finishBy:'')+(rows.some(r=>String(r.bpm).endsWith('*'))?'   ·   * tempo changes':'')+(pages.length>1?'   ·   page '+(pi+1)+' of '+pages.length:''));
     c+=`0 0 0 RG 1.2 w ${M} ${PH-M-50} m ${PW-M} ${PH-M-50} l S\n`;
-    pg.forEach(b=>{ const x=M+b.col*(colW+gap); let yy=b.y-nameSz; const nz=fit(b.r.name,nameSz,colW-numW);
+    pg.forEach(b=>{ const x=M+b.col*(colW+gap); if(b.r.brk){ c+=T('F1',infoSz,x+numW,b.y-infoSz*1.15,b.info); return; } let yy=b.y-nameSz; const nz=fit(b.r.name,nameSz,colW-numW);
       c+=T('F2',nameSz*0.8,x,yy+nameSz*0.1,String(b.r.n))+T('F2',nz,x+numW,yy,b.r.name); yy-=infoSz*1.35;
       c+=T('F1',infoSz,x+numW,yy,b.info);
       if(b.fl){ yy-=infoSz*1.3; c+=T('F2',infoSz,x+numW,yy,b.fl); }
@@ -3981,6 +3984,7 @@ function importMerge(pkg,dec){ snap(); syncSet();
   L.id='L'+setSeq++; L.name=uniqSetName(L.name||'Imported'); L.order=(L.order||[]).map(id=>idMap[id]||id).filter(id=>songs.some(s=>s.id===id));
   const remap=o=>{ const r={}; Object.entries(o||{}).forEach(([k,v])=>{ if(idMap[k]) r[idMap[k]]=v; }); return r; };
   L.vers=remap(L.vers); L.after=remap(L.after);
+  if(L.breaks) L.breaks=L.breaks.map(b=>({...b,after:b.after?(idMap[b.after]||b.after):''})); // 9d: breaks travel with the setlist (export / import, the backup rig)
   Object.entries(L.vers).forEach(([sid,vid])=>{ const s=songs.find(q=>q.id===sid); if(!s||!versOf(s).some(v=>v.id===vid)) delete L.vers[sid]; });
   setlists.push(L); curSet=L.id; setOrder=L.order;
   const addById=(dst,src,key='id')=>{ (src||[]).forEach(x=>{ if(x&&!dst.some(y=>y[key]===x[key])) dst.push(x); }); };
@@ -4062,7 +4066,7 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
   setSessionName(n){ $('crumbAll').textContent=n||'Library'; },
   routeLog:()=>ROUTE_LOG,
   // 6e: versions and the setlist flow (src/pages/arrange.ts)
-  ver:{ play:s=>playVer(s), cur:s=>curVer(s), payload:(s,v)=>verPayload(s,v), map:(s,v)=>verMap(s,v), fields:(s,v)=>verFields(s,v), inVer:(s,t,v)=>trackInVer(s,t,v), nextOf:s=>nextInSet(s), after:s=>afterOf(s) },
+  ver:{ play:s=>playVer(s), cur:s=>curVer(s), payload:(s,v)=>verPayload(s,v), map:(s,v)=>verMap(s,v), fields:(s,v)=>verFields(s,v), inVer:(s,t,v)=>trackInVer(s,t,v), nextOf:s=>(window.SLBreaks&&SLBreaks.after(s.id))?null:nextInSet(s), after:s=>afterOf(s) }, // 9d: a break after s: nothing is queued (no segue into the next song)
   nextState(m){ NEXTST=m; if(perfOn) renderPerform(); },
   // the song after the one that ended (Stop) or segued into: selected, at its start
   readySong(id,keepPlaying){ const s=songs.find(x=>x.id===id); if(!s) return; playId=id; pos=0; open.add(id); if(focusId) focusId=id; loopExitId=null; jumpQueuedSec=null;
@@ -4662,5 +4666,6 @@ try{ const q=new URLSearchParams(location.search).get('settings'); if(q) setTime
 <script src="show9.js"></script>
 <script src="look9.js"></script>
 <script src="menus9.js"></script>
+<script src="breaks9.js"></script>
 </body>
 </html>

@@ -467,6 +467,7 @@ void AudioHost::refreshClock()
         if ((clockByDefault(nm) && ! off.contains(nm)) || on.contains(nm)) cm |= 1u << i;
         if (tr.contains(nm)) tm |= 1u << i;
     }
+    if (clockHeld) cm = 0; // 9d: a silent break: no clock until the next song starts
     eng.setMidiClock(cm, tm, n);
 }
 

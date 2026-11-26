@@ -393,6 +393,7 @@ Bridge::Options Bridge::addTo(Options o)
         if (! u.startsWith("https://github.com/mylesmcneal1/setline-engine")) return juce::var(false);
         return juce::var(juce::URL(u).launchInDefaultBrowser());
     });
+    o = add(o, "clockHold", [this](const juce::var& a) { audio.holdClock((bool) a["on"]); return juce::var(true); }); // 9d: a silent break stops the MIDI clock
     o = add(o, "setMenus", [this](const juce::var& a) { if (onMenus) onMenus(a); return juce::var(true); }); // 9c
     o = add(o, "windowCmd", [](const juce::var& a) { // 9c: Window › Minimise / Full screen
         const auto what = a["what"].toString();

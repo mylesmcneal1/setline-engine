@@ -116,8 +116,11 @@ export function untilNextChange(show, curIndex, pos, field) {
   // the next songs: at their start, or inside them. A Stop or Auto-next anywhere before makes the time unknowable:
   // "after <the last such song>" (from then on the time is exact).
   let t = Math.max(0, songOf(curIndex).len - pos), after = null;
+  // 9d: the breaks after a song add their length; one that waits for Play makes the time unknowable
+  const brk = (i) => { let s = 0; for (const b of order[i].brk || []) { s += +b.len || 0; if (b.wait) after = songOf(i).name; } return s; };
   const a0 = order[curIndex].after || { mode: "stop" };
   if (a0.mode === "stop" || a0.mode === "auto") after = songOf(curIndex).name;
+  t += brk(curIndex);
   // progress since the last change: from the first song with this value (going back) to the change
   const progressTo = (endT) => { let s0 = curIndex; if (!last) while (s0 > 0 && val(s0 - 1) === here && !inner(s0 - 1).length) s0--;
     let span = 0, done = 0; for (let k = s0; k < curIndex; k++) { span += songOf(k).len; done += songOf(k).len; }
@@ -130,6 +133,7 @@ export function untilNextChange(show, curIndex, pos, field) {
     t += songOf(j).len; between += songOf(j).len;
     const a = order[j].after || { mode: "stop" };
     if (a.mode === "stop" || a.mode === "auto") after = songOf(j).name;
+    const bl = brk(j); t += bl; between += bl;
     // the value at the end of song j (its last inner change) carries on
     const ins = inner(j); if (ins.length && ins[ins.length - 1].v !== here) return res(j, t, ins[ins.length - 1].v, after, progressTo(between));
   }
