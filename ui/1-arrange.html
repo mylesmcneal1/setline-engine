@@ -1149,6 +1149,7 @@
 <link rel="stylesheet" href="look9.css">
 <link rel="stylesheet" href="breaks9.css">
 <link rel="stylesheet" href="time9e.css">
+<link rel="stylesheet" href="fix10a.css">
 </head>
 <body>
 
@@ -1750,7 +1751,7 @@ function renderSetlist(){
     const s=songs.find(x=>x.id===id);
     // a song with 2+ versions is a stack of cards: the front card says which version this set plays (‹ › or the wheel flips it)
     const vs=versOf(s), ev=entryVer(s), many=vs.length>1, vi=vs.indexOf(ev), xtra=!ev.custom&&verParts(s,ev).some(p=>p.extra);
-    el.insertAdjacentHTML('beforeend',`<div class="song ${s.id===selId?'on':''} ${many?'stk':''}" draggable="true" data-id="${s.id}"><span class="n">${i+1}</span><span class="sbar" style="background:${s.col||'#5a5a62'}"></span><span class="t">${esc(s.name)}${many?`<span class="vn">${esc(ev.name)}${xtra?' ◆':''} · ${fmt(verLen(s,ev))}</span><span class="dots">${vs.map((_,j)=>`<i class="${j===vi?'on':''}"></i>`).join('')}</span>`:''}</span>${many?`<span class="var"><button class="vprev" title="Previous version">‹</button><button class="vnext" title="Next version">›</button></span>`:`<span class="d">${fmt(verLen(s,ev))}</span>`}<button class="rmx" data-id="${s.id}" title="Remove from this setlist">×</button></div>`);
+    el.insertAdjacentHTML('beforeend',`<div class="song ${s.id===selId?'on':''} ${many?'stk':''}" data-id="${s.id}"><span class="n">${i+1}</span><span class="sbar" style="background:${s.col||'#5a5a62'}"></span><span class="t">${esc(s.name)}${many?`<span class="vn">${esc(ev.name)}${xtra?' ◆':''} · ${fmt(verLen(s,ev))}</span><span class="dots">${vs.map((_,j)=>`<i class="${j===vi?'on':''}"></i>`).join('')}</span>`:''}</span>${many?`<span class="var"><button class="vprev" title="Previous version">‹</button><button class="vnext" title="Next version">›</button></span>`:`<span class="d">${fmt(verLen(s,ev))}</span>`}<button class="rmx" data-id="${s.id}" title="Remove from this setlist">×</button></div>`);
     const al=afterLabel(afterOf(s)); if(al&&i<setOrder.length-1) el.insertAdjacentHTML('beforeend',`<div class="tr ${afterOf(s).mode}" data-id="${s.id}" title="After this song (right-click the song to change)">${al}</div>`);
   });
   el.querySelectorAll('.song.stk').forEach(row=>{ const s=songs.find(x=>x.id===row.dataset.id); const flip=d=>{ flipVer(s,d); row.classList.remove('fl','fr'); };
@@ -1761,7 +1762,7 @@ function renderSetlist(){
   const pool=libSongs();
   $('libCount').textContent=songs.length+' song'+(songs.length===1?'':'s');
   renderLibFilter();
-  $('pool').innerHTML=pool.map(s=>{ const inSet=setOrder.includes(s.id), nv=versOf(s).length; return `<div class="ps ${inSet?'inset':''}" draggable="true" data-id="${s.id}" title="${inSet?'In this setlist':'Drag into the set, or double-click'}"><span class="sbar" style="background:${s.col||'#5a5a62'}"></span><span>${inSet?'<i class="indot"></i>':''}${esc(s.name)}${nv>1?`<em class="vbadge" title="${nv} versions">${nv}</em>`:''}</span><span>${fmt(s.audio)}</span>${inSet?'':`<button class="addx" data-id="${s.id}" title="Add to the end of this setlist">＋</button>`}</div>`; }).join('')
+  $('pool').innerHTML=pool.map(s=>{ const inSet=setOrder.includes(s.id), nv=versOf(s).length; return `<div class="ps ${inSet?'inset':''}" data-id="${s.id}" title="${inSet?'In this setlist':'Drag into the set, or double-click'}"><span class="sbar" style="background:${s.col||'#5a5a62'}"></span><span>${inSet?'<i class="indot"></i>':''}${esc(s.name)}${nv>1?`<em class="vbadge" title="${nv} versions">${nv}</em>`:''}</span><span>${fmt(s.audio)}</span>${inSet?'':`<button class="addx" data-id="${s.id}" title="Add to the end of this setlist">＋</button>`}</div>`; }).join('')
     ||`<div class="faint" style="font-size:11.5px;padding:4px 8px 8px">${songs.length?'No song matches.':'No songs yet: ＋ Song, or drop audio files here.'}</div>`;
   el.querySelectorAll('.rmx').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const id=b.dataset.id, i=setOrder.indexOf(id); setOrder.splice(i,1); refresh(); toast(`Removed “${songs.find(x=>x.id===id).name}” from ${curSetObj().name}`,()=>{ setOrder.splice(i,0,id); refresh(); }); });
   $('pool').querySelectorAll('.addx').forEach(b=>b.onclick=e=>{ e.stopPropagation(); setOrder.push(b.dataset.id); refresh(); });
@@ -1771,20 +1772,11 @@ function renderSetlist(){
   el.querySelectorAll('.song').forEach(row=>{
     row.onclick=e=>{ if(e.target.closest('.rmx,.xs,.var')) return; if(songRowClick(e,row.dataset.id,'set',[...setOrder])) return; select(row.dataset.id,true); };
     row.oncontextmenu=e=>{ e.preventDefault(); songMenu(e,row.dataset.id,'set'); };
-    row.ondragstart=()=>{dragId=row.dataset.id; dragFrom='set'; row.classList.add('dragging');};
-    row.ondragend=()=>row.classList.remove('dragging');
-    row.ondragover=e=>{e.preventDefault(); row.classList.add('over');};
-    row.ondragleave=()=>row.classList.remove('over');
-    row.ondrop=e=>{e.preventDefault(); e.stopPropagation(); const to=setOrder.indexOf(row.dataset.id); setOrder=setOrder.filter(x=>x!==dragId); setOrder.splice(to,0,dragId); refresh();};
   });
   el.querySelectorAll('.tr').forEach(tr=>tr.onclick=e=>{ const s=songs.find(x=>x.id===tr.dataset.id); afterMenu(e,s); });
-  document.querySelectorAll('#pool .ps').forEach(p=>{ p.ondragstart=()=>{dragId=p.dataset.id; dragFrom='pool';}; p.ondblclick=()=>{ if(!setOrder.includes(p.dataset.id)){ setOrder.push(p.dataset.id); refresh(); } }; });
+  document.querySelectorAll('#pool .ps').forEach(p=>{ p.ondblclick=()=>{ if(!setOrder.includes(p.dataset.id)){ setOrder.push(p.dataset.id); refresh(); } }; });
 }
-$('songs').ondragover=e=>{e.preventDefault(); $('songs').classList.add('dropzone');};
-$('songs').ondragleave=()=>$('songs').classList.remove('dropzone');
-$('songs').ondrop=e=>{e.preventDefault(); $('songs').classList.remove('dropzone'); if(dragId&&!setOrder.includes(dragId)){ setOrder.push(dragId); refresh(); }};
-$('libSec').ondragover=e=>e.preventDefault();
-$('libSec').ondrop=e=>{e.preventDefault(); if(dragFrom==='set'){ setOrder=setOrder.filter(x=>x!==dragId); refresh(); }};
+// 10a: dragging songs into and within the setlist: SLDrag (fix10a.js)
 // The Library list: search (name, key), sort (A–Z, recently added, length), filter by a song field value (6g fields)
 let LIBQ='', LIBSORT='az', LIBFILT='';
 let FIELDS=[]; // song field definitions (6g): [{id, name, type, options}]; values in song.fields
@@ -2611,7 +2603,7 @@ function addTrack(s,k){ if(!s) return;
   if(k==='cues'){ if(s.tracks.includes('Cues')) return; s.tracks.splice(s.tracks.includes('Click')?1:0,0,'Cues'); s.cues=s.cues||[]; buildBars(s); refresh(); toast('Cues track added. Double-click it to place a cue.'); return; }
   if(!s.tracks.includes('Click')){ s.tracks.unshift('Click'); s.ck=s.ck||[]; buildBars(s); refresh(); toast('Click track added. Double-click it to add a click clip.'); return; }
   let n=2, name='Click ('+n+')'; while(s.tracks.includes(name)) name='Click ('+(++n)+')'; const last=Math.max(...clickTracks(s).map(x=>s.tracks.indexOf(x)));
-  s.tracks.splice(last+1,0,name); (s.troles||(s.troles={}))[name]='Click'; regRoles(s); ckOf(s,name); buildBars(s); refresh();
+  s.tracks.splice(last+1,0,name); if(window.SL10a) SL10a.aboveMidi(s,name); (s.troles||(s.troles={}))[name]='Click'; regRoles(s); ckOf(s,name); buildBars(s); refresh();
   toast(`“${name}” added with its own clips, sound, level and output. Double-click its name to rename it (e.g. Click (drums)).`); }
 function renameTrackBox(s,t,el){ if(['Click','Cues'].includes(t)){ toast(`“${t}” keeps its name (it decides the track type)`); return; } const r=el.getBoundingClientRect();
   floatInput(r.left,r.top-2,Math.max(140,r.width),24,t,v=>{ if(!v||v===t) return; if(s.tracks.includes(v)){ toast(`“${v}” is already a track in ${s.name}`); return; } snap(); renameTrack(s,t,v); if(trackOpen&&trackOpen.song===s.id&&trackOpen.track===t) trackOpen.track=v; refresh(); }); }
@@ -3073,7 +3065,7 @@ function renderInsp0(){
   else { normVer(s,V); const secs=srcSecs(s);
     vh=rcard('Sections in this version',`<div id="vSecs">${V.order.map((o,i)=>{ const x=o.k==='sec'?secs.find(q=>q.id===o.id):V.extras.find(q=>q.id===o.id); if(!x) return '';
       const col=o.k==='x'?VX_COL:SEC_C[x.type]||'#7d8696';
-      return `<div class="secl ${o.on?'':'out'}" draggable="true" data-i="${i}"><span class="grip" title="Drag to reorder">⋮⋮</span><span class="sq" style="background:${col}"></span><span class="sn">${esc(x.name)}${o.k==='x'?' <small>· this version only</small>':''}</span><button class="ck ${o.on?'':'off'}" data-i="${i}" title="${o.on?'In this version (click to drop it)':'Left out (click to put it back)'}">✓</button></div>`; }).join('')}</div>
+      return `<div class="secl ${o.on?'':'out'}" data-drag10 data-i="${i}"><span class="grip" title="Drag to reorder">⋮⋮</span><span class="sq" style="background:${col}"></span><span class="sn">${esc(x.name)}${o.k==='x'?' <small>· this version only</small>':''}</span><button class="ck ${o.on?'':'off'}" data-i="${i}" title="${o.on?'In this version (click to drop it)':'Left out (click to put it back)'}">✓</button></div>`; }).join('')}</div>
       <p class="rnote">Untick to drop a section, drag to reorder. Same stems, no copies.</p>${cuesOf(s).some(c=>cueSecType(c.text))?`<div class="racts"><button class="btn line" id="vSecCues" title="Each section cue (Verse, Chorus…) starts a section; count-ins don’t">Make sections from cues</button></div>`:''}`); }
   vh+=rcard('Version',rrow('Name',`<input id="vName" value="${esc(V.name)}" spellcheck="false">`)
     +rrow('Default in new sets',tog('vDef',!!V.def,'The version a song plays when it’s added to a setlist'))
@@ -3197,7 +3189,7 @@ function renderDrawer(){
         <div class="saveas" id="saveBox"><input id="saveName" placeholder="Preset name" value="${esc(autoLabel(sel))}"><button class="btn pri" id="saveOk">Save</button></div>`;
     } else {
       const list=profPresets().filter(p=>p.name.toLowerCase().includes(ed.q.toLowerCase()));
-      const item=p=>`<div class="pi ${p.built?'built':''}" draggable="true" data-pid="${p.id}"><span class="pn"><i></i>${esc(p.name)}</span><span class="pr">${rawOf(p.p)}</span></div>`;
+      const item=p=>`<div class="pi ${p.built?'built':''}" data-drag10 data-pid="${p.id}"><span class="pn"><i></i>${esc(p.name)}</span><span class="pr">${rawOf(p.p)}</span></div>`;
       h+=`<input class="search" id="pq" placeholder="Search presets" value="${esc(ed.q)}">
         <div class="kv" style="margin:0 0 10px"><label>Add at</label><select id="aAt"><option value="play">Playhead</option>${s.secPos.map(p=>`<option value="${p.start}">${esc(p.name)} · ${p.start}</option>`).join('')}</select></div>
         <h4>Saved</h4><div class="pal">${list.filter(p=>!p.built).map(item).join('')||'<div class="faint" style="font-size:12px;padding:4px 8px">None yet. Select an event → Save as preset</div>'}</div>
@@ -3331,7 +3323,7 @@ function addNative(list){ list.forEach(x=>{ if(picked.some(p=>p.path===x.path)) 
 // Adds imported stems to song s as audio tracks. list: [{role, info}], refs: {file path: session reference}.
 function attachStems(s,list,refs,copy){ s.files=s.files||{}; s.troles=s.troles||{};
   list.forEach(x=>{ const base=x.info.name.replace(/\.[^.]+$/,'').trim()||'Audio'; let name=x.role&&x.role!=='__skip'&&!s.tracks.includes(x.role)?x.role:base; const b0=name; let n=2; while(s.tracks.includes(name)) name=b0+' '+(n++);
-    s.tracks.push(name); if(name!==x.role&&x.role) s.troles[name]=x.role;
+    s.tracks.push(name); if(window.SL10a) SL10a.aboveMidi(s,name); if(name!==x.role&&x.role) s.troles[name]=x.role;
     s.files[name]={path:refs[x.info.path]||x.info.path,ch:x.info.channels,rate:x.info.rate,frames:x.info.frames,len:x.info.seconds,fmt:x.info.format,copy:!!copy};
     s.audio=Math.max(s.audio||0,x.info.seconds); });
   if(!Object.keys(s.troles).length) delete s.troles; regRoles(s); }
@@ -3546,6 +3538,7 @@ function ableSong(src){ const id=freshSongId(), so={id,name:src.name,key:'—',c
       if(Math.abs(t.gainDb||0)>0.01) so.gain[name]=Math.max(-60,+(+t.gainDb).toFixed(2)); }
     else { so.midiCfg[name]={port:t.midi.port||'',ch:t.midi.ch||1,early:'0',...(t.profile?{dev:t.profile}:{})}; so.midi[name]=(t.midi.events||[]).map(e=>({id:evId++,...e})); }
     rows.push({t,name}); });
+  if(window.SL10a) SL10a.midiLast(so); // 10a: Live's order, MIDI tracks under the audio, click and cue tracks
   normSecs(so); buildBars(so);
   // tracks that reach Live's outputs through the same return track (bus) share an output, across the whole import
   so.outs={}; rows.forEach(({t,name})=>{ if(t.kind!=='audio'||!t.bus) return;
@@ -3903,7 +3896,7 @@ function renderBand(){ const el=$('bandV'); if(!el||!bandOn) return; const sc=cu
         return `<div class="bw ${w.id===BWID?'on':''} ${d.cmd?'ctl':''}" data-w="${w.id}" style="left:${w.x/12*100}%;top:${w.y/9*100}%;width:${w.w/12*100}%;height:${w.h/9*100}%;${w.cfg&&w.cfg.col?`--wc:${w.cfg.col}`:''}"><span>${esc((w.cfg&&w.cfg.label)||d.name)}</span><small>${esc(bandPreview(w))}</small><i class="brs" data-rs="${w.id}"></i></div>`; }).join('')}</div></div>
       <p class="faint" style="font-size:11px;margin-top:8px">Drag widgets in from the right, move and resize them on the grid; Delete removes the selected one. Changes show on the device at once. ${list.some(w=>(SLBand.WIDGETS[w.type]||{}).cmd)?'This screen can do what its buttons do, nothing else.':'No buttons: this screen can only watch.'}</p></div>`;
     const w=list.find(x=>x.id===BWID);
-    right=w?bandWidgetSettings(sc,w):`<div class="br"><h3>Widgets</h3>${['Info','Communication','Controls'].map(g=>`<div class="bwg"><div class="faint" style="font-size:11px;margin:10px 0 4px">${g}</div>${Object.entries(SLBand.WIDGETS).filter(([,d])=>d.group===g).map(([k,d])=>`<div class="bwl" draggable="true" data-add="${k}">${esc(d.name)}</div>`).join('')}</div>`).join('')}</div>`; }
+    right=w?bandWidgetSettings(sc,w):`<div class="br"><h3>Widgets</h3>${['Info','Communication','Controls'].map(g=>`<div class="bwg"><div class="faint" style="font-size:11px;margin:10px 0 4px">${g}</div>${Object.entries(SLBand.WIDGETS).filter(([,d])=>d.group===g).map(([k,d])=>`<div class="bwl" data-drag10 data-add="${k}">${esc(d.name)}</div>`).join('')}</div>`).join('')}</div>`; }
   else right=`<div class="br dim" title="Add a screen first"><h3>Widgets</h3>${['Info','Communication','Controls'].map(g=>`<div class="bwg"><div class="faint" style="font-size:11px;margin:10px 0 4px">${g}</div>${Object.entries((window.SLBand&&SLBand.WIDGETS)||{}).filter(([,d])=>d.group===g).map(([k,d])=>`<div class="bwl">${esc(d.name)}</div>`).join('')}</div>`).join('')}</div>`;
   el.innerHTML=left+mid+right; wireBand(); }
 function bandPreview(w){ const c=w.cfg||{}, f=FIELDS.find(x=>x.id===c.field);
@@ -4145,7 +4138,7 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
   // phase 6b: click tracks (tests)
   ck:{ of:(s,t)=>ckOf(s,t), cfg:(s,t)=>clickCfg(s,t), repeat:(s,t,r,m,n)=>repeatClip(s,t,r,m,n), box:(s,t,r)=>repeatBox(s,t,r), dup:()=>doDup(), pick:(s,t,r)=>setPick({kind:'ck',song:s.id,track:t,id:r.id}), copy:()=>doCopy(), pasteAt:(s,t,at)=>pasteAt(s,t,at), openPanel:(s,t)=>openClickPanel(s,t) },
   // phase 6b: the grid (tests)
-  grid:{ snapT:(s,t,f)=>snapT(s,t,f), barGrid:(s,b)=>barGrid(s,b), name:s=>gridName(s), barBeatAt:(s,t)=>barBeatAt(s,t), evTime:(s,e)=>evTime(s,e), nearestBeat:(s,t)=>nearestBeat(s,t), set:v=>{ GRID=v; renderFolders(); }, snap:b=>{ SNAP=b; $("snapB").classList.toggle("on",b); }, zoom:z=>setZoom(z), get pxs(){ return PXS; } },
+  grid:{ snapT:(s,t,f)=>snapT(s,t,f), barGrid:(s,b)=>barGrid(s,b), name:s=>gridName(s), barBeatAt:(s,t)=>barBeatAt(s,t), evTime:(s,e)=>evTime(s,e), nearestBeat:(s,t)=>nearestBeat(s,t), set:v=>{ GRID=v; renderFolders(); }, snap:b=>{ SNAP=b; $("snapB").classList.toggle("on",b); }, zoom:z=>window.SL9&&SL9.zoomNow?SL9.zoomNow(z):setZoom(z), get pxs(){ return PXS; } },
   cueCfg:s=>cueCfg(s), cueVoiceAll:()=>CUEV, pron:()=>PRON, nudge:id=>+(VNUDGE[id||'']||0), setVoiceModel:st=>{ const was=VMODEL.state; if(st&&Array.isArray(st.voices)){ KVOICES=st.voices; st={...st}; delete st.voices; } VMODEL={...VMODEL,...st}; if(settingsOpen()&&SET_TAB==='voices'){ const k=$('stKstate'); if(k&&was===VMODEL.state&&VMODEL.state==='downloading') k.textContent=`Downloading… ${VMODEL.total?Math.floor(100*VMODEL.done/VMODEL.total):0}%`; else renderSettings(); }
     if(VMODEL.state==='ready'&&cuevFresh&&!(CUEV.voice||CUEV.name)){ CUEV={...KOKORO_DEFAULT,speed:CUEV.speed||1}; cuevFresh=false; renderFolders(); }
     if(!cueOpen) return; if(was==='downloading'&&VMODEL.state==='downloading'&&$('cvDlBar')){ const pct=VMODEL.total?Math.floor(100*VMODEL.done/VMODEL.total):0; $('cvDlBar').style.width=pct+'%'; $('cvDlText').textContent=`Downloading better voices… ${pct}% (${Math.round(VMODEL.done/1e6)} of ${KOKORO_MB()} MB)`; return; }
@@ -4697,5 +4690,6 @@ try{ const q=new URLSearchParams(location.search).get('settings'); if(q) setTime
 <script src="menus9.js"></script>
 <script src="breaks9.js"></script>
 <script src="time9e.js"></script>
+<script src="fix10a.js"></script>
 </body>
 </html>

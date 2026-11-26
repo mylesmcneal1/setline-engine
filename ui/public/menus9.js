@@ -73,6 +73,8 @@
     ];
     const vers = s && typeof versOf === "function" ? versOf(s) : [];
     const songM = [
+      it("renameSong", "Rename song…", () => { const x = song(); if (x) renameSong(x.id); }, { dis: !s }),
+      it("sortMidi", "Sort tracks: MIDI to the bottom", () => window.SL10a && SL10a.sortMidi(typeof songSel !== "undefined" && songSel.size ? [...songSel] : (song() ? [song().id] : [])), { dis: !s && !(typeof songSel !== "undefined" && songSel.size) }), sep(),
       it("addTrack", "Add track…", () => { const b = $("newTrackB"); if (b) b.click(); }, { dis: !s }),
       it("addSection", "Add section", () => { const x = song(); if (x) addSecAt(x, playId === x.id ? barAtTime(x, pos) : 1); }, { dis: !s }),
       it("addMeter", "Add time signature…", () => { const x = song(); if (x && window.SLMeter) SLMeter.open(x, playId === x.id ? barAtTime(x, pos) : 1, null); }, { dis: !s }),

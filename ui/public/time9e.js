@@ -197,7 +197,7 @@
     if (fitPrev && fitPrev.song === s.id) {
       const p = fitPrev; fitPrev = null; setCompact(p.compact, true);
       if (p.trkH) s.trkH = p.trkH; else delete s.trkH; if (p.trkHs) s.trkHs = p.trkHs; else delete s.trkHs;
-      if (window.SL9 && SL9.zoomTo) { preset(p.hx); PXS = p.pxs; refresh(); set(p.hx); } else refresh();
+      refresh(); if (window.SL9 && SL9.glideTo) SL9.glideTo(p.pxs, p.hx / p.pxs); // 10a: glides back
       sc.scrollTop = p.st; return;
     }
     fitPrev = { song: s.id, pxs: PXS, hx: HX, st: sc.scrollTop, trkH: s.trkH, trkHs: s.trkHs ? { ...s.trkHs } : null, compact: compact() };

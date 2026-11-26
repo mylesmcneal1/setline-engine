@@ -1,0 +1,24 @@
+/* set.Line 10a: pointer drags (ghost, landing lines), renaming in place */
+.card9, .r9h, #songs .song, #songs .brk9, #pool .ps, .row.trk > .lh, [data-drag10] { -webkit-user-select: none; user-select: none; }
+.row.trk > .lh { cursor: grab; }
+.row.trk > .lh :is(button, .hf, .ochip, .ms, .rsz9, .ctab) { cursor: default; }
+body.drag10, body.drag10 * { cursor: grabbing !important; -webkit-user-select: none !important; user-select: none !important; }
+.drag10src { opacity: .4; }
+.ghost10 {
+  position: fixed; z-index: 10000; pointer-events: none; transform: translate(12px, -50%);
+  padding: 5px 11px 5px 9px; border-radius: 7px; border-left: 3px solid var(--c, #ff9f0a);
+  background: #2a2c33; color: #fff; font-size: 12.5px; font-weight: 600; white-space: nowrap;
+  max-width: 260px; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 8px 24px rgba(0, 0, 0, .55);
+}
+.ghost10.no { opacity: .6; }
+.line10 {
+  position: fixed; z-index: 9999; pointer-events: none; height: 3px; border-radius: 2px;
+  background: #ff9f0a; box-shadow: 0 0 0 1px rgba(0, 0, 0, .35), 0 0 8px rgba(255, 159, 10, .55);
+}
+.line10.blue { background: #0a84ff; box-shadow: 0 0 0 1px rgba(0, 0, 0, .35), 0 0 8px rgba(10, 132, 255, .55); }
+.ren10 {
+  position: fixed; z-index: 10001; padding: 0 8px; border-radius: 6px; border: 1.5px solid var(--acc, #0a84ff);
+  background: #16181d; color: #fff; outline: none; box-shadow: 0 6px 20px rgba(0, 0, 0, .5);
+}
+/* the name can be edited: ✎ on hover */
+#hero .htitle h2:hover::after, .card9 .c9h b:hover::after, .row9 .r9n:hover::after { content: " ✎"; font-size: .7em; font-weight: 400; opacity: .5; }

@@ -180,15 +180,15 @@
       h += rcard("Preset", `<p class="rnote" style="margin-top:0">${cur ? "The preset from " + at1 + ". Drag one onto the lane's top bar to change preset mid-song." : "Pick a preset: it's sent at the start of the song."}</p>`
         + rrow("Setlist", `<select id="mQcSet">${Array.from({ length: 13 }, (_, k) => `<option value="${k}" ${k === sl ? "selected" : ""}>Setlist ${k}</option>`).join("")}</select>`)
         + rrow("Bank", `<select id="mQcBank">${Array.from({ length: 32 }, (_, k) => `<option value="${k + 1}" ${k + 1 === bank ? "selected" : ""}>Bank ${k + 1}</option>`).join("")}</select>`)
-        + `<div class="mbank">${[..."ABCDEFGH"].map((l, k) => { const n = (bank - 1) * 8 + k + 1, nm = info("qc", n).name; return `<button draggable="true" data-p="${n}" class="${cur && n === pn ? "on" : ""}" title="${bank}${l}${nm ? " · " + esc(nm) : ""} (drag onto the preset bar)">${bank}${l}</button>`; }).join("")}</div>`
+        + `<div class="mbank">${[..."ABCDEFGH"].map((l, k) => { const n = (bank - 1) * 8 + k + 1, nm = info("qc", n).name; return `<button data-drag10 data-p="${n}" class="${cur && n === pn ? "on" : ""}" title="${bank}${l}${nm ? " · " + esc(nm) : ""} (drag onto the preset bar)">${bank}${l}</button>`; }).join("")}</div>`
         + rrow("Name", `<input id="mPName" value="${esc(pi.name)}" placeholder="Name of ${M.qcName(pn)}" spellcheck="false">`));
     } else {
       const saved = Object.entries(LIB().axe).filter(([, v]) => v && v.name).map(([k, v]) => [+k, v.name]).sort((a, b) => a[0] - b[0]);
       h += rcard("Preset", `<div class="mbig"><input id="mAxeNum" type="number" min="0" max="1023" value="${pn}" title="Preset number (0-1023)"><div><b>${esc(pi.name || "Unnamed")}</b><small>Bank ${pn >> 7} · PC ${pn & 127} (sent automatically)</small></div></div>`
         + rrow("Name", `<input id="mPName" value="${esc(pi.name)}" placeholder="Name of preset ${pn}" spellcheck="false">`)
-        + `<input id="mAxeQ" type="search" placeholder="Search presets by number or name…" style="width:100%;margin-top:6px" spellcheck="false"><div class="mres" id="mAxeRes">${saved.slice(0, 8).map(([n, nm]) => `<button draggable="true" data-p="${n}"><b>${n}</b> ${esc(nm)}</button>`).join("")}</div>`);
+        + `<input id="mAxeQ" type="search" placeholder="Search presets by number or name…" style="width:100%;margin-top:6px" spellcheck="false"><div class="mres" id="mAxeRes">${saved.slice(0, 8).map(([n, nm]) => `<button data-drag10 data-p="${n}"><b>${n}</b> ${esc(nm)}</button>`).join("")}</div>`);
     }
-    h += rcard(`Scenes · colours match your ${d === "qc" ? "QC" : "Axe-Fx"}`, `<div class="mscenes">${pi.scenes.map((x, k) => `<button draggable="true" data-sc="${k}" style="--sc:${x.col}" title="Drag onto the lane · click to rename or recolour"><b>${x.label}</b><small>${esc(x.name || "")}</small></button>`).join("")}</div>
+    h += rcard(`Scenes · colours match your ${d === "qc" ? "QC" : "Axe-Fx"}`, `<div class="mscenes">${pi.scenes.map((x, k) => `<button data-drag10 data-sc="${k}" style="--sc:${x.col}" title="Drag onto the lane · click to rename or recolour"><b>${x.label}</b><small>${esc(x.name || "")}</small></button>`).join("")}</div>
       <p class="rnote">Click a scene to rename it or change its colour. Saved with preset ${M.presetLabel(d, pn)}, so every song using it shows the same names and colours.</p>`);
     if (typeof FIELDS !== "undefined" && FIELDS.length)
       h += rcard("Preset fields", FIELDS.map((f) => rrow(esc(f.name), fieldInput(f, pi.fields[f.id] ?? "", `data-pf="${f.id}" style="width:150px"`))).join("")
@@ -228,7 +228,7 @@
     if ($("mAxeNum")) $("mAxeNum").onchange = () => setPreset(Math.max(0, Math.min(1023, +$("mAxeNum").value || 0)), 0);
     if ($("mAxeQ")) $("mAxeQ").oninput = () => { const q = $("mAxeQ").value.trim().toLowerCase(), all = Object.entries(LIB().axe).filter(([, v]) => v && v.name).map(([k, v]) => [+k, v.name]);
       const hits = all.filter(([n, nm]) => !q || String(n).startsWith(q) || nm.toLowerCase().includes(q)).sort((a, b) => a[0] - b[0]).slice(0, 12);
-      $("mAxeRes").innerHTML = hits.map(([n, nm]) => `<button draggable="true" data-p="${n}"><b>${n}</b> ${esc(nm)}</button>`).join("") || (/^\d+$/.test(q) && +q <= 1023 ? `<button data-p="${+q}"><b>${+q}</b> (no name yet)</button>` : `<span class="faint" style="font-size:11px">No saved preset matches</span>`);
+      $("mAxeRes").innerHTML = hits.map(([n, nm]) => `<button data-drag10 data-p="${n}"><b>${n}</b> ${esc(nm)}</button>`).join("") || (/^\d+$/.test(q) && +q <= 1023 ? `<button data-p="${+q}"><b>${+q}</b> (no name yet)</button>` : `<span class="faint" style="font-size:11px">No saved preset matches</span>`);
       wirePanelResults(); };
     const wirePanelResults = () => document.querySelectorAll(".mres [data-p]").forEach((b) => { b.onclick = () => setPreset(+b.dataset.p, 0); b.ondragstart = (e) => { e.dataTransfer.setData("text/sl-preset", b.dataset.p + "|0"); }; });
     const lib = LIB(), entry = () => (lib[d][pn] || (lib[d][pn] = {}));

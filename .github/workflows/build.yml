@@ -77,8 +77,18 @@ jobs:
 
       # 9e: the song timeline as one grid: scroll down 3 screens and sideways 50 bars, zoom at the pointer; the ruler,
       # time signature, tempo, sections and every lane line up (±1 px), headers never move; track sizes, Fit all
-      - name: UI timeline (one song, and two open in Folders)
+      - name: UI timeline (one song, and two open in Folders) and the 10a-c suites, in Chrome
         run: node tests/ui-timeline.mjs --shots ui-layout-shots
+
+      # 10a: the same suites in WebKit, the macOS app's engine (the show machine runs macOS 12): zoom and pinch,
+      # renaming, every drag done with pointer events, the timeline grid, track sizes
+      - name: UI in WebKit
+        if: matrix.name == 'macos'
+        shell: bash
+        run: |
+          npm i --no-save --no-package-lock --prefix "$RUNNER_TEMP/pw" playwright@1.64.0
+          "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install webkit
+          PLAYWRIGHT="$RUNNER_TEMP/pw/node_modules/playwright" node tests/ui-webkit.mjs --require --shots ui-layout-shots
 
       - name: Upload UI layout screenshots
         if: always()

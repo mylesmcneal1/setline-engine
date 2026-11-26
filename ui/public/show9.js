@@ -109,7 +109,7 @@
   function cardHTML(s) {
     const tun = tuningOf(s), pre = firstPreset(s), nt = s.tracks.length;
     const sel = typeof songSel !== "undefined" && songSel.has(s.id);
-    return `<div class="card9 ${s.id === selId ? "cur" : ""} ${sel ? "msel" : ""}" draggable="true" data-id="${s.id}" style="--c:${s.col || "#5a5f6a"}" tabindex="0" aria-label="${esc(s.name)}">
+    return `<div class="card9 ${s.id === selId ? "cur" : ""} ${sel ? "msel" : ""}" data-id="${s.id}" style="--c:${s.col || "#5a5f6a"}" tabindex="0" aria-label="${esc(s.name)}">
       <div class="c9h">${S9.sel ? `<span class="ck9 ${sel ? "on" : ""}" aria-hidden="true"></span>` : ""}<b title="${esc(s.name)}">${esc(s.name)}</b>${inSet(s.id) ? `<span class="inset9">IN SET</span>` : ""}</div>
       ${secBar(s)}
       <div class="c9m">${[tun, `${nt} track${nt === 1 ? "" : "s"}`, pre].filter(Boolean).map((x) => `<span>${esc(x)}</span>`).join("")}</div>
@@ -128,8 +128,6 @@
       c.ondblclick = () => { if (!S9.sel) openSong(id); };
       c.onkeydown = (e) => { if (e.key === "Enter") openSong(id); };
       c.oncontextmenu = (e) => { e.preventDefault(); songMenu(e, id, "list"); };
-      c.ondragstart = (e) => { dragId = id; dragFrom = "pool"; c.classList.add("dragging"); try { e.dataTransfer.setData("text/plain", id); e.dataTransfer.effectAllowed = "copy"; } catch (x) {} };
-      c.ondragend = () => { c.classList.remove("dragging"); clearDropLine(); };
     });
     timing("cards", t0);
   }
@@ -161,7 +159,7 @@
     const o = open.has(s.id), si = setOrder.indexOf(s.id), sel = typeof songSel !== "undefined" && songSel.has(s.id);
     const tun = tuningOf(s), pre = firstPreset(s);
     return `${divider ? `<div class="div9">Not in this set</div>` : ""}<div class="row9 ${o ? "open" : ""} ${s.id === selId ? "cur" : ""} ${s.id === playId ? "playing" : ""} ${sel ? "msel" : ""}" data-row="${s.id}" style="--c:${s.col || "#5a5f6a"}">
-      <div class="r9h fh" draggable="true" data-id="${s.id}"><span class="ck9 ${sel ? "on" : ""}"></span><span class="chev9" aria-hidden="true">›</span>
+      <div class="r9h fh" data-id="${s.id}"><span class="ck9 ${sel ? "on" : ""}"></span><span class="chev9" aria-hidden="true">›</span>
         <b class="r9n" title="${esc(s.name)}">${si >= 0 ? `<em>${si + 1}</em>` : ""}${esc(s.name)}</b>
         <span class="r9m mono">${fmtBpm(s.tmap[0].bpm)} BPM · ${esc(meterChip(s).split(" ")[0])} · ${fmt(lenOf(s))}</span>
         <span class="r9t">${esc([tun, pre].filter(Boolean).join(" · ") || "–")}</span>
@@ -187,8 +185,6 @@
     const id = r.dataset.row, hd = r.querySelector(".r9h");
     hd.onclick = (e) => { if (e.target.closest(".r9x")) return; if (S9.sel || e.shiftKey || e.ctrlKey || e.metaKey) { pickSel(e, id, rowIds()); return; } if (songSel.size) { songSel.clear(); markSel(); } songAnchor = id; toggleRow(id); };
     hd.oncontextmenu = (e) => { e.preventDefault(); songMenu(e, id, "list"); };
-    hd.ondragstart = (e) => { dragId = id; dragFrom = inSet(id) ? "set" : "pool"; try { e.dataTransfer.setData("text/plain", id); } catch (x) {} };
-    hd.ondragend = clearDropLine;
     r.querySelector(".r9x").onclick = (e) => { e.stopPropagation(); const b = e.currentTarget.getBoundingClientRect(); songMenu({ clientX: b.left - 120, clientY: b.bottom + 4 }, id, "list"); };
   }
   const rowIds = () => [...document.querySelectorAll(".row9")].map((r) => r.dataset.row);
@@ -241,41 +237,13 @@
     const brk = window.SLBreaks ? SLBreaks.count() : 0, blen = window.SLBreaks ? SLBreaks.length() : 0;
     if ($("setCount")) $("setCount").textContent = `${n} song${n === 1 ? "" : "s"}${brk ? ` · ${brk} break${brk === 1 ? "" : "s"}` : ""}`;
     if ($("setLen")) $("setLen").textContent = fmt(len + blen);
-    wireSetDrop();
   };
   // a click on a setlist song opens it (Cards: its timeline; Folders: its row)
   function openFromSet(id) {
     if (S9.view === "folders" && !focusSong()) { toggleRow(id, true); const r = document.querySelector(`.row9[data-row="${id}"]`); if (r) r.scrollIntoView({ block: "nearest" }); return; }
     if (focusId !== id) openSong(id);
   }
-  // drag a card (or row) onto the sidebar: an orange line shows where it lands
-  let dropAt = -1;
-  function clearDropLine() { document.querySelectorAll(".drop9").forEach((x) => x.remove()); dropAt = -1; }
-  function wireSetDrop() {
-    const el = $("songs"); if (!el || el._w9) return; el._w9 = true;
-    el.addEventListener("dragover", (e) => {
-      if (!dragId) return; e.preventDefault();
-      const rows = [...el.querySelectorAll(".song")]; let at = rows.length;
-      for (let i = 0; i < rows.length; i++) { const r = rows[i].getBoundingClientRect(); if (e.clientY < r.top + r.height / 2) { at = i; break; } }
-      if (at === dropAt) return; clearDropLine(); dropAt = at;
-      const line = document.createElement("div"); line.className = "drop9";
-      if (rows[at]) rows[at].before(line); else (rows.length ? rows[rows.length - 1].nextSibling ? rows[rows.length - 1].after(line) : el.appendChild(line) : el.appendChild(line));
-    }, true);
-    el.addEventListener("dragleave", (e) => { if (!el.contains(e.relatedTarget)) clearDropLine(); });
-    el.addEventListener("drop", (e) => {
-      if (!dragId || dragFrom === "set" && setOrder.includes(dragId) && e.target.closest(".song")) { clearDropLine(); return; } // reordering: the page handles it
-      e.preventDefault(); e.stopPropagation();
-      const id = dragId, at = dropAt < 0 ? setOrder.length : dropAt; clearDropLine(); dragId = null;
-      const ex = setOrder.indexOf(id);
-      if (ex >= 0) {
-        if (dragFrom === "set") { snap(); setOrder.splice(ex, 1); setOrder.splice(at > ex ? at - 1 : at, 0, id); refresh(); return; }
-        const s = songs.find((x) => x.id === id);
-        confirmBox(`“${esc(s.name)}” is already in this setlist`, `It’s #${ex + 1}. Move it here? (To play it twice, duplicate the song first: right-click › Duplicate song.)`, "Move it here", () => { snap(); setOrder.splice(ex, 1); setOrder.splice(at > ex ? at - 1 : at, 0, id); refresh(); });
-        return;
-      }
-      snap(); setOrder.splice(at, 0, id); refresh();
-    }, true);
-  }
+  // 10a: dragging a card or row onto the sidebar: SLDrag (fix10a.js)
 
   // ---------------------------------------------------------------- select mode + the floating action bar
   function setSelect(on) {
@@ -334,10 +302,15 @@
     if (e.key === "ArrowLeft" && e.altKey && (e.metaKey || e.ctrlKey)) { e.preventDefault(); collapseAll(); }
   });
 
-  // ---------------------------------------------------------------- smooth zoom
-  // PXS (pixels per second) changes continuously, centred on the pointer; only the open song(s) are drawn again,
-  // once per animation frame.
-  let zq = null;
+  // ---------------------------------------------------------------- smooth zoom (10a)
+  // Every zoom glides to its target: a critically damped spring on log(zoom), ~140 ms, so the motion is the same
+  // for ⌥ + wheel, pinch, the slider, + / −, the presets, Fit and Fit all. More input mid-glide just moves the
+  // target (no restart, no stutter). Two kinds of target: "anchor" (the time under x = ax stays put: wheel, pinch,
+  // + / −, the slider) and "span" (the left edge glides to a time too: presets, Fit). Each frame redraws only the
+  // open song(s) at the new zoom, then sets the one shared sideways position (9e). Customize › Reduce animations
+  // (body.calm): it jumps.
+  const W = 40; // spring rate (1/s): settles to ~1 % in ~140 ms
+  const Z = { on: false, mode: "anchor", x: 0, v: 0, xt: 0, ax: 0, tAt: 0, l: 0, lv: 0, lt: 0, hx: -1, last: 0, raf: 0, done: [] };
   // 9e: the lanes' visible width and their left edge on screen (measured: the Folders rows have padding)
   const LV = () => (window.TL9 ? TL9.viewW() : $("scroller").clientWidth - headW());
   const LX = () => (window.TL9 ? TL9.laneLeft() : $("scroller").getBoundingClientRect().left + headW());
@@ -347,41 +320,83 @@
     if (FS) { const t0 = performance.now(); R0(); decorateSong(FS); return performance.now() - t0; }
     const t0 = performance.now(); openIds().forEach(fillRow); return performance.now() - t0;
   }
-  // z: new pixels per second; ax: the x (in the scroller, past the track headers) that stays put
-  function zoomTo(z, ax) {
-    const sc = $("scroller"); z = Math.max(ZMIN, Math.min(ZMAX, z));
-    if (Math.abs(z - PXS) < 1e-4) return;
-    if (ax == null) ax = LV() / 2;
-    // 9e: one gesture keeps its exact anchor time (the position is whole pixels, so recomputing it each step drifts)
-    const g = zoomTo.g, tAt = g && Math.abs(g.ax - ax) < 0.5 && g.hx === sc.scrollLeft ? g.tAt : (sc.scrollLeft + ax) / PXS;
-    zq = { z, ax, tAt };
-    if (zoomTo.raf) return;
-    zoomTo.raf = requestAnimationFrame(() => {
-      zoomTo.raf = 0; const q = zq; zq = null; if (!q) return;
-      const t0 = performance.now();
-      PXS = q.z; if ($("zoom")) $("zoom").value = zToSlider(q.z);
-      const nx = Math.max(0, q.tAt * PXS - q.ax); if (window.TL9) TL9.preset(nx); // 9e: drawn at the new position at once
-      redrawOpen();
-      sc.scrollLeft = nx;
-      zoomTo.g = { ax: q.ax, tAt: q.tAt, hx: sc.scrollLeft };
-      syncZoomBar();
-      timing("zoom frame", t0);
-    });
+  const clampZ = (z) => Math.max(ZMIN, Math.min(ZMAX, z));
+  let instant = false; // zoomNow: a programmatic zoom (hooks, tests) lands at once
+  const calm = () => instant || document.body.classList.contains("calm");
+  function zoomNow(z, ax) { instant = true; try { zoomTo(z, ax); } finally { instant = false; } }
+  // draw one frame at zoom z with the lanes' left edge at nx px
+  function frame(z, nx) {
+    const sc = $("scroller"), t0 = performance.now();
+    PXS = z; if ($("zoom")) $("zoom").value = zToSlider(z);
+    nx = Math.max(0, nx); if (window.TL9) TL9.preset(nx); // 9e: drawn at the new position at once
+    redrawOpen();
+    sc.scrollLeft = nx; Z.hx = sc.scrollLeft;
+    syncZoomBar();
+    timing("zoom frame", t0);
   }
-  // the page's buttons and hooks: at once (wheel, pinch and the slider go through zoomTo: one draw per frame)
-  window.setZoom = function (z, ax) { const sc = $("scroller"); z = Math.max(ZMIN, Math.min(ZMAX, z)); if (Math.abs(z - PXS) < 1e-4) return; if (ax == null) ax = LV() / 2; const tAt = (sc.scrollLeft + ax) / PXS; PXS = z; if ($("zoom")) $("zoom").value = zToSlider(z); const nx = Math.max(0, tAt * PXS - ax); if (window.TL9) TL9.preset(nx); redrawOpen(); sc.scrollLeft = nx; syncZoomBar(); };
-  const zoomBy = (f, axFrac) => { const sc = $("scroller"); zoomTo((zq ? zq.z : PXS) * f, axFrac == null ? null : LV() * axFrac); };
-  // ⌥ + wheel, Ctrl/⌘ + wheel and trackpad pinch (a wheel with ctrlKey): exponential, so it feels continuous
+  // the closed form of a critically damped spring: position and velocity after dt
+  function spring(x, v, xt, dt) { const d = x - xt, e = Math.exp(-W * dt), k = (v + W * d) * dt; return [xt + (d + k) * e, (v - W * k) * e]; }
+  function step(now) {
+    Z.raf = 0;
+    const dt = Math.min(0.05, Math.max(0.001, (now - Z.last) / 1000)); Z.last = now;
+    [Z.x, Z.v] = spring(Z.x, Z.v, Z.xt, dt);
+    if (Z.mode === "span") [Z.l, Z.lv] = spring(Z.l, Z.lv, Z.lt, dt);
+    const end = Math.abs(Z.x - Z.xt) < 1e-3 && Math.abs(Z.v) < 0.05 && (Z.mode !== "span" || Math.abs(Z.l - Z.lt) * Math.exp(Z.xt) < 0.3);
+    if (end) { Z.x = Z.xt; Z.v = 0; Z.l = Z.lt; Z.lv = 0; }
+    const z = Math.exp(Z.x);
+    frame(z, Z.mode === "span" ? Z.l * z : Z.tAt * z - Z.ax);
+    if (end) { Z.on = false; const d = Z.done; Z.done = []; d.forEach((f) => f()); return; }
+    Z.raf = requestAnimationFrame(step);
+  }
+  function run() {
+    if (calm()) { Z.x = Z.xt; Z.v = 0; Z.l = Z.lt; Z.lv = 0; const z = Math.exp(Z.xt); frame(z, Z.mode === "span" ? Z.lt * z : Z.tAt * z - Z.ax); Z.on = false; const d = Z.done; Z.done = []; d.forEach((f) => f()); return; }
+    if (!Z.on) { Z.on = true; Z.x = Math.log(PXS); Z.v = 0; Z.last = performance.now() - 16; }
+    if (!Z.raf) Z.raf = requestAnimationFrame(step);
+  }
+  // the zoom the current glide is heading to (more input stacks on it)
+  const target = () => (Z.on ? Math.exp(Z.xt) : PXS);
+  // z: new pixels per second; ax: the x (past the track headers) whose time stays put
+  function zoomTo(z, ax) {
+    const sc = $("scroller"); z = clampZ(z);
+    if (ax == null) ax = LV() / 2;
+    if (Math.abs(z - target()) < 1e-4 && (!Z.on || Z.mode === "anchor")) return;
+    // one gesture keeps its exact anchor time (the position is whole pixels, so recomputing it each step drifts)
+    const same = Z.mode === "anchor" && Math.abs(Z.ax - ax) < 0.5 && Z.hx === sc.scrollLeft && (Z.on || performance.now() - Z.last < 400);
+    const tAt = same ? Z.tAt : (sc.scrollLeft + ax) / PXS;
+    Z.mode = "anchor"; Z.ax = ax; Z.tAt = tAt; Z.xt = Math.log(z);
+    run();
+  }
+  // zoom to z with the left edge at time a (presets, Fit, Fit all, drag-to-zoom)
+  function glideTo(z, a) {
+    z = clampZ(z);
+    if (!Z.on || Z.mode !== "span") { Z.l = $("scroller").scrollLeft / PXS; Z.lv = 0; }
+    Z.mode = "span"; Z.xt = Math.log(z); Z.lt = Math.max(0, a);
+    run();
+  }
+  // a promise for the end of the current glide (tests; Fit all's "back")
+  const settled = () => new Promise((r) => (Z.on ? Z.done.push(r) : r()));
+  // the page's own zoom calls (the toolbar slider of older layouts, key shortcuts): the same glide
+  window.setZoom = function (z, ax) { zoomTo(z, ax); };
+  const zoomBy = (f, axFrac) => zoomTo(target() * f, axFrac == null ? null : LV() * axFrac);
+  // ⌥ + wheel, Ctrl/⌘ + wheel and a trackpad pinch: exponential, so equal moves give equal steps.
+  // A pinch arrives as a wheel with ctrlKey (Chrome, WebView2: deltaY ≈ −100·ln(scale) per step): k = 0.02 makes
+  // one full pinch (scale ~2) about 4×. A mouse wheel notch with ⌥ (deltaY 100) is ×1.28.
+  const KP = 0.02, KA = 0.0025;
+  let G = null; // a WebKit pinch (gesturestart / gesturechange / gestureend, macOS): its own scale, relative to its start
   $("scroller").addEventListener("wheel", (e) => {
     if (!(e.altKey || e.ctrlKey || e.metaKey)) return;
     e.preventDefault(); e.stopImmediatePropagation();
-    const sc = $("scroller"), ax = e.clientX - LX();
-    const d = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
-    zoomTo((zq ? zq.z : PXS) * Math.exp(-d * (e.ctrlKey && !e.altKey ? 0.01 : 0.0025)), Math.max(0, ax));
+    if (G) return; // the pinch is already coming in as gesture events
+    const ax = e.clientX - LX(), d = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+    zoomTo(target() * Math.exp(-d * (e.ctrlKey && !e.altKey ? KP : KA)), Math.max(0, ax));
   }, { capture: true, passive: false });
+  const inLanes = (e) => { const sc = $("scroller"), r = sc.getBoundingClientRect(); return e.clientX == null || (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom); };
+  document.addEventListener("gesturestart", (e) => { if (!openIds().length || !inLanes(e)) return; e.preventDefault(); G = { z0: target(), ax: Math.max(0, (e.clientX == null ? LX() + LV() / 2 : e.clientX) - LX()) }; }, { passive: false });
+  document.addEventListener("gesturechange", (e) => { if (!G) return; e.preventDefault(); if (e.scale > 0) zoomTo(G.z0 * e.scale, G.ax); }, { passive: false });
+  document.addEventListener("gestureend", (e) => { if (!G) return; e.preventDefault(); G = null; }, { passive: false });
   // the visible span of the open song: [t0, t1] seconds
   function visSpan() { const sc = $("scroller"), w = LV(); return [sc.scrollLeft / PXS, (sc.scrollLeft + w) / PXS]; }
-  function fitSpan(s, a, b) { const sc = $("scroller"), w = LV() - 24; if (b - a < 0.05) return; const z = Math.max(ZMIN, Math.min(ZMAX, w / (b - a))); PXS = z; if ($("zoom")) $("zoom").value = zToSlider(z); const nx = Math.max(0, a * PXS - 12); if (window.TL9) TL9.preset(nx); redrawOpen(); sc.scrollLeft = nx; syncZoomBar(); }
+  function fitSpan(s, a, b) { const w = LV() - 24; if (b - a < 0.05) return; const z = clampZ(w / (b - a)); glideTo(z, a - 12 / z); }
   function zoomPreset(s, k) {
     if (k === "song") { fitSpan(s, 0, s.len); return; }
     const at = typeof pos === "number" && playId === s.id ? pos : visSpan()[0];
@@ -408,7 +423,7 @@
         const W = strip.getBoundingClientRect().width, x0 = e.clientX, [a0, b0] = visSpan(), edge = e.target.classList.contains("l") ? "l" : e.target.classList.contains("r") ? "r" : "";
         f.onpointermove = (m) => { const dt = (m.clientX - x0) / W * s.len, sc = $("scroller");
           if (!edge) sc.scrollLeft = Math.max(0, (a0 + dt) * PXS);
-          else { let a = a0, b = b0; if (edge === "l") a = Math.min(b0 - 0.5, Math.max(0, a0 + dt)); else b = Math.max(a0 + 0.5, Math.min(s.len, b0 + dt)); const w = LV(); zoomTo(w / (b - a), 0); zq && (zq.tAt = a); }
+          else { let a = a0, b = b0; if (edge === "l") a = Math.min(b0 - 0.5, Math.max(0, a0 + dt)); else b = Math.max(a0 + 0.5, Math.min(s.len, b0 + dt)); frame(clampZ(LV() / (b - a)), a * clampZ(LV() / (b - a))); }
           syncZoomBar(); };
         f.onpointerup = () => { f.onpointermove = null; };
       };
@@ -509,7 +524,7 @@
   }
 
   // ---------------------------------------------------------------- exports (tests, the menus, Diagnostics)
-  window.SL9 = { mode: () => S9.view, setMode: setView, draw, toggleRow, collapseAll, zoomTo, zoomBy, zoomPreset, fitSpan, select: setSelect, act, timings: () => S9.timings.slice(), summary, state: S9, trackMenu, deleteTrack, dupTrack, tuningOf, firstPreset };
+  window.SL9 = { mode: () => S9.view, setMode: setView, draw, toggleRow, collapseAll, zoomTo, zoomBy, zoomPreset, fitSpan, glideTo, settled, zoomNow, zoomTarget: target, select: setSelect, act, timings: () => S9.timings.slice(), summary, state: S9, trackMenu, deleteTrack, dupTrack, tuningOf, firstPreset };
   buildSide();
   // the library changed (switch / open): its own view
   const ssn = window.SLPage && Object.getOwnPropertyDescriptor(window.SLPage, "setSessionName");

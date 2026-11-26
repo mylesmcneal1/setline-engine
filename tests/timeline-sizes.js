@@ -7,6 +7,7 @@ async function timelineSizes() {
   const frames = (n = 2) => new Promise((r) => { const f = () => (--n <= 0 ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); });
   const P = [], log = [], sc = document.getElementById("scroller");
   const ok = (c, m) => { if (!c) P.push(m); };
+  const settle = async () => { await frames(1); await SL9.settled(); await frames(1); }; // 10a: zoom glides
   document.querySelector('.tabs a[data-tab="show"]').click(); await wait(300);
   SL9.setMode("cards"); await wait(150);
   const S = SLPage.songs, s = S.find((x) => x.name === "Glasshouse"); openSong(s.id); await wait(300);
@@ -22,7 +23,7 @@ async function timelineSizes() {
   ok(order.join(",") === "ruler,meter9,tempo,secs", "pinned rows in order ruler, time signature, tempo, sections: " + order);
   ok(sc.querySelector(".meter9 .mcur9").textContent === "4/4", "the Time signature header shows 4/4");
   ok(!sc.querySelector(".ruler .msig"), "no time signature badges left on the ruler");
-  SL9.zoomTo(40 / barDur); await frames(2);
+  SL9.zoomTo(40 / barDur); await settle();
   sc.scrollLeft = s.bars[29].t * PXS; await frames(2);
   const st = sc.querySelector(".meter9 .mstk9");
   ok(st && !st.hidden && st.textContent === "4/4" && Math.abs(st.getBoundingClientRect().left - TL9.laneLeft()) <= 1, "the meter in force sticks at the left edge (4/4 at bar 30)");
@@ -72,20 +73,20 @@ async function timelineSizes() {
   log.push(`fit tracks: ${s.trkH} px for ${rows().length} tracks`);
 
   // ---- Fit all, and back
-  TL9.setSize(s, 2); SL9.zoomTo(40 / barDur); await frames(3); sc.scrollLeft = 500; await frames(2);
+  TL9.setSize(s, 2); SL9.zoomTo(40 / barDur); await settle(); sc.scrollLeft = 500; await frames(2);
   const z0 = PXS, h0 = sc.scrollLeft;
-  TL9.fitAll(s); await frames(3);
+  TL9.fitAll(s); await settle();
   const W = s.len * PXS, last2 = rows()[rows().length - 1].getBoundingClientRect();
   ok(document.body.classList.contains("top9c") && W <= TL9.viewW() && sc.scrollLeft === 0 && last2.bottom <= sc.getBoundingClientRect().top + sc.clientHeight + 1,
     `Fit all: every bar (${Math.round(W)} of ${Math.round(TL9.viewW())} px) and every track on screen`);
   log.push(`fit all: ${s.trkH} px tracks, ${PXS.toFixed(2)} px/s`);
   ok(sc.querySelector('.rt9 [data-a="fitAll"]').classList.contains("on"), "Fit all is lit");
-  TL9.fitAll(s); await frames(3);
+  TL9.fitAll(s); await settle();
   ok(Math.abs(PXS - z0) < 1e-6 && sc.scrollLeft === h0 && !s.trkH && !document.body.classList.contains("top9c"), `Fit all again: back to the zoom (${PXS.toFixed(2)} vs ${z0.toFixed(2)}), position (${sc.scrollLeft} vs ${h0}) and sizes from before`);
 
   // ---- cue labels: never on top of each other, at most 2 rows
   for (const z of ["song", "32"]) {
-    SL9.zoomPreset(s, z); await frames(2);
+    SL9.zoomPreset(s, z); await settle();
     const cv = [...sc.querySelectorAll("canvas[data-t]")].find((c) => c._cues && c._cues.length);
     if (!cv) { P.push("no cue lane"); break; }
     const L = cv._cues.filter((c) => c.w > 0); let clash = 0;

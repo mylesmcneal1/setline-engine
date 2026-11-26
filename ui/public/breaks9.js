@@ -80,7 +80,7 @@
     adoptPending();
     const el = $("songs"); if (!el) return;
     const rows = [...el.querySelectorAll(".song")];
-    const row = (b) => `<div class="brk9 ${SELB === b.id ? "on" : ""} ${BRK && BRK.b.id === b.id ? "now" : ""}" draggable="true" data-b="${b.id}" title="${esc(b.note || b.label)}"><span class="bico" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M6.5 5.5v5M9.5 5.5v5"/></svg></span><span class="bt">${esc(b.label)}</span><span class="bl">${BRK && BRK.b.id === b.id ? mmss(left()) : mmss(+b.len || 0)}</span></div>`;
+    const row = (b) => `<div class="brk9 ${SELB === b.id ? "on" : ""} ${BRK && BRK.b.id === b.id ? "now" : ""}" data-b="${b.id}" title="${esc(b.note || b.label)}"><span class="bico" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M6.5 5.5v5M9.5 5.5v5"/></svg></span><span class="bt">${esc(b.label)}</span><span class="bl">${BRK && BRK.b.id === b.id ? mmss(left()) : mmss(+b.len || 0)}</span></div>`;
     // before the first song, after each song (and its "after" line), orphans at the end
     afterOf("").slice().reverse().forEach((b) => el.insertAdjacentHTML("afterbegin", row(b)));
     rows.forEach((r) => { const bs = afterOf(r.dataset.id); if (!bs.length) return; let at = r; const tr = r.nextElementSibling; if (tr && tr.classList.contains("tr")) at = tr; bs.slice().reverse().forEach((b) => at.insertAdjacentHTML("afterend", row(b))); });
@@ -89,23 +89,13 @@
       const id = r.dataset.b;
       r.onclick = (e) => { e.stopPropagation(); SELB = id; renderSetlist(); renderInsp(); if (typeof NARROW === "function" && NARROW() && !isOpen("R")) setPanel("R", true, true); };
       r.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); SELB = id; renderSetlist(); renderInsp(); ctxMenu(e, [{ label: "Duplicate break", icon: "dup", act: () => dup(id) }, { label: "Skip it now", icon: "open", dis: !(BRK && BRK.b.id === id), act: () => skip() }, "-", { label: "Delete break", icon: "del", danger: true, act: () => del(id) }]); };
-      r.ondragstart = (e) => { dragB = id; try { e.dataTransfer.setData("text/plain", id); } catch (x) {} r.classList.add("dragging"); };
-      r.ondragend = () => { dragB = null; r.classList.remove("dragging"); };
     });
-    // drop a break: after the song row it's dropped on (or before the break it's dropped on)
-    el.querySelectorAll(".song,.brk9").forEach((t) => {
-      t.addEventListener("dragover", (e) => { if (dragB) { e.preventDefault(); t.classList.add("over"); } });
-      t.addEventListener("dragleave", () => t.classList.remove("over"));
-      t.addEventListener("drop", (e) => { if (!dragB) return; e.preventDefault(); e.stopPropagation(); t.classList.remove("over"); const id = dragB; dragB = null;
-        if (t.classList.contains("brk9")) { const tb = list().find((x) => x.id === t.dataset.b); if (tb && tb.id !== id) moveTo(id, tb.after, tb.id); }
-        else moveTo(id, t.dataset.id, null); }, true);
-    });
+    // 10a: dragging a break (and songs) within the setlist: SLDrag (fix10a.js)
     // the footer: "11 songs · 2 breaks · 52:40"
     const n = setOrder.length, nb = list().length, len = setOrder.reduce((a, id) => { const s = songs.find((x) => x.id === id); return a + (s ? verLen(s, entryVer(s)) : 0); }, 0) + totalLen();
     if ($("setCount")) $("setCount").textContent = `${n} song${n === 1 ? "" : "s"}${nb ? ` · ${nb} break${nb === 1 ? "" : "s"}` : ""}`;
     if ($("setLen")) $("setLen").textContent = fmt(len);
   };
-  let dragB = null;
   // selecting a song (anywhere) unselects the break
   const SEL0 = window.select; window.select = function (id) { if (SELB && id) { SELB = null; } return SEL0.apply(this, arguments); };
   // a song selected in the setlist: the break selection goes

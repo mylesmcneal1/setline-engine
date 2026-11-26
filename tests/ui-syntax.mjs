@@ -12,7 +12,7 @@ for (const page of ["ui/1-arrange.html", "ui/band.html"]) {
   console.log(`${page}: ${scripts.length} inline script(s) checked`);
 }
 // the page's plain scripts (8c: modeler.js, modeler-ui.js; served as they are from ui/public)
-for (const f of ["ui/public/modeler.js", "ui/public/modeler-ui.js", "ui/public/show9.js", "ui/public/look9.js", "ui/public/menus9.js", "ui/public/breaks9.js", "ui/public/time9e.js"]) {
+for (const f of ["ui/public/modeler.js", "ui/public/modeler-ui.js", "ui/public/show9.js", "ui/public/look9.js", "ui/public/menus9.js", "ui/public/breaks9.js", "ui/public/time9e.js", "ui/public/fix10a.js"]) {
   try { new vm.Script(readFileSync(new URL("../" + f, import.meta.url), "utf8"), { filename: f }); console.log(`${f}: checked`); }
   catch (e) { bad++; console.error(`FAIL ${f}: ${e.message}`); }
 }

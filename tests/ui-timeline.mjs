@@ -3,13 +3,15 @@
 // that the ruler, time signature, tempo and sections rows and every lane line up (±1 px), the headers never move,
 // there's no dead column and the top rows stay pinned (tests/timeline-check.js); then the Time signature row, track
 // heights, Fit tracks / Fit all, cue labels and the macOS 12 colour fallback (tests/timeline-sizes.js). No dependencies.
-//   node tests/ui-timeline.mjs [--shots <dir>]     (CHROME=<path> to pick the browser)
+//   node tests/ui-timeline.mjs [--shots <dir>] [--only song,10a]     (CHROME=<path> to pick the browser)
+// The suites: tests/ui-suites.mjs (10a and later phases too). The same suites run in WebKit: tests/ui-webkit.mjs.
 import { createServer } from "node:http";
 import { readFile, mkdtemp, writeFile, mkdir, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { join, extname, resolve } from "node:path";
 import { tmpdir } from "node:os";
+import { pick, suiteCode } from "./ui-suites.mjs";
 
 const root = resolve(import.meta.dirname, "../ui/dist");
 const args = process.argv.slice(2);
@@ -22,7 +24,7 @@ const chrome = process.env.CHROME || [
   "/usr/bin/google-chrome", "/usr/bin/chromium-browser", "/usr/bin/chromium",
 ].find((p) => existsSync(p));
 if (!chrome) { console.log("UI TIMELINE SKIPPED (no Chrome found)"); process.exit(0); }
-const check = [await readFile(resolve(import.meta.dirname, "timeline-check.js"), "utf8"), await readFile(resolve(import.meta.dirname, "timeline-sizes.js"), "utf8")].join("\n");
+const suites = pick(args);
 
 // ---- a static server for ui/dist
 const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".woff2": "font/woff2", ".woff": "font/woff", ".png": "image/png", ".json": "application/json" };
@@ -51,14 +53,15 @@ await cdp("Page.enable"); await cdp("Runtime.enable");
 
 let fails = 0;
 if (shots) await mkdir(shots, { recursive: true });
-for (const mode of ["song", "folders", "sizes"]) {
+for (const suite of suites) {
+  const mode = suite.name;
   await cdp("Emulation.setDeviceMetricsOverride", { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
   const loaded = once("Page.loadEventFired");
   await cdp("Page.navigate", { url: base + "?timeline=" + Date.now() });
   await loaded;
   await evaluate(`await new Promise(r=>setTimeout(r,600));`);
   let r;
-  try { r = await evaluate(`${check}\nreturn await ${mode === "sizes" ? "timelineSizes()" : "timelineCheck(" + JSON.stringify(mode) + ")"};`); } catch (e) { r = { problems: ["error: " + e.message.split("\n")[0]], log: [] }; }
+  try { r = await evaluate(await suiteCode(suite)); } catch (e) { r = { problems: ["error: " + e.message.split("\n")[0]], log: [] }; }
   console.log(`${r.problems.length ? "FAIL" : "ok  "} 1280x800 ${mode}`);
   for (const l of r.log) console.log("      " + l);
   for (const p of r.problems.slice(0, 12)) console.log("   !! " + p);

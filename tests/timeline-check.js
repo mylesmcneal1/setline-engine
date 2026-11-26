@@ -9,6 +9,7 @@ async function timelineCheck(MODE) {
   const frames = (n = 2) => new Promise((r) => { const f = () => (--n <= 0 ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); });
   const P = [], log = [], sc = document.getElementById("scroller");
   const near = (a, b, tol = 1) => Math.abs(a - b) <= tol;
+  const settle = async () => { await frames(1); await SL9.settled(); await frames(1); }; // 10a: zoom glides
   document.querySelector('.tabs a[data-tab="show"]').click(); await wait(300);
   const S = SLPage.songs, A = S.find((x) => x.name === "Glasshouse"), B = S.find((x) => x !== A && x.tracks.length >= 3);
   // tall tracks so there are 3 screens to scroll down; ~40 px a bar so there are 50 bars to scroll sideways
@@ -17,7 +18,7 @@ async function timelineCheck(MODE) {
   if (MODE === "song") { SL9.setMode("cards"); await wait(150); openSong(A.id); }
   else { if (focusSong()) closeSong(); SL9.setMode("folders"); await wait(150); SL9.state.oneOpen = false; SL9.toggleRow(A.id, true); SL9.toggleRow(B.id, true); }
   await wait(300);
-  SL9.zoomTo(40 / barDur); await frames(3);
+  SL9.zoomTo(40 / barDur); await settle();
   const heads0 = () => [...sc.querySelectorAll(".fbody .row .lh")].filter((x) => x.getBoundingClientRect().height > 0);
   const headLeft = heads0()[0].getBoundingClientRect().left;
   const NATIVE = Object.getOwnPropertyDescriptor(Element.prototype, "scrollLeft");
@@ -82,7 +83,7 @@ async function timelineCheck(MODE) {
   for (const [dir, n] of [["in", -120], ["out", 100], ["in again", -60]]) {
     const O0 = sc.querySelector(".folder .ruler .lane").getBoundingClientRect().left, t0 = (px - O0) / PXS, z0 = PXS;
     for (let i = 0; i < 4; i++) { fire({ deltaY: n, altKey: true }); await frames(1); }
-    await frames(3);
+    await settle();
     const O1 = sc.querySelector(".folder .ruler .lane").getBoundingClientRect().left, t1 = (px - O1) / PXS;
     log.push(`zoom ${dir}: ${z0.toFixed(2)} -> ${PXS.toFixed(2)} px/s; under the pointer ${t0.toFixed(3)} s -> ${t1.toFixed(3)} s`);
     if (near(PXS, z0, 0.01)) P.push(`zoom ${dir}: didn't zoom`);

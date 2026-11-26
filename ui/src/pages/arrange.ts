@@ -775,7 +775,7 @@ const ableStore = (): Record<string, { mode: string; choices: Record<string, str
 let ableProg: ((p: any) => void) | null = null; // 9a: copy progress goes to the import window, not the generic box
 async function importAbleton(path?: string, choose?: (data: AbleData, dups: any[]) => Promise<AbleChoice | null>, mode = "auto", choicesIn?: Record<string, string>) {
   if (page().playing) { page().toast("Stop playback first"); return { error: "playing" }; }
-  if (!lib) { page().toast("Open a library first"); return { error: "no library" }; }
+  if (!(await needLibrary("Import Ableton project"))) return { error: "no library" };
   const A = (window as any).SLAble;
   const ports = page().PORTS || [];
   const located: Record<string, string> = {};
@@ -1175,8 +1175,26 @@ function preferences() { page().openSettings(); }
 const isDirty = () => (lib ? sessionText() !== libText : sessionText() !== doc.savedText);
 let startProblem = "";
 async function openAtStart(): Promise<string> {
-  try { startProblem = await openLibrary(""); } catch (e) { startProblem = String((e as Error)?.message || e); }
+  const p = (async () => { try { return await openLibrary(""); } catch (e) { return String((e as Error)?.message || e); } })();
+  libOpening = p; startProblem = await p; if (libOpening === p) libOpening = null;
   return startProblem;
+}
+// 10a: the library is opened in the background at start-up (seconds for a big one on the 2015 MacBook). A command
+// that needs it (Import Ableton…, from the menu bar, ⌘I, a drop or the first-run checklist) waits for that instead
+// of refusing; with no library at all it offers to make one right there.
+let libOpening: Promise<string> | null = null;
+async function needLibrary(what: string): Promise<boolean> {
+  if (!lib && libOpening) { SL.call("logLine", { text: what + ": waiting for the library to open" }).catch(() => {}); await libOpening.catch(() => {}); }
+  if (lib) return true;
+  SL.call("logLine", { text: what + ": no library open (" + (startProblem || "none opened") + ")" }).catch(() => {});
+  // the last library (or a new "My Library") first, quietly; then ask
+  const why = await openAtStart();
+  if (lib) return true;
+  return new Promise<boolean>((res) => page().confirm("No library is open", `${what} needs a library to put the songs in.${why ? " (" + why + ")" : ""}`, "Create a library", async () => {
+    const r = await SL.call<{ name?: string; error?: string }>("libraryCreate", { name: "My Library" });
+    if (r.error && !/exist/i.test(r.error)) { page().toast(r.error); res(false); return; }
+    await openLibrary(r.name || "My Library"); res(!!lib);
+  }));
 }
 async function retryStartShow() {
   const why = await openAtStart();
@@ -1542,7 +1560,7 @@ async function main() {
   // keeps what's on screen, and the library it belongs to: what's on disk is the baseline for the next autosave.
   if (keptSession && lib) {
     const r = await SL.call<{ text?: string; error?: string }>("libraryOpen", { name: lib.name }).catch(() => ({} as { text?: string }));
-    if (r.text) libWritten = libFiles(r.text); else lib = null;
+    if (r.text) libWritten = libFiles(r.text); else { lib = null; showProblem = await openAtStart(); } // 10a: never left without one
   } else if (!keptSession && !showProblem && (!info.testScript || info.reopenLast)) {
     showProblem = await openAtStart();
   }
