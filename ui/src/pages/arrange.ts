@@ -334,6 +334,7 @@ async function run(s: Song, t: number) {
       const r = await SL.call<Transport & LoadResult>("transport", { cmd: "play", songId: s.id, fromBar: 1, fromBeat: 1 });
       if (!r.error && r.songId === s.id) { adoptNext(); await syncLoop(s); queueNext(s); return; }
     }
+    if (s.id === loadedSongId && took(/^(playStop|play)$/)) { await syncLoop(s); queueNext(s); return; } // 8d: a pedal started it natively
     for (let attempt = 0; attempt < 2; attempt++) {
       if (!(await ensureLoaded(s))) { page().setPlaying(false); return; }
       await syncLoop(s); // armed before playing, so the first pass wraps too
@@ -353,8 +354,27 @@ async function run(s: Song, t: number) {
 }
 
 let levelQueued: Song | null = null;
+// 8d: the pedal fast path: what the app may do natively, kept current (Bridge::pedalFast); and what it just did
+let nativeDid: { action: string; result: any; at: number } | null = null, lastArm = "";
+const took = (action: string | RegExp) => { const d = nativeDid; if (!d || Date.now() - d.at > 1500 || !(typeof action === "string" ? d.action === action : action.test(d.action))) return null; nativeDid = null; return d; };
+function pedalArmNow() {
+  const p = page() as any, s = p.songs.find((x: Song) => x.id === loadedSongId), sel = p.playId || p.selId;
+  const arm: any = { songId: loadedSongId || "", ready: !!s && sel === loadedSongId && !busy && !pending, when: p.jumpWhen ? p.jumpWhen() : "bar",
+    nextId: nextMeta && nextMeta.ready ? nextMeta.songId : "", looping: p.looping ? !!p.looping() : false, vamp: p.vampOn ? !!p.vampOn() : false, sync: p.syncMsgs ? p.syncMsgs() : [] };
+  if (s) {
+    if (!p.playing) { const at = toBarBeat(s, p.pos); arm.bar = at.bar; arm.beat = at.beat; }
+    arm.secs = curMap ? curMap.filter((q: any) => !q.extra).map((q: any) => [q.vb, q.vb + q.bars, q.secId]) : (s.secs || []).map((x: any) => [x.start, x.start + x.bars, x.id]);
+    arm.jumps = (p.pedalOrder ? p.pedalOrder(s) : []).map((id: number) => { const q = arm.secs.find((x: any[]) => x[2] === id); return q ? q[0] : 0; });
+  }
+  const k = JSON.stringify(arm);
+  if (k !== lastArm) { lastArm = k; SL.call("pedalArm", arm).catch(() => {}); }
+}
+setInterval(() => { if (SL.native) pedalArmNow(); }, 250);
 const SLE = {
   edited: () => { setTimeout(() => liveClicks().catch(() => {}), 60); }, // 7a: after an edit (the page calls it from snap())
+  flush: () => libSave().catch(() => {}), // 8d: the library on disk before an update restarts set.Line
+  // 8d: a pedal's action was done natively (Bridge::pedalFast): the page catches up without sending it again
+  nativeDid: (action: string, result: any) => { nativeDid = { action, result, at: Date.now() }; },
   rigSendSetlist: () => rigSendSetlist(), // 7d: Settings › Backup rig
   // Play song s from page time t (seconds). Called for Play, locate while playing, next song...
   // Requests made while one is in flight coalesce (dragging the playhead sends only the latest).
@@ -371,6 +391,7 @@ const SLE = {
   // Next while playing (6e): the song waiting in the next slot takes over with a 10 ms fade; anything else loads.
   async nextSong(n: Song) {
     cancelAuto();
+    if (nextMeta && nextMeta.songId === n.id && took("nextSong")) { adoptNext(); page().setPlayId(n.id); page().setPos(0); await syncLoop(n); queueNext(n); return; } // 8d: done natively
     if (nextMeta && nextMeta.songId === n.id && nextMeta.key === loadKey(payload(n)) && !busy) {
       busy = true;
       try {
@@ -393,7 +414,8 @@ const SLE = {
     const nowSrc = srcBarBeat(s, page().pos).bar, cur = (s.secs || []).find((x: any) => nowSrc >= x.start && nowSrc < x.start + x.bars);
     let atBar = 0;
     if (cur) { const e = toBarBeat(s, srcTime(s, Math.min(cur.start + cur.bars - 1, s.total), 1)); atBar = e.bar + 1; }
-    const r = await SL.call<{ queued?: boolean; atSeconds?: number; error?: string }>("queueJump", { toBar, toBeat: 1, when: when === "section" && atBar ? "section" : when === "beat" ? "beat" : "bar", atBar });
+    const nd = took(/^jump\d+$/); // 8d: a pedal queued it natively: the same jump, not queued twice (a bar line could pass in between)
+    const r = nd && nd.result && nd.result.queued ? nd.result : await SL.call<{ queued?: boolean; atSeconds?: number; error?: string }>("queueJump", { toBar, toBeat: 1, when: when === "section" && atBar ? "section" : when === "beat" ? "beat" : "bar", atBar });
     if (r.error || !r.queued) { if (r.error) page().toast(r.error); return false; }
     jumpQ = { secId, at: r.atSeconds || 0 }; page().jumpQueued(secId); loopKey = "";
     return true;
@@ -1130,6 +1152,7 @@ async function fileMenu(at: { clientX: number; clientY: number }) {
     "-",
     { label: "Settings…", icon: "⚙", key: (navigator.platform.startsWith("Mac") ? "⌘" : "Ctrl+") + ",", act: () => { preferences(); } },
     { label: "Copy diagnostics", icon: "⎘", act: () => { diagnostics("copy"); } },
+    { label: "Check for updates…", icon: "⟳", act: () => { (window as any).SLUpd.check(true); } },
     "-",
     { label: "Quit", icon: "⏻", act: () => { quitApp(); } },
   ];
@@ -1398,6 +1421,7 @@ async function main() {
     if (st.state === "ready") { preparedKey = ""; prepareCues(); loadedKey = null; }
   });
   SL.on("menu", (m: { cmd: string }) => {
+    if (m.cmd === "checkUpdates") { (window as any).SLUpd.check(true); return; } // 8d
     if (m.cmd === "export") exportSetlist(); else if (m.cmd === "import") importPackage(); else if (m.cmd === "importAbleton") importAbleton().catch((e) => page().toast(String(e)));
     else if (m.cmd === "dupSetlist") page().setlistCmd("dup"); else if (m.cmd === "cleanUp") cleanUpAudio();
     else if (m.cmd === "about") showAbout();
@@ -1478,6 +1502,7 @@ async function main() {
   SL.on("midiReconnected", (m: { reconnected: string[] }) => page().midiReconnected(m.reconnected || []));
   // 7c: footswitches / controllers (MidiControl.h)
   SL.on("midiAction", (m: any) => (page() as any).midiAction(m));
+  SL.on("updateProgress", (m: { done: number }) => { const u = (window as any).SLUpd; if (u) { u.state().pct = m.done; const st = u.state(); if (st.draw) st.draw(); } });
   // 7d: the backup rig
   SL.on("rigState", (st: any) => { if (st && st.t === "st") rigFollow(st); });
   SL.on("rigCommand", (c: any) => { rigCommand(c).catch(() => {}); });
@@ -1494,6 +1519,8 @@ async function main() {
   if (!info.testScript) SL.call<{ error?: string }>("bandStart", {}).then((r) => { if (r && r.error) SL.call("logLine", { text: "Band server: " + r.error }); page().band.info(r); }).catch(() => {});
   await reportLoading(showProblem, !!info.testScript);
   if (!info.testScript && lib) offerMigration().catch((e) => console.warn("set.Line: migration", e));
+  // 8d: set.Line closed unexpectedly while playing last time: offer to resume where it was (tests call it themselves)
+  if (!info.testScript && lib) setTimeout(() => { const r = (window as any).SLResume; if (r) r.check().catch(() => {}); }, 600);
   // Test hook (--test-script): run an async script with the page and this module's functions; write its result.
   if (info.testScript) {
     let out: unknown;

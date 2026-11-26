@@ -727,6 +727,7 @@ juce::var AudioHost::transport(const juce::var& req)
     const auto cmd = req["cmd"].toString();
     if (cmd == "stop") {
         eng.stop();
+        if (loaded) eng.prime(eng.position()); // 8d: Play usually starts again from here: its audio ready now
     } else if (cmd == "next") { // Next while playing: the song waiting in the next slot, faded over (10 ms)
         if (! nextLoaded || ! eng.hasNext()) return errorObj("The next song isn't loaded yet.", "nonext");
         if (req["songId"].toString().isNotEmpty() && req["songId"].toString() != nextId) return errorObj("Another song is waiting.", "nonext");

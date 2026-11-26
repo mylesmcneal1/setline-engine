@@ -67,6 +67,15 @@ private:
     AudioHost& audio;
     juce::WebBrowserComponent* browser = nullptr;
     juce::PropertiesFile& settings; // (Preferences: the Shows folder)
+    juce::File updStaged;            // 8d: an update downloaded, verified and unpacked next to the app
+    juce::var pedalArmV;             // 8d: what a pedal can do natively right now (the page keeps it current: pedalArm)
+    int fastCount = 0; double fastMax = 0, fastSum = 0; juce::String fastWorst;
+    juce::var pedalFast(const juce::String& action, bool press, double t0);
+  public:
+    // 8d: crash recovery's state (resumeSave / resumeGet); markStopped() on a normal quit
+    juce::File resumeFile() const { return settings.getFile().getSiblingFile("resume.json"); }
+    void markStopped() { auto v = juce::JSON::parse(resumeFile().loadFileAsString()); if (auto* o = v.getDynamicObject()) { o->setProperty("playing", false); resumeFile().replaceWithText(juce::JSON::toString(v, true)); } }
+  private:
     SessionFile session;
     Media media;
     Peaks peaks;

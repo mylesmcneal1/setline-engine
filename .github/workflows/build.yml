@@ -148,6 +148,15 @@ jobs:
           "$EXE" --ableton-test ableton-test | tee ableton-test.txt
           grep -q "ABLETON OK" ableton-test.txt
 
+      # 8d: in-app updates on fake apps: version compare, SHA-256 verify (good / damaged), unpack next to the app,
+      # install (the old one kept as "(previous)"), roll back and forward again (the real swap scripts)
+      - name: In-app update test
+        shell: bash
+        run: |
+          if [ -d "$APP/Contents/MacOS" ]; then EXE="$APP/Contents/MacOS/set.Line"; else EXE="$APP"; fi
+          "$EXE" --update-test update-test | tee update-test.txt
+          grep -q "UPDATE OK" update-test.txt
+
       # Built-in Kokoro voices: ONNX Runtime 1.19.2 loaded from the app, the pinned model downloaded (or taken
       # from the cache) and verified, every English voice saying the common cue words, cache behaviour, timing.
       - name: Kokoro voices test

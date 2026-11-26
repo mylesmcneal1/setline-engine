@@ -1103,6 +1103,9 @@
   .mbig b{display:block;font-size:13px} .mbig small{color:var(--muted);font-size:11px}
   .mres{display:flex;flex-direction:column;gap:2px;margin-top:4px;max-height:150px;overflow:auto} .mres button{text-align:left;padding:4px 6px;border-radius:5px;font-size:12px;color:var(--text)} .mres button:hover{background:#2a2d33} .mres b{font-family:var(--code,monospace);color:#ff9f0a;margin-right:6px}
   .mpal{display:flex;flex-wrap:wrap;gap:6px} .mpal i{width:20px;height:20px;border-radius:50%;cursor:pointer} .mpal i.on{outline:2px solid #fff;outline-offset:2px}
+  .updbox{width:min(560px,94vw);text-align:left} .updbox p{margin:6px 0} .updnotes{max-height:220px;overflow:auto;margin:8px 0;padding:8px 10px;border-radius:8px;background:rgba(255,255,255,.05);font-size:12px;line-height:1.5;color:#c9c9cf}
+  .updbar{height:6px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden;margin:10px 0 4px} .updbar i{display:block;height:100%;background:var(--cyan,#64d2ff)}
+  .printbox{width:min(440px,94vw);text-align:left} .printbox .kv{margin:8px 0} .prf{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px} .prf label{display:flex;align-items:center;gap:5px}
   .diagv{font-family:var(--code);font-size:12px;line-height:1.45;word-break:break-word;color:var(--text)}
 </style>
 <script src="ui.js"></script>
@@ -1259,7 +1262,7 @@ function setlistMenu(e){ const c=curSetObj(), r=e.currentTarget?e.currentTarget.
   ctxMenu(at,[{cap:'Setlists'},...setlists.map(l=>({label:l.name,key:(l.id===curSet?'✓  ':'')+l.order.length+(l.order.length===1?' song':' songs'),cur:l.id===curSet,icon:`<span class="cb" style="background:${setCol(l)}"></span>`,act:()=>useSet(l.id)})),'-',
     {label:'New setlist',icon:'＋',act:()=>setlistCmd('new')},{label:`Duplicate “${c.name}”`,icon:'⧉',act:()=>setlistCmd('dup')},{label:'Rename…',icon:'✎',act:()=>setlistCmd('ren')},
     {label:'Colour ▸',icon:'●',act:()=>swatchPop({left:at.clientX+150,right:at.clientX+150,top:at.clientY},setCol(c),col=>{ snap(); c.col=col; refresh(); })},
-    {label:'Finish by…'+(c.finishBy?'  '+c.finishBy:''),icon:'⏱',act:()=>finishByBox()},{label:'MIDI sync point…',icon:'⇄',act:()=>openSettings('midi')},
+    {label:'Finish by…'+(c.finishBy?'  '+c.finishBy:''),icon:'⏱',act:()=>finishByBox()},{label:'Print setlist…',icon:'print',act:()=>printSetBox()},{label:'MIDI sync point…',icon:'⇄',act:()=>openSettings('midi')},
     {label:`Delete “${c.name}”…`,icon:'⌫',danger:true,dis:setlists.length<2,act:()=>setlistCmd('del')}]); }
 const ROLE={'Click':'click','Cues':'cues','Drums':'drums','Bass':'bass','Keys':'keys','Guitars':'guitars','BGVs':'bgvs','Synth / Pads':'synth','FX / Risers':'fx','Pads':'synth','Strings':'strings'};
 // ---------- outputs (6d): every track has its own output, set on its header or in the right panel ----------
@@ -2461,8 +2464,13 @@ const IC={
   timer:SVGI('<circle cx="8" cy="9" r="5"/><path d="M8 9V6.5M6.5 2h3"/>'),
   sync:SVGI('<path d="M2.5 5.5h10l-2.5-2.5M13.5 10.5h-10l2.5 2.5"/>'),
   note:SVGI('<path d="M6 12.5a1.8 1.8 0 1 1-1.8-1.8H6V3l6-1v8.6"/><circle cx="10.2" cy="10.6" r="1.8"/>'),
+  exp:SVGI('<path d="M8 10V2.5M5 5.5l3-3 3 3M3 9.5v3a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3"/>'), imp:SVGI('<path d="M8 2.5V10M5 7l3 3 3-3M3 9.5v3a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3"/>'),
+  folder:SVGI('<path d="M2 4.5a1 1 0 0 1 1-1h3l1.5 1.5H13a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z"/>'), lib:SVGI('<path d="M3 2.5v11M6 2.5v11M9.5 3l3 10.2"/>'),
+  clock:SVGI('<circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 1.5"/>'), clean:SVGI('<path d="M10 2.5 6.5 8M4 8.5h6l-1 5H5z"/>'), gear:SVGI('<circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2M3.6 3.6l1.4 1.4M11 11l1.4 1.4M3.6 12.4 5 11M11 5l1.4-1.4"/>'),
+  quit:SVGI('<path d="M8 2v6M4.6 4a5 5 0 1 0 6.8 0"/>'), update:SVGI('<path d="M13 8a5 5 0 0 1-8.6 3.5M3 8a5 5 0 0 1 8.6-3.5M11.5 2v2.6H9M4.5 14v-2.6H7"/>'),
+  print:SVGI('<path d="M4.5 6V2.5h7V6M4.5 11.5h-2v-5h11v5h-2M4.5 9.5h7v4h-7z"/>'),
 };
-const GLYPH={'∿':'audio','⎍':'midi','❝':'cue','“':'cue','◔':'click','○':'click','✎':'edit','●':'colour','↑':'up','↓':'down','⧉':'dup','⌫':'del','＋':'add','⊕':'add','−':'remove','✂':'cut','▦':'grid','↻':'repeat','①':'count','✓':'check','✕':'close','›':'open','↘':'after','⏱':'timer','⇄':'sync','♩':'note','♫':'note','♬':'note'};
+const GLYPH={'⇪':'exp','⇩':'imp','▤':'lib','📂':'folder','🕘':'clock','🧹':'clean','⚙':'gear','⎘':'dup','⏻':'quit','⟳':'update','🖨':'print','∿':'audio','⎍':'midi','❝':'cue','“':'cue','◔':'click','○':'click','✎':'edit','●':'colour','↑':'up','↓':'down','⧉':'dup','⌫':'del','＋':'add','⊕':'add','−':'remove','✂':'cut','▦':'grid','↻':'repeat','①':'count','✓':'check','✕':'close','›':'open','↘':'after','⏱':'timer','⇄':'sync','♩':'note','♫':'note','♬':'note'};
 const iconOf=g=>g&&IC[g]?IC[g]:g&&GLYPH[g]?IC[GLYPH[g]]:(g||'');
 // 8a: "92 BPM · 4/4 · Bb": each part its own item, so a part that doesn't fit goes with its separator (never a stray "·")
 const metaParts=a=>a.filter(Boolean).map(x=>`<span>${x}</span>`).join('');
@@ -3250,6 +3258,121 @@ function secsFromCues(s){ const starts=[]; cuesOf(s).slice().sort((a,b)=>a.bar-b
   if(starts[0].start>1){ if(starts[0].type==='intro') starts[0].start=1; else starts.unshift({start:1,name:'Intro',type:'intro'}); }
   s.secs=starts.map((x,i)=>({id:sid++,name:x.name,type:x.type,start:x.start,bars:Math.max(1,(starts[i+1]?starts[i+1].start:s.total+1)-x.start),end:'continue',say:'',notes:{},tile:true}));
   normSecs(s); buildBars(s); return true; }
+// ======================= UPDATES (8d): File › Check for updates…, a quiet check once a day =======================
+// Downloads the "latest" release, checks its SHA-256 and installs it like setline-update (the build before is kept:
+// Roll back). Never while playing: Install waits until playback stops.
+let UPD={info:null,rel:null,state:'',pct:0,waiting:false};
+async function updCheck(manual){ if(!NATIVE||!window.SLE){ if(manual) toast('In the app this checks GitHub for a newer set.Line'); return null; }
+  UPD.info=await ncall('updateInfo'); const r=await ncall('updateCheck'); UPD.rel=r;
+  if(manual) updBox(); else if(r&&r.newer) toast(`set.Line ${esc(r.latest)} is available · File › Check for updates…`,6000);
+  return r; }
+function updBox(){ document.querySelectorAll('#updBox').forEach(x=>x.remove()); const bg=document.createElement('div'); bg.className='cfbg'; bg.id='updBox'; document.body.appendChild(bg);
+  const draw=()=>{ const r=UPD.rel||{}, i=UPD.info||{}, err=r.error, newer=!!r.newer, cant=i.cant;
+    const notes=String(r.notes||'').split(/\r?\n/).filter(l=>l.trim()).slice(0,40).map(l=>`<div>${esc(l)}</div>`).join('');
+    bg.innerHTML=`<div class="cfbox updbox" role="dialog" aria-label="Updates"><b>${err?'Couldn’t check for updates':newer?`set.Line ${esc(r.latest)} is available`:'set.Line is up to date'}</b>
+      <p>This is set.Line ${esc(i.current||r.current||'')}.${!err&&!newer?` The latest is ${esc(r.latest||'')}.`:''}${i.previous?` The build before (${esc(i.previous)}) is kept, so you can roll back.`:''}</p>
+      ${err?`<p class="abw">${esc(err)}</p>`:''}
+      ${newer&&notes?`<div class="updnotes">${notes}</div>`:''}
+      ${cant&&newer?`<p class="abw">${esc(cant)}</p>`:''}
+      ${UPD.state==='downloading'?`<div class="updbar"><i style="width:${UPD.pct}%"></i></div><p>Downloading and checking… ${UPD.pct}%</p>`:''}
+      ${UPD.state==='ready'?`<p>Downloaded and verified (SHA-256). ${playing?'<b>It installs when you stop</b> (never while playing).':'set.Line restarts to finish.'}</p>`:''}
+      <div class="cfa">${i.previous?'<button class="btn line" id="updBack">Roll back to '+esc(i.previous)+'…</button>':''}<span style="flex:1"></span>
+        <button class="btn line" id="updNo">${newer?'Later':'Close'}</button>${newer&&!cant?`<button class="btn pri" id="updGo" ${UPD.state==='downloading'?'disabled':''}>${UPD.state==='ready'?(playing?'Install when stopped':'Install and restart'):'Download and install'}</button>`:''}</div></div>`;
+    $('updNo').onclick=()=>{ bg.remove(); };
+    if($('updBack')) $('updBack').onclick=()=>confirmBox('Roll back?',`set.Line goes back to ${esc(i.previous)} and restarts. You can roll forward the same way.`,'Roll back',async()=>{ if(playing){ toast('Stop first: set.Line never changes builds while playing'); return; } await libFlush(); const x=await ncall('updateRollback'); if(x&&x.error) toast(x.error); });
+    if($('updGo')) $('updGo').onclick=async()=>{ if(UPD.state==='ready'){ updInstall(); return; } UPD.state='downloading'; UPD.pct=0; draw();
+      const x=await ncall('updateDownload',{asset:r.asset,sums:r.sums}); if(!x||x.error){ UPD.state=''; UPD.rel={...r,error:x&&x.error||'The download failed.'}; draw(); return; } UPD.state='ready'; draw(); if(!playing) updInstall(); }; };
+  UPD.draw=draw; draw(); }
+// installs now, or as soon as playback stops
+async function updInstall(){ if(playing){ UPD.waiting=true; toast('The update installs when you stop'); if(UPD.draw) UPD.draw(); return; } UPD.waiting=false; await libFlush(); const x=await ncall('updateInstall'); if(x&&x.error) toast(x.error); else toast('Installing the update; set.Line restarts…',8000); }
+async function libFlush(){ try{ if(window.SLE&&SLE.flush) await SLE.flush(); }catch(e){} }
+setInterval(()=>{ if(UPD.waiting&&!playing) updInstall(); },1000);
+window.SLUpd={ check:updCheck, box:updBox, state:()=>UPD };
+// ======================= CRASH RECOVERY (8d) =======================
+// While playing, where we are (setlist, song, version, position) is saved every 2 s and on every start / stop (a small
+// file the app writes atomically). A normal quit marks it stopped; still "playing" on the next launch means set.Line
+// closed unexpectedly: "Resume Glasshouse at bar 41?" (positions it, ready for Play) with Sync MIDI right there.
+let RESUME_AT=0, RESUME_WAS=false;
+function resumeState(){ const s=songs.find(x=>x.id===playId), L=curSetObj(); return {playing:!!(playing&&s), set:L?L.id:'', setName:L?L.name:'', songId:s?s.id:'', songName:s?s.name:'', verId:s?entryVerId(s):'', verName:s?((entryVer(s)||{}).name||''):'', t:+(+pos||0).toFixed(3), bar:s?(playing?engBar:barAtTime(s,pos)):1, at:Date.now()}; }
+function resumeSave(force){ if(!NATIVE||!window.SLE||(typeof rigFollowing==='function'&&rigFollowing())) return; const now=Date.now(); if(!force&&now-RESUME_AT<2000) return; RESUME_AT=now; ncall('resumeSave',resumeState()).catch(()=>{}); }
+setInterval(()=>{ if(playing!==RESUME_WAS){ RESUME_WAS=playing; resumeSave(true); } else if(playing) resumeSave(false); },500);
+async function resumeCheck(){ if(!NATIVE||!window.SLE) return null; const r=await ncall('resumeGet'); if(!r||!r.playing||Date.now()-(+r.at||0)>12*3600*1000) return null;
+  const s=songs.find(x=>x.id===r.songId); if(!s) return null;
+  const ver=r.verName&&versOf(s).length>1?' ('+esc(r.verName)+')':'', where=r.setName?' in “'+esc(r.setName)+'”':'';
+  const bg=document.createElement('div'); bg.className='cfbg'; bg.id='resumeBox';
+  bg.innerHTML='<div class="cfbox" role="dialog" aria-label="Resume"><b>set.Line closed unexpectedly</b><p id="rsText">Resume <b>'+esc(s.name)+'</b>'+ver+' at bar '+(+r.bar||1)+where+'? It’s positioned there, ready for Play.</p>'
+    +'<div class="cfa"><button class="btn line" id="rsSync" title="Send the setlist’s MIDI sync point to every device">Sync MIDI</button><span style="flex:1"></span><button class="btn line" id="rsNo">Dismiss</button><button class="btn pri" id="rsGo">Resume</button></div></div>';
+  document.body.appendChild(bg);
+  const done=()=>{ bg.remove(); ncall('resumeSave',{...r,playing:false}).catch(()=>{}); };
+  const toSet=()=>{ if(r.set&&setlists.some(l=>l.id===r.set)&&curSet!==r.set) useSet(r.set); };
+  $('rsNo').onclick=done;
+  $('rsSync').onclick=()=>{ toSet(); syncMidi(); };
+  $('rsGo').onclick=()=>{ toSet(); if(r.verId&&versOf(s).some(v=>v.id===r.verId)) setEntryVer(s,r.verId);
+    open.add(s.id); select(s.id,false); refresh(); locate(s,Math.max(0,+r.t||0)); done(); toast(s.name+': ready at bar '+(+r.bar||1)+'. Press Play.'); };
+  return r; }
+window.SLResume={ check:resumeCheck, state:resumeState, save:resumeSave };
+// ======================= PRINTABLE SETLIST (8d) =======================
+// Setlist menu › Print setlist…: big, high-contrast text for the stage floor, as a PDF (nothing to install).
+// Per song: number, name, version, key, BPM, length, chosen song / preset fields, and how it goes into the next song.
+const PRINT_OPT={size:'L',cols:1,fields:[]};
+try{ Object.assign(PRINT_OPT,JSON.parse(localStorage.getItem('setline.printSet')||'{}')); }catch(e){}
+function setlistRows(L){ L=L||curSetObj(); return (L.order||[]).map((id,i)=>{ const s=songs.find(x=>x.id===id); if(!s) return null; const v=entryVer(s,L)||defVer(s), a=afterOf(s,L);
+  const fv=Object.assign({},window.MODUI?MODUI.presetFields(s):{},s.fields||{},v&&v.fields||{});
+  return {n:i+1,name:s.name,ver:versOf(s).length>1?v.name:'',key:s.key&&s.key!=='—'?s.key:'',bpm:+(+s.tmap[0].bpm).toFixed(1)+(s.tmap.length>1?'*':''),len:fmt(verLen(s,v)),
+    fields:FIELDS.filter(f=>PRINT_OPT.fields.includes(f.id)&&fv[f.id]!==undefined&&fv[f.id]!=='').map(f=>[f.name,String(fv[f.id])]),
+    then:i<L.order.length-1?(a.mode==='segue'?'segue':a.mode==='auto'?'auto-next '+a.sec+' s':''):''}; }).filter(Boolean); }
+// the PDF: US Letter, Helvetica, black on white; 1 or 2 columns; L or XL
+function setlistPdf(L,opt){ L=L||curSetObj(); opt=opt||PRINT_OPT; const rows=setlistRows(L);
+  const W1252={'–':150,'—':151,'·':183,'’':146,'‘':145,'“':147,'”':148,'…':133,'•':149,'»':187,'♯':35,'♭':98};
+  const enc=s=>[...String(s)].map(ch=>{ const c=ch.charCodeAt(0); const v=W1252[ch]||(c<256?c:63); return v===40||v===41||v===92?'\\'+String.fromCharCode(v):String.fromCharCode(v); }).join('');
+  const XL=opt.size==='XL', nameSz=XL?34:26, infoSz=XL?17:13, numW=XL?52:40, PW=612, PH=792, M=36, gap=24, cols=Math.max(1,Math.min(2,+opt.cols||1)), colW=(PW-2*M-(cols-1)*gap)/cols;
+  // Helvetica-Bold widths are roughly 0.6 em on average: long names get smaller to fit their column
+  const fit=(t,sz,w)=>{ let z=sz; while(z>10&&String(t).length*z*0.58>w) z-=1; return z; };
+  const blocks=rows.map(r=>{ const info=[r.ver,r.key?'Key '+r.key:'',r.bpm+' BPM',r.len].filter(Boolean).join('  ·  '), fl=r.fields.map(([k,v])=>k+': '+v).join('  ·  ');
+    const h=nameSz*1.15+infoSz*1.35+(fl?infoSz*1.3:0)+(r.then?infoSz*1.3:0)+(XL?14:10); return {r,info,fl,h}; });
+  // two columns on one page: split the songs evenly between them (else fill a column, then the next)
+  const avail=PH-M-60-M, totalH=blocks.reduce((a,b)=>a+b.h,0), half=cols===2&&totalH<=2*avail?totalH/2:Infinity;
+  const pages=[]; let page=[], col=0, y=PH-M-60, used=0;
+  blocks.forEach(b=>{ if(y-b.h<M||(col===0&&used>0&&used+b.h/2>half)){ col++; y=PH-M-60; used=0; if(col>=cols){ pages.push(page); page=[]; col=0; } } page.push({...b,col,y}); y-=b.h; used+=b.h; });
+  if(page.length||!pages.length) pages.push(page);
+  const objs=[], add=o=>{ objs.push(o); return objs.length; };
+  const F1=add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>'), F2=add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>');
+  const pagesId=objs.length+pages.length*2+1, kids=[], total=fmt(rows.reduce((a,r)=>a+(+r.len.split(':')[0])*60+(+r.len.split(':')[1]||0),0));
+  const T=(f,sz,x,yy,t)=>`BT /${f} ${sz} Tf ${x.toFixed(1)} ${yy.toFixed(1)} Td (${enc(t)}) Tj ET\n`;
+  pages.forEach((pg,pi)=>{ let c=T('F2',22,M,PH-M-22,L.name)+T('F1',11,M,PH-M-40,new Date().toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'})+'   ·   '+rows.length+' songs   ·   '+total+(L.finishBy?'   ·   finish by '+L.finishBy:'')+(rows.some(r=>String(r.bpm).endsWith('*'))?'   ·   * tempo changes':'')+(pages.length>1?'   ·   page '+(pi+1)+' of '+pages.length:''));
+    c+=`0 0 0 RG 1.2 w ${M} ${PH-M-50} m ${PW-M} ${PH-M-50} l S\n`;
+    pg.forEach(b=>{ const x=M+b.col*(colW+gap); let yy=b.y-nameSz; const nz=fit(b.r.name,nameSz,colW-numW);
+      c+=T('F2',nameSz*0.8,x,yy+nameSz*0.1,String(b.r.n))+T('F2',nz,x+numW,yy,b.r.name); yy-=infoSz*1.35;
+      c+=T('F1',infoSz,x+numW,yy,b.info);
+      if(b.fl){ yy-=infoSz*1.3; c+=T('F2',infoSz,x+numW,yy,b.fl); }
+      if(b.r.then){ yy-=infoSz*1.3; c+=T('F2',infoSz,x+numW,yy,'» '+b.r.then); } });
+    const cs=add(`<< /Length ${c.length} >>\nstream\n${c}endstream`); kids.push(add(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${PW} ${PH}] /Resources << /Font << /F1 ${F1} 0 R /F2 ${F2} 0 R >> >> /Contents ${cs} 0 R >>`)); });
+  add(`<< /Type /Pages /Kids [${kids.map(k=>k+' 0 R').join(' ')}] /Count ${kids.length} >>`); const cat=add(`<< /Type /Catalog /Pages ${objs.length} 0 R >>`);
+  let out='%PDF-1.4\n'; const offs=[]; objs.forEach((o,i)=>{ offs.push(out.length); out+=`${i+1} 0 obj\n${o}\nendobj\n`; });
+  const xref=out.length; out+=`xref\n0 ${objs.length+1}\n0000000000 65535 f \n`+offs.map(o=>String(o).padStart(10,'0')+' 00000 n \n').join('')+`trailer\n<< /Size ${objs.length+1} /Root ${cat} 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return {pdf:out,pages:pages.length,rows}; }
+function printSetBox(){ const L=curSetObj(); document.querySelectorAll('#printBox').forEach(x=>x.remove()); const bg=document.createElement('div'); bg.className='cfbg'; bg.id='printBox'; document.body.appendChild(bg);
+  const draw=()=>{ bg.innerHTML=`<div class="cfbox printbox" role="dialog" aria-label="Print setlist"><b>Print “${esc(L.name)}”</b><p>Big, high-contrast text for the stage floor, saved as a PDF. ${L.order.length} songs.</p>
+      <div class="kv"><label>Size</label>${segm('prSize',[['L','Large'],['XL','Extra large']],PRINT_OPT.size)}</div>
+      <div class="kv"><label>Columns</label>${segm('prCols',[[1,'One'],[2,'Two']],PRINT_OPT.cols)}</div>
+      <div class="kv stack"><label>Song fields to include</label>${FIELDS.length?`<div class="prf">${FIELDS.map(f=>`<label><input type="checkbox" data-f="${f.id}" ${PRINT_OPT.fields.includes(f.id)?'checked':''}> ${esc(f.name)}</label>`).join('')}</div>`:'<p class="faint" style="font-size:12px;margin:0">No song fields yet (Settings › Band). Tuning, Guitar… can be printed per song.</p>'}</div>
+      <p class="faint" style="font-size:11.5px;margin-top:8px">Each song: number, name, version, key, BPM, length, the fields above, and » segue / » auto-next into the next one.</p>
+      <div class="cfa"><button class="btn line" id="prNo">Cancel</button><button class="btn pri" id="prGo">Export PDF…</button></div></div>`;
+    bg.querySelectorAll('#prSize button').forEach(b=>b.onclick=()=>{ PRINT_OPT.size=b.dataset.v; draw(); });
+    bg.querySelectorAll('#prCols button').forEach(b=>b.onclick=()=>{ PRINT_OPT.cols=+b.dataset.v; draw(); });
+    bg.querySelectorAll('[data-f]').forEach(c=>c.onchange=()=>{ PRINT_OPT.fields=c.checked?[...new Set([...PRINT_OPT.fields,c.dataset.f])]:PRINT_OPT.fields.filter(x=>x!==c.dataset.f); });
+    $('prNo').onclick=()=>bg.remove();
+    $('prGo').onclick=async()=>{ try{ localStorage.setItem('setline.printSet',JSON.stringify(PRINT_OPT)); }catch(e){} bg.remove(); await exportSetlistPdf(); }; };
+  draw(); }
+async function exportSetlistPdf(to){ const L=curSetObj(), r=setlistPdf(L,PRINT_OPT), b64=btoa(r.pdf);
+  if(!NATIVE||!window.SLE){ toast('In the app this saves the setlist as a PDF'); return {...r}; }
+  const x=await ncall('savePdf',{name:L.name+' setlist',base64:b64,to:to||''}); if(x&&x.path) toast('Setlist saved: '+x.path); else if(x&&x.error) toast(x.error); return {...r,...(x||{})}; }
+window.SLPrint={ box:printSetBox, pdf:setlistPdf, rows:setlistRows, save:exportSetlistPdf, opt:PRINT_OPT };
+
+
+// the quiet check: once a day at most, a few seconds after launch
+setTimeout(async()=>{ if(!NATIVE||!window.SLE) return; const i=await ncall('updateInfo'); if(i&&i.daily&&!i.cant&&Date.now()-(i.lastCheck||0)>20*3600*1000) updCheck(false).catch(()=>{}); },8000);
+
 // MIDI note -> name as Live shows it (60 = C3)
 const noteName=n=>['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'][n%12]+(Math.floor(n/12)-2);
 const stripNum=n=>String(n||'').replace(/^\d+\s*[-_.]\s*/,'').trim();
@@ -3463,10 +3586,11 @@ function syncLines(text,ch){ const c=Math.max(0,Math.min(15,(+ch||1)-1)), out=[]
     else if((m=line.match(/^raw\s+((?:[0-9a-f]{2}\s*){1,3})$/i))) out.push(m[1].trim().split(/\s+/).map(h=>parseInt(h,16)));
     else bad.push(line); });
   return {msgs:out,bad}; }
-async function syncMidi(){ const onlyPorts=null, sy=syncOf(), devs=sy.devices.map((d,i)=>[d,i]);
+let SYNC_NATIVE=0; // 8d: a pedal sent the sync point natively just now
+async function syncMidi(){ const onlyPorts=null, sy=syncOf(), devs=sy.devices.map((d,i)=>[d,i]); const already=Date.now()-SYNC_NATIVE<1500; SYNC_NATIVE=0;
   if(!devs.length){ if(!onlyPorts) toast('No MIDI sync point for “'+curSetObj().name+'”: set one in Settings › MIDI'); return {sent:0}; }
   let ok=0; const fails=[];
-  for(const [d,i] of devs){ const {msgs}=syncLines(d.text,d.ch); const r=await ncall('sendMidiNow',{port:d.port,msgs}); if(r&&!r.error){ ok++; SYNC_SENT[i]=Date.now(); } else if(NATIVE) fails.push(d.port+(r&&r.error?': '+r.error:'')); else { ok++; SYNC_SENT[i]=Date.now(); } }
+  for(const [d,i] of devs){ const {msgs}=syncLines(d.text,d.ch); const r=already?{ok:true}:await ncall('sendMidiNow',{port:d.port,msgs}); if(r&&!r.error){ ok++; SYNC_SENT[i]=Date.now(); } else if(NATIVE) fails.push(d.port+(r&&r.error?': '+r.error:'')); else { ok++; SYNC_SENT[i]=Date.now(); } }
   SYNCED={set:curSet,list:devs.map(([d,i])=>({label:d.port+' · Ch '+d.ch,ok:!!SYNC_SENT[i]}))};
   if(fails.length) toast(`MIDI sync: ${ok} sent, ${fails.length} failed (${fails.join('; ')})`);
   else if(!onlyPorts){ const b=$('syncBtn'), r=b&&!b.hidden?b.getBoundingClientRect():null; if(r) ctxMenu({clientX:r.left,clientY:r.bottom+6},[{cap:'Sent to all devices at once'},...SYNCED.list.map(x=>({label:x.label,icon:x.ok?'✓':'✕',act:()=>{}})),{cap:'Songs take over from here.'}]); else toast(`MIDI synced: ${ok} device${ok===1?'':'s'} ✓`); }
@@ -3760,7 +3884,8 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
     soundcheck:(id,v)=>soundcheck(id,v), endSoundcheck:()=>endSoundcheck(), vamp:()=>vamp(), jump:id=>queueJumpTo(id), cancelJump:()=>cancelQueuedJump(), syncMidi:()=>syncMidi(), fillSync:()=>fillSyncFromFirst(), syncLines:(t,c)=>syncLines(t,c),
     view:on=>setBand(on), addWidget:(sc,type,x,y)=>addWidget(sc,type,x,y), select:(id,ori)=>{ BSEL=id; if(ori) BORI=ori; renderBand(); }, fields:()=>FIELDS, setFields:f=>{ FIELDS=f; refresh(); }, fieldVal:(s,f,v)=>fieldVal(s,f,v), setFieldVal:(s,f,val,v)=>setFieldVal(s,f,val,v), newField:n=>newField(n), table:()=>fieldsTable(), finishBy:v=>{ const L=curSetObj(); if(v) L.finishBy=v; else delete L.finishBy; } },
   midiReconnected(names){ /* 7a: Sync MIDI is one button only; nothing goes out by itself */ },
-  selectSong:id=>{ select(id,false); refresh(); }, rigLost:m=>rigLost(m), rigBack:()=>rigBack(), rigPaired:m=>rigPaired(m), rigLibrary:l=>rigLibrary(l), rigProgress:m=>rigProgress(m), rigInfo:ri=>rigInfoIn(ri), rigFollowing:()=>rigFollowing(), midiAction:m=>onMidiAction(m), midiIn:m=>onMidiIn(m), midiLearned:m=>{ if(window.SLLearn) SLLearn(m); }, setMidiMap:(l,ins)=>{ MIDI_MAP=Array.isArray(l)?l:[]; MIDI_INS=ins||[]; if(settingsOpen()&&SET_TAB==='controls') renderSettings(); }, midiMap:()=>MIDI_MAP,
+  selectSong:id=>{ select(id,false); refresh(); },
+  jumpWhen:()=>JUMP_WHEN, looping:()=>looping(), vampOn:()=>!!VAMP, pedalOrder:s=>{ const x=perfPartsNow(); return x&&x.s&&x.s.id===s.id?x.src.map(p=>p.secId):(s.secs||[]).map(p=>p.id); }, syncMsgs:()=>syncOf().devices.map(d=>({port:d.port,msgs:syncLines(d.text,d.ch).msgs})), rigLost:m=>rigLost(m), rigBack:()=>rigBack(), rigPaired:m=>rigPaired(m), rigLibrary:l=>rigLibrary(l), rigProgress:m=>rigProgress(m), rigInfo:ri=>rigInfoIn(ri), rigFollowing:()=>rigFollowing(), midiAction:m=>onMidiAction(m), midiIn:m=>onMidiIn(m), midiLearned:m=>{ if(window.SLLearn) SLLearn(m); }, setMidiMap:(l,ins)=>{ MIDI_MAP=Array.isArray(l)?l:[]; MIDI_INS=ins||[]; if(settingsOpen()&&SET_TAB==='controls') renderSettings(); }, midiMap:()=>MIDI_MAP,
   setlistOpened(){},
   // 6f: the Library
   setlistCmd:cmd=>setlistCmd(cmd), curSetId:()=>curSet,
@@ -3928,6 +4053,8 @@ window.SLActions={ list:()=>ACTIONS.map(({id,name,key})=>({id,name,key})), run:(
 // ---- 7c: a mapped pedal / controller message (MidiControl.h): run the action, light the MIDI-in dot, say it on Perform
 let MIDI_MAP=[], MIDI_INS=[], MIDI_LAST='';
 function onMidiAction(m){ const a=ACTIONS.find(x=>x.id===m.action); if(!a) return; if(m.press===false&&!a.momentary) return;
+  if(m.fast&&window.SLE&&SLE.nativeDid){ SLE.nativeDid(m.action,m.fastResult); if(m.action==='syncMidi') SYNC_NATIVE=Date.now(); // 8d: already done in the engine; the page catches up
+    if(/^(playStop|play|stop)$/.test(m.action)){ const want=!!(m.fastResult&&m.fastResult.playing); if(want!==playing) toggle(); midiLight(true); perfFlash((a.ico||'')+' '+(want?'Play':'Stop')+' (pedal)'); setTimeout(midiFeedback,30); return; } }
   a.run(undefined,m.press!==false); midiLight(true);
   if(m.press!==false) perfFlash(`${a.ico||''} ${a.name.replace(/ \(.*\)$/,'')} (pedal)`.trim());
   if(window.SLE&&SLE.call) SLE.call('midiActed',{t0:m.t0,action:m.action}).catch(()=>{});
@@ -4152,11 +4279,14 @@ async function settingsHTML(tab){
       <h3 style="margin-top:6px">Song fields</h3><p class="d">Your own fields per song (Tuning, Guitar, Click…): set in each song’s panel, overridable per version, shown on the band’s screens.</p>
       ${sgrp(FIELDS.length?FIELDS.map((f,i)=>sf(`<input data-fn="${i}" value="${esc(f.name)}" style="width:130px">`,`<span class="clkrow"><select data-ft="${i}"><option value="text" ${f.type!=='list'?'selected':''}>Text</option><option value="list" ${f.type==='list'?'selected':''}>List of choices</option></select>${f.type==='list'?`<input data-fo="${i}" value="${esc((f.options||[]).join(', '))}" placeholder="E Standard, Drop D…" style="width:180px" title="Comma between choices">`:''}<button class="sel2" style="min-width:0" data-fu="${i}" ${i?'':'disabled'} title="Move up">↑</button><button class="sel2" style="min-width:0" data-fd="${i}" title="Delete">✕</button></span>`)):[sf('No song fields yet','')])}
       <div class="racts"><button class="btn line" id="stFadd">＋ Add a field</button><button class="btn line" id="stFtable">Song fields table…</button></div>`; }
-  if(tab==='general'){ const st=(await ncall('libraryState'))||{name:'My Library',root:'Documents/set.Line/Libraries/My Library',onLaunch:'last'};
+  if(tab==='general'){ const st=(await ncall('libraryState'))||{name:'My Library',root:'Documents/set.Line/Libraries/My Library',onLaunch:'last'}; UPD.info=(await ncall('updateInfo'))||UPD.info||{current:'(browser preview)',daily:true};
     return `<h3>General</h3><p class="d">The library is every song and setlist, saved as you work. This computer remembers which setlist was open.</p>
       ${sgrp([sf('On launch',segm('stLaunch',[['last','Last setlist'],['empty','Empty setlist']],st.onLaunch||'last')),
         sf('Library',`<span style="display:flex;gap:6px;align-items:center;min-width:0"><span class="rval" title="${esc(st.root||'')}">${esc(st.root||'')}</span><button class="sel2" style="min-width:0" id="stLib">Show in folder</button></span>`),
-        sf('Logs',`<button class="sel2" style="min-width:0" id="stLogs">Open logs folder</button>`)])}`; }
+        sf('Logs',`<button class="sel2" style="min-width:0" id="stLogs">Open logs folder</button>`)])}
+      <h3 style="margin-top:14px">Updates</h3>${(()=>{ const u=UPD.info||{}; return sgrp([sf('set.Line '+esc(u.current||''),`<button class="sel2" style="min-width:0" id="stUpd">Check for updates…</button>`),
+        sf('Check once a day<div class="sub">Quietly, a few seconds after launch; it only says when there’s something new.</div>',tog('stUpdDaily',u.daily!==false)),
+        sf('Access token<div class="sub">Only if the repository is private: a GitHub token that can read it. Kept on this computer.</div>',`<input class="tx" id="stUpdTok" type="password" placeholder="${u.hasToken?'(saved)':'none'}" style="width:170px" spellcheck="false">`)]); })()}`; }
   if(tab==='look'){ const ap=window.SLAppearance?SLAppearance.get():'dark';
     let cm='auto', rm=false; try{ cm=localStorage.getItem('setline.compact')||'auto'; rm=localStorage.getItem('setline.reduceMotion')==='1'; }catch(e){}
     return `<h3>Appearance</h3><p class="d">For this computer only.</p>${sgrp([sf('Theme<div class="sub">Darker suits dark stages.</div>',segm('stLook',[['dark','Dark'],['darker','Darker']],ap)),
@@ -4209,6 +4339,8 @@ function wireSettings(tab){ const q=id=>$(id), re=()=>renderSettings();
     q('stFadd').onclick=()=>{ snap(); newField(); refresh(); bandChanged(); re(); setTimeout(()=>{ const l=document.querySelectorAll('#sbody [data-fn]'); const x=l[l.length-1]; if(x){ x.focus(); x.select(); } },50); };
     q('stFtable').onclick=()=>{ closeSettings(); fieldsTable(); }; }
   if(tab==='general'){ q('stLaunch').querySelectorAll('button').forEach(b=>b.onclick=async()=>{ await ncall('libraryState',{onLaunch:b.dataset.v}); re(); });
+    if(q('stUpd')) q('stUpd').onclick=()=>{ closeSettings&&closeSettings(); updCheck(true); }; if(q('stUpdDaily')) q('stUpdDaily').onclick=async()=>{ const u=UPD.info||{}; u.daily=!(u.daily!==false); UPD.info=u; await ncall('updatePrefs',{daily:u.daily}); re(); };
+    if(q('stUpdTok')) q('stUpdTok').onchange=async e=>{ await ncall('updatePrefs',{token:e.target.value}); UPD.info=await ncall('updateInfo'); toast(e.target.value?'Access token saved':'Access token removed'); };
     q('stLib').onclick=()=>ncall('libraryReveal'); q('stLogs').onclick=()=>ncall('revealFolder',{which:'logs'}); }
   if(tab==='look'){ q('stLook').querySelectorAll('button').forEach(b=>b.onclick=()=>{ if(window.SLAppearance) SLAppearance.set(b.dataset.v); re(); });
     q('stCompact').querySelectorAll('button').forEach(b=>b.onclick=()=>{ try{ localStorage.setItem('setline.compact',b.dataset.v); }catch(e){} applyCompact(); if(NARROW()) setPanel('R',false,true); re(); });

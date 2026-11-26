@@ -143,7 +143,14 @@ void MidiControl::incoming(const juce::String& port, const uint8_t* d, int len)
     if (acts.isEmpty() && ! show) return;
     juce::MessageManager::callAsync([alive_, acts, port, text, k, show] {
         if (! *alive_ || ! (*alive_)->emit) return;
-        for (auto& a : acts) (*alive_)->emit("midiAction", a);
+        for (auto a : acts) {
+            if ((*alive_)->fast) {
+                const double t1 = juce::Time::getMillisecondCounterHiRes();
+                const auto r = (*alive_)->fast(a["action"].toString(), (bool) a["press"], (double) a["t0"]);
+                if (! r.isVoid()) if (auto* o = a.getDynamicObject()) { o->setProperty("fast", true); o->setProperty("fastMs", r.hasProperty("actMs") ? (double) r["actMs"] : juce::Time::getMillisecondCounterHiRes() - (double) a["t0"]); o->setProperty("doneMs", juce::Time::getMillisecondCounterHiRes() - (double) a["t0"]); o->setProperty("fastResult", r); o->setProperty("hopMs", t1 - (double) a["t0"]); }
+            }
+            (*alive_)->emit("midiAction", a);
+        }
         if (show) (*alive_)->emit("midiIn", obj({ { "port", port }, { "text", text }, { "kind", k.kind }, { "ch", k.ch }, { "num", k.num }, { "val", k.val }, { "mapped", ! acts.isEmpty() } }));
     });
 }

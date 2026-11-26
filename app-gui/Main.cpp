@@ -12,6 +12,7 @@
 #include "Log.h"
 #include "Folders.h"
 #include "AbletonImport.h"
+#include "Updater.h"
 
 namespace setline::gui {
 
@@ -90,6 +91,13 @@ public:
             const auto lines = ableton::selfTest(juce::File::getCurrentWorkingDirectory().getChildFile(args[at + 1].unquoted()));
             std::printf("%s\n", lines.joinIntoString("\n").toRawUTF8());
             setApplicationReturnValue(lines[lines.size() - 1] == "ABLETON OK" ? 0 : 1);
+            quit();
+            return;
+        }
+        if (const int ut = args.indexOf("--update-test"); ut >= 0 && ut + 1 < args.size()) { // 8d: in-app updates on fake apps
+            const auto lines = updater::selfTest(juce::File::getCurrentWorkingDirectory().getChildFile(args[ut + 1].unquoted()));
+            std::printf("%s\n", lines.joinIntoString("\n").toRawUTF8());
+            setApplicationReturnValue(lines[lines.size() - 1] == "UPDATE OK" ? 0 : 1);
             quit();
             return;
         }
@@ -264,6 +272,7 @@ public:
     void shutdown() override
     {
         applog::line("Quit");
+        if (bridge) bridge->markStopped(); // 8d: a normal quit: nothing to resume next time
         splash.reset();
         if (testThread.joinable()) testThread.join();
         testCues.reset();
@@ -316,6 +325,8 @@ private:
             if (index == 1) { // Help
                 m.addItem(juce::PopupMenu::Item("Copy diagnostics").setID(21).setAction([this] { send("copyDiagnostics"); }));
                 m.addItem(juce::PopupMenu::Item("Save diagnostics...").setID(22).setAction([this] { send("saveDiagnostics"); }));
+                m.addSeparator();
+                m.addItem(juce::PopupMenu::Item("Check for Updates...").setID(23).setAction([this] { send("checkUpdates"); })); // 8d
                 return m;
             }
             // 6f: there is no Open or Save: the Library saves itself

@@ -84,6 +84,9 @@ public:
     // 5 ms *before* fromSample, so the audio is at full level exactly on fromSample.
     // Returns false if the disk couldn't preroll in time or fromSample is past the end.
     bool start(int64_t fromSample = 0, int timeoutMs = 5000);
+    // 8d: while stopped, fill the stems from where Play will start (the pedal fast path's armed position), so a
+    // start from there doesn't wait for the disk
+    void prime(int64_t fromSample);
     // ---- 7d (backup rig): transport at a host time, so two computers do the same thing at the same moment ----
     // fromSample leaves the interface exactly at `when` (silence until then; sample-accurate inside the block).
     bool startAt(int64_t fromSample, Clock::time_point when, int timeoutMs = 5000);
@@ -233,6 +236,7 @@ private:
 
     std::atomic<bool> playing { false }, finished { false }, deviceRunning { false }, stopReq { false };
     std::atomic<int64_t> serial { 0 };
+    std::atomic<int> idleRuns { 0 }; // 8d: callbacks in a row that found the engine stopped (they touch no stem)
     std::atomic<int> latencyBase { 0 };
     std::atomic<int64_t> startAtNs { 0 }, stopAtNs { 0 }, lastOutNs { 0 }, lastPos { 0 }, testNowNs { 0 }; // 7d
 

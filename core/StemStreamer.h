@@ -57,7 +57,10 @@ public:
         standbyReady.store(false, std::memory_order_release);
         seekReq.store(frame, std::memory_order_release);
         timeline = frame; debt = 0; pending = -1; // audio thread is idle while the engine is stopped
+        seekedTo = frame;
     }
+    // 8d: already sought to frame and filled, nothing read since (the engine is stopped): Play needn't seek again
+    bool primedAt(int64_t frame) const { return seekedTo == frame && timeline == frame && primed(); }
     bool primed() const
     {
         return ! seeking.load(std::memory_order_acquire) && seekReq.load(std::memory_order_acquire) < 0
@@ -239,6 +242,7 @@ private:
     std::atomic<int> active { 0 };
     std::atomic<uint64_t> gen { 0 };
     int64_t timeline = 0, pending = -1; int debt = 0; // audio thread
+    int64_t seekedTo = -1;                             // 8d: the last seek (control thread, engine stopped)
 };
 
 } // namespace setline

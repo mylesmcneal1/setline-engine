@@ -3,6 +3,7 @@
 #include "Log.h"
 #include "Package.h"
 #include "AbletonImport.h"
+#include "Updater.h"
 #include "Media.h"
 #include "WebUi.h"
 #include <set>
@@ -39,6 +40,7 @@ Bridge::Bridge(AudioHost& host, juce::PropertiesFile& settings) : audio(host), s
     audio.onSetupChanged = [this] { emit("audioSetupChanged", audio.getSetup()); };
     audio.emit = [this](const juce::Identifier& id, const juce::var& v) { emit(id, v); };
     midiControl.emit = [this](const juce::String& id, const juce::var& v) { emit(juce::Identifier(id), v); };
+    midiControl.fast = [this](const juce::String& a, bool press, double t0) { return pedalFast(a, press, t0); }; // 8d
     audio.setEchoGuard(&midiControl.echo);
     // 7d: the backup rig
     rig.emit = [this](const juce::String& id, const juce::var& v) { rigMute(); emit(juce::Identifier(id), v); };
@@ -109,6 +111,51 @@ Cues::Choice Bridge::choiceOf(const juce::var& v, juce::String* missing) const
 // The rate cues are made at: the device's, or 48 kHz without one (offline renders use the same).
 double Bridge::cueRate() const { return audio.sampleRate() > 0 ? audio.sampleRate() : 48000.0; }
 
+// 8d: a mapped pedal's transport action, done natively on the message thread (no page in between). -> the result,
+// or void when the page should do it (not armed, not playing, an action that needs the page...).
+juce::var Bridge::pedalFast(const juce::String& a, bool press, double t0)
+{
+    const auto& arm = pedalArmV;
+    if (! arm.isObject() || ! press) return {};
+    auto ok = [](const juce::var& r) { return r.isObject() && ! r.hasProperty("error"); };
+    auto obj = [](std::initializer_list<std::pair<const char*, juce::var>> kv) { auto* o = new juce::DynamicObject(); for (auto& [k, v] : kv) o->setProperty(k, v); return juce::var(o); };
+    const auto st = audio.transportState();
+    const bool playing = (bool) st["playing"];
+    juce::var r;
+    double actMs = 0; // when the engine has it: a stop request is posted at once (the 10 ms fade-out follows, no click)
+    if (a == "playStop" || a == "play" || a == "stop") {
+        if (playing && a != "play") { actMs = juce::Time::getMillisecondCounterHiRes() - t0; r = audio.transport(obj({ { "cmd", "stop" } })); }
+        else if (! playing && a != "stop" && (bool) arm["ready"] && arm["songId"].toString() == st["songId"].toString())
+            r = audio.transport(obj({ { "cmd", "play" }, { "fromBar", arm["bar"] }, { "fromBeat", arm["beat"] } }));
+    } else if (a == "nextSong") {
+        if (playing && arm["nextId"].toString().isNotEmpty()) r = audio.transport(obj({ { "cmd", "next" }, { "songId", arm["nextId"] } }));
+    } else if (a.startsWith("jump") && a.length() > 4 && a.substring(4).containsOnly("0123456789")) {
+        const int n = a.substring(4).getIntValue();
+        auto* js = arm["jumps"].getArray();
+        if (playing && js && n >= 1 && n <= js->size() && (int) (*js)[n - 1] >= 1) {
+            const int bar = (int) st["bar"]; int atBar = 0;
+            if (auto* ss = arm["secs"].getArray()) for (auto& x : *ss) if (bar >= (int) x[0] && bar < (int) x[1]) atBar = (int) x[1];
+            const auto when = arm["when"].toString();
+            r = audio.queueJump(obj({ { "toBar", (*js)[n - 1] }, { "toBeat", 1 }, { "when", when == "section" && atBar ? "section" : when == "beat" ? "beat" : "bar" }, { "atBar", atBar } }));
+        }
+    } else if (a == "vamp") {
+        if (playing && ! (bool) arm["vamp"]) {
+            const int bar = (int) st["bar"];
+            if (auto* ss = arm["secs"].getArray()) for (auto& x : *ss) if (bar >= (int) x[0] && bar < (int) x[1]) { r = audio.setLoop(obj({ { "fromBar", x[0] }, { "fromBeat", 1 }, { "toBar", x[1] }, { "toBeat", 1 } })); break; }
+        }
+    } else if (a == "exitLoop") {
+        if (playing && (bool) arm["looping"]) r = audio.setLoop(juce::var());
+    } else if (a == "syncMidi") {
+        if (auto* d = arm["sync"].getArray()) { int n = 0; for (auto& x : *d) n += ok(audio.sendMidiNow(x["port"].toString(), x["msgs"])) ? 1 : 0; if (n) r = obj({ { "sent", n } }); }
+    }
+    if (! ok(r)) return {};
+    const double done = juce::Time::getMillisecondCounterHiRes() - t0, ms = actMs > 0 ? actMs : done;
+    if (auto* ro = r.getDynamicObject()) { ro->setProperty("actMs", ms); ro->setProperty("doneMs", done); }
+    ++fastCount; fastSum += ms; if (ms > fastMax) { fastMax = ms; fastWorst = a; }
+    if (fastCount <= 20 || ms > 5) applog::line("Pedal fast path: " + a + " in " + juce::String(ms, 2) + " ms");
+    return r;
+}
+
 juce::String Bridge::diagnostics()
 {
     juce::StringArray t;
@@ -141,6 +188,7 @@ juce::String Bridge::diagnostics()
     t.add("Startup: " + applog::startupSummary());
     { const auto ri = rig.info(); t.add("Backup rig: " + ri["role"].toString() + (rig.paired() ? ", paired with " + ri["peer"].toString() + ", clock offset " + juce::String((double) ri["offsetMs"], 2) + " ms, worst drift " + juce::String((double) ri["driftWorstMs"], 2) + " ms" + ((bool) ri["failover"] ? ", BACKUP IS LIVE" : "") : juce::String(rig.role() == "off" ? "" : ", not paired"))); }
     t.add("MIDI in: " + (midiControl.inputs().isEmpty() ? juce::String("no inputs") : midiControl.inputs().joinIntoString(", ")) + ", " + juce::String(midiControl.mappings().size()) + " mappings" + (midiActCount ? ", " + juce::String(midiActCount) + " pedal actions, slowest " + juce::String(midiActMax, 1) + " ms" : juce::String()));
+    t.add("Pedals (fast path): " + (fastCount ? juce::String(fastCount) + " actions straight to the engine, average " + juce::String(fastSum / fastCount, 2) + " ms, worst " + juce::String(fastMax, 2) + " ms (" + fastWorst + ")" : juce::String("none yet")));
     t.add("Kokoro voices: " + kokoro::stateName(kokoro::status().state) + "; voice picker: " + cues.voiceListInfo());
     t.add("");
     t.add("Log (last 200 lines of " + applog::current().getFullPathName() + "):");
@@ -161,7 +209,7 @@ void Bridge::rigMute() { audio.setRigMute(rig.midiMuted(), juce::StringArray::fr
 
 Bridge::~Bridge() {
     exportCancel->store(true);
-    if (exporter.joinable()) exporter.join(); band.stop(); if (rigSender.joinable()) rigSender.join(); rig.emit = nullptr; audio.rigDelayMs = nullptr; audio.onTransportChange = nullptr; audio.onJumpQueued = nullptr; midiControl.emit = nullptr; audio.setEchoGuard(nullptr); kokoro::setListener(nullptr); *alive = nullptr; audio.onSetupChanged = nullptr; audio.emit = nullptr; audio.cueAudio = nullptr; media.emit = nullptr; }
+    if (exporter.joinable()) exporter.join(); band.stop(); if (rigSender.joinable()) rigSender.join(); rig.emit = nullptr; audio.rigDelayMs = nullptr; audio.onTransportChange = nullptr; audio.onJumpQueued = nullptr; midiControl.emit = nullptr; midiControl.fast = nullptr; audio.setEchoGuard(nullptr); kokoro::setListener(nullptr); *alive = nullptr; audio.onSetupChanged = nullptr; audio.emit = nullptr; audio.cueAudio = nullptr; media.emit = nullptr; }
 
 Bridge::Options Bridge::add(Options o, const char* name, Fn fn)
 {
@@ -580,6 +628,17 @@ Bridge::Options Bridge::addTo(Options o)
     o = add(o, "midiMappings", [this](const juce::var&) { juce::Array<juce::var> ins; for (auto& n : midiControl.inputs()) ins.add(n); auto* r = new juce::DynamicObject(); r->setProperty("list", midiControl.mappings()); r->setProperty("inputs", ins); return juce::var(r); });
     o = add(o, "setMidiMappings", [this](const juce::var& a) { midiControl.setMappings(a["list"]); auto* r = new juce::DynamicObject(); r->setProperty("ok", true); return juce::var(r); });
     o = add(o, "midiLearn", [this](const juce::var& a) { midiControl.learn((bool) a["on"]); return juce::var(true); });
+    // 8d: the pedal fast path's state (the song loaded and ready, where Play starts, the sections in the engine's bars,
+    // jump timing, the next song waiting, the sync point's messages) and its numbers
+    o = add(o, "pedalArm", [this](const juce::var& a) {
+        // the sync point's ports opened now (the first send to a port opens it, which can take ~80 ms)
+        if (juce::JSON::toString(a["sync"]) != juce::JSON::toString(pedalArmV["sync"])) if (auto* d = a["sync"].getArray()) for (auto& x : *d) audio.preopenMidi(x["port"].toString());
+        pedalArmV = a;
+        // stopped, armed: the stems filled from where a pedal's Play starts (no disk wait then)
+        if ((bool) a["ready"] && a.hasProperty("bar")) audio.primeAt((int) a["bar"], (double) a["beat"]);
+        return juce::var(true);
+    });
+    o = add(o, "pedalStats", [this](const juce::var&) { auto* r = new juce::DynamicObject(); r->setProperty("count", fastCount); r->setProperty("max", fastMax); r->setProperty("avg", fastCount ? fastSum / fastCount : 0.0); r->setProperty("worst", fastWorst); return juce::var(r); });
     o = add(o, "midiInject", [this](const juce::var& a) { midiControl.inject(a["port"].toString(), a["bytes"]); return juce::var(true); }); // tests: as if a pedal sent it
     // the page ran a pedal's action: how long since the message arrived (logged; Copy diagnostics shows the worst)
     o = add(o, "midiActed", [this](const juce::var& a) {
@@ -661,6 +720,112 @@ Bridge::Options Bridge::addTo(Options o)
             juce::MessageManager::callAsync([v, done, alive_] { if (*alive_ != nullptr) done(v); });
         }).detach();
     });
+    // ---- 8d: in-app updates (Updater.h): check the "latest" release, download + verify + stage, install / roll back
+    auto appVersion = [] { return juce::JUCEApplication::getInstance()->getApplicationVersion(); };
+    auto prevVersion = [](const juce::File& prev) -> juce::String {
+        if (! prev.exists()) return {};
+       #if JUCE_MAC
+        const auto plist = prev.getChildFile("Contents/Info.plist").loadFileAsString();
+        const auto after = plist.fromFirstOccurrenceOf("<key>CFBundleShortVersionString</key>", false, false);
+        const auto v = after.fromFirstOccurrenceOf("<string>", false, false).upToFirstOccurrenceOf("</string>", false, false).trim();
+        return v.isNotEmpty() ? v : juce::String("the previous build");
+       #else
+        return "the previous build";
+       #endif
+    };
+    auto playingNow = [this] { return (bool) audio.transportState()["playing"]; };
+    o = add(o, "updateInfo", [this, appVersion, prevVersion](const juce::var&) {
+        const auto app = updater::currentApp();
+        auto* r = new juce::DynamicObject();
+        r->setProperty("current", appVersion());
+        r->setProperty("previous", prevVersion(updater::previousApp(app)));
+        r->setProperty("cant", updater::cantInstall(app, appVersion()));
+        r->setProperty("daily", settings.getBoolValue("updateDaily", true));
+        r->setProperty("lastCheck", settings.getDoubleValue("updateLastCheck", 0));
+        r->setProperty("hasToken", settings.getValue("updateToken").isNotEmpty());
+        r->setProperty("staged", updStaged.exists());
+        return juce::var(r);
+    });
+    o = add(o, "updatePrefs", [this](const juce::var& a) {
+        if (a.hasProperty("daily")) settings.setValue("updateDaily", (bool) a["daily"]);
+        if (a.hasProperty("token")) settings.setValue("updateToken", a["token"].toString().trim());
+        settings.saveIfNeeded();
+        auto* r = new juce::DynamicObject(); r->setProperty("ok", true); return juce::var(r);
+    });
+    o = addAsync(o, "updateCheck", [this, appVersion](const juce::var&, auto done) {
+        const auto token = settings.getValue("updateToken"), cur = appVersion();
+        settings.setValue("updateLastCheck", (double) juce::Time::currentTimeMillis());
+        auto alive_ = alive;
+        std::thread([token, cur, done, alive_] {
+            juce::String err;
+            auto rel = updater::fetchLatest(token, err);
+            juce::MessageManager::callAsync([rel, err, cur, done, alive_] {
+                if (*alive_ == nullptr) return;
+                auto* r = new juce::DynamicObject(); juce::var rv(r);
+                r->setProperty("current", cur);
+                if (err.isNotEmpty()) { r->setProperty("error", err); done(rv); return; }
+                for (auto& [k, v] : rel.getDynamicObject()->getProperties()) r->setProperty(k, v);
+                r->setProperty("latest", rel["version"]);
+                r->setProperty("newer", updater::compareVersions(rel["version"].toString(), cur) > 0);
+                done(rv);
+            });
+        }).detach();
+    });
+    o = addAsync(o, "updateDownload", [this, appVersion](const juce::var& a, auto done) {
+        const auto app = updater::currentApp();
+        const auto why = updater::cantInstall(app, appVersion());
+        if (why.isNotEmpty()) { auto* r = new juce::DynamicObject(); r->setProperty("error", why); done(juce::var(r)); return; }
+        const auto token = settings.getValue("updateToken"), url = a["asset"]["url"].toString(), sums = a["sums"]["url"].toString(), name = updater::assetName();
+        const auto work = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("setline-update");
+        auto alive_ = alive;
+        std::thread([this, token, url, sums, name, work, app, done, alive_] {
+            juce::String err;
+            const auto sumsFile = work.getChildFile("SHA256SUMS.txt"), zip = work.getChildFile(name);
+            juce::File staged;
+            int last = -1;
+            auto progress = [alive_, &last](double f) { const int pc = (int) (f * 100); if (pc == last) return; last = pc;
+                juce::MessageManager::callAsync([alive_, pc] { if (*alive_ != nullptr) { auto* o = new juce::DynamicObject(); o->setProperty("done", pc); (*alive_)->emit("updateProgress", juce::var(o)); } }); };
+            if (updater::download(sums, token, sumsFile, nullptr, err) && updater::download(url, token, zip, progress, err)
+                && updater::verify(zip, sumsFile.loadFileAsString(), name, err))
+                staged = updater::stage(zip, app, err);
+            work.deleteRecursively();
+            juce::MessageManager::callAsync([this, staged, err, done, alive_] {
+                if (*alive_ == nullptr) return;
+                auto* r = new juce::DynamicObject();
+                if (err.isNotEmpty() || ! staged.exists()) r->setProperty("error", err.isNotEmpty() ? err : juce::String("The update couldn't be prepared."));
+                else { updStaged = staged; r->setProperty("ready", true); applog::line("Update: downloaded, verified and unpacked next to set.Line"); }
+                done(juce::var(r));
+            });
+        }).detach();
+    });
+    // never while playing: the page waits until it's stopped (and saves the library first), then calls this
+    o = add(o, "updateInstall", [this, playingNow](const juce::var&) {
+        auto* r = new juce::DynamicObject(); juce::var rv(r);
+        if (playingNow()) { r->setProperty("error", "Stop first: set.Line never updates while playing."); return rv; }
+        if (! updStaged.exists()) { r->setProperty("error", "Download the update first."); return rv; }
+        const auto app = updater::currentApp();
+        const auto script = updater::writeSwapScript(juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("setline-update-run"), false, app, updStaged, updater::currentPid(), true);
+        if (! updater::runScript(script, false)) { r->setProperty("error", "Couldn't start the installer."); return rv; }
+        applog::line("Update: installing; set.Line quits and the new build starts");
+        juce::Timer::callAfterDelay(400, [] { juce::JUCEApplication::quit(); });
+        r->setProperty("ok", true); return rv;
+    });
+    o = add(o, "updateRollback", [this, playingNow, appVersion](const juce::var&) {
+        auto* r = new juce::DynamicObject(); juce::var rv(r);
+        if (playingNow()) { r->setProperty("error", "Stop first: set.Line never changes builds while playing."); return rv; }
+        const auto app = updater::currentApp();
+        if (! updater::previousApp(app).exists()) { r->setProperty("error", "There's no previous build to go back to."); return rv; }
+        const auto why = updater::cantInstall(app, appVersion());
+        if (why.isNotEmpty()) { r->setProperty("error", why); return rv; }
+        const auto script = updater::writeSwapScript(juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("setline-update-run"), true, app, {}, updater::currentPid(), true);
+        if (! updater::runScript(script, false)) { r->setProperty("error", "Couldn't start the rollback."); return rv; }
+        applog::line("Update: rolling back to the previous build");
+        juce::Timer::callAfterDelay(400, [] { juce::JUCEApplication::quit(); });
+        r->setProperty("ok", true); return rv;
+    });
+    // ---- 8d: crash recovery: where the show is while playing (the page writes it every 2 s); cleared on a normal quit
+    o = add(o, "resumeSave", [this](const juce::var& a) { resumeFile().replaceWithText(juce::JSON::toString(a, true)); auto* r = new juce::DynamicObject(); r->setProperty("ok", true); return juce::var(r); });
+    o = add(o, "resumeGet", [this](const juce::var&) { const auto v = juce::JSON::parse(resumeFile().loadFileAsString()); return v.isObject() ? v : juce::var(new juce::DynamicObject()); });
     // the import's summary, next to the Library's migration log -> its path
     o = add(o, "ableLog", [this](const juce::var& a) {
         const auto f = lib.folder().getChildFile("ableton-import-log.txt");

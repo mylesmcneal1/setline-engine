@@ -362,7 +362,8 @@ void Engine::waitForCallbackToFinish()
 
 void Engine::fadeOutAndStop()
 {
-    if (playing.load(std::memory_order_acquire) && deviceRunning.load() && ! cfg.offline) {
+    const bool was = playing.load(std::memory_order_acquire);
+    if (was && deviceRunning.load() && ! cfg.offline) {
         // Let the callback fade out (10 ms) and stop by itself; give up waiting after 250 ms.
         stopReq.store(true, std::memory_order_release);
         const auto until = Clock::now() + std::chrono::milliseconds(250);
@@ -370,7 +371,9 @@ void Engine::fadeOutAndStop()
     }
     playing.store(false, std::memory_order_release);
     stopReq.store(false, std::memory_order_release);
-    waitForCallbackToFinish(); // from here on the audio thread does not touch any stem
+    // from here on the audio thread does not touch any stem. 8d: already stopped, and a callback has seen it
+    // stopped since: none can be in the middle of reading a stem, so no need to wait two more callbacks
+    if (was || idleRuns.load(std::memory_order_acquire) < 1) waitForCallbackToFinish();
 }
 
 void Engine::stop()
@@ -403,6 +406,16 @@ void Engine::jumpAtHost(Clock::time_point when, int64_t to)
     setJump(at, to, false);
 }
 
+void Engine::prime(int64_t fromSample)
+{
+    std::lock_guard<std::mutex> lk(control);
+    if (playing.load(std::memory_order_acquire) || cfg.offline) return;
+    auto& P = cur();
+    if (fromSample < 0 || fromSample >= P.songLen) return;
+    const int64_t audioFrom = fromSample - std::min<int64_t>(fromSample, std::lround(0.005 * cfg.sampleRate)); // as start() does
+    for (auto& s : P.stems) if (! s->primedAt(audioFrom)) s->requestSeek(audioFrom);
+}
+
 bool Engine::start(int64_t fromSample, int timeoutMs)
 {
     std::lock_guard<std::mutex> lk(control);
@@ -415,7 +428,7 @@ bool Engine::start(int64_t fromSample, int timeoutMs)
     // Audio starts up to 5 ms early so the fade-in is over by fromSample; click and MIDI start at fromSample.
     const int64_t preroll = std::min<int64_t>(fromSample, std::lround(0.005 * cfg.sampleRate));
     const int64_t audioFrom = fromSample - preroll;
-    if (! (nextFresh.exchange(false) && audioFrom == 0)) for (auto& s : P.stems) s->requestSeek(audioFrom);
+    if (! (nextFresh.exchange(false) && audioFrom == 0)) for (auto& s : P.stems) if (! s->primedAt(audioFrom)) s->requestSeek(audioFrom); // 8d: primed there already: no seek
     armStems(); // an armed loop's target is prepared again from the new position
     if (cfg.offline) {
         for (auto& s : P.stems) while (! s->primed()) s->fill();
@@ -491,7 +504,8 @@ void Engine::process(float* const* outs, int numOuts, int n)
     // 7a: new click hits (only when the last ones have been collected, so the hand-back slot is always free)
     if (clickOut.load(std::memory_order_acquire) == nullptr)
         if (auto* u = clickIn.exchange(nullptr, std::memory_order_acq_rel)) takeClicks(u);
-    if (! playing.load(std::memory_order_acquire)) { clockIdle(n, t0); return; }
+    if (! playing.load(std::memory_order_acquire)) { idleRuns.fetch_add(1, std::memory_order_acq_rel); clockIdle(n, t0); return; }
+    idleRuns.store(0, std::memory_order_release);
     // 7d: when this block's first sample leaves the interface; a start / stop scheduled for a host time
     const double srate = cfg.sampleRate;
     const int64_t outNs = nsOf(t0) + (int64_t) std::llround(latencyBase.load(std::memory_order_relaxed) / srate * 1e9);

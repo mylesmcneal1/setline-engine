@@ -21,6 +21,10 @@ public:
     // emit(name, payload) on the message thread: "midiAction" {action, press, mapping, port, t0, label},
     // "midiIn" {port, text, kind, ch, num, val} (the Activity line, throttled), "midiLearned" {port, type, ch, num, val}
     std::function<void(const juce::String&, const juce::var&)> emit;
+    // 8d: the fast path. Called on the message thread for each mapped action before the page hears of it; a result
+    // (not void) means the action was done natively (straight to the engine). The page is told {fast: true, fastMs,
+    // fastResult} and only catches up.
+    std::function<juce::var(const juce::String& action, bool press, double t0)> fast;
 
     juce::var mappings() const;                 // [{id, action, port, type, ch, num, mode, debounce, feedback}]
     void setMappings(const juce::var& list);    // saved to the settings

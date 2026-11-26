@@ -20,6 +20,13 @@ Mac through GitHub:
 3. **On the Mac, run `setline-update`.** It downloads `latest`, checks the SHA-256, asks you to quit set.Line if
    it's running, installs it in `/Applications`, and prints the old and new version and the release notes.
 
+   **From 8d on, no Terminal is needed.** In set.Line, use **File › Check for updates…**: it shows the release
+   notes, then downloads, checks the SHA-256 and installs the same way (the build before is kept as
+   "set.Line (previous).app"), and restarts. It never installs while playing; it waits until you stop.
+   **Roll back to the previous version…** is in the same dialog. set.Line also checks quietly once a day, a few
+   seconds after launch, and only says something when there's a newer build. While the repository is private,
+   add a GitHub access token that can read it in Settings › General › Updates.
+
 ## One-time setup on the Mac
 In Terminal:
 

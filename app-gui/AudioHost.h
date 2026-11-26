@@ -101,6 +101,8 @@ public:
     // A queued jump (Perform: tap a section while playing): {toBar, toBeat, when: "bar" | "section" | "beat", atBar}
     // jumps to toBar at the next bar line / at atBar (end of the section) / at the next beat; {cancel: true} clears it.
     juce::var queueJump(const juce::var& req);
+    void preopenMidi(const juce::String& port) { std::vector<std::string> w; midiOuts.resolve(port, w); } // 8d: before a pedal needs it
+    void primeAt(int bar, double beat) { if (loaded && ! eng.isPlaying()) eng.prime(eng.tempoMap().sampleAt(juce::jmax(1, bar), juce::jmax(1.0, beat))); } // 8d
     juce::var transportState();
     // Tests (--test-script): maps the song exactly as loadSong does and renders it offline (no device):
     // {fromBar, seconds, loop: {fromBar, toBar}} -> {rate, bars: [sample per downbeat], outs: [{onsets, peak}], midi: [sample]}
