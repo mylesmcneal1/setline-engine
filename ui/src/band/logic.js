@@ -93,29 +93,47 @@ export function mergeFields(songFields, verFields) {
 // what's left of the current song + the full lengths of the songs in between. A Stop or Auto-next before it makes the
 // time unknowable: {after: <the song it follows>} instead. -> null (no change ahead) or
 // {value, songId, songName, index, inSec | null, after | null, progress (0..1 since the last change), fromValue}
+// 9b: a field's value at time t of a song: its value at the start, then each preset change inside it that sets the
+// field (fchg: [{t, f: {field: value}}], sent by the host for fields the song doesn't set itself)
+export function fieldValueAt(show, songId, fieldId, t) {
+  let v = fieldValue(show, songId, fieldId);
+  const s = show && show.songs && show.songs[songId];
+  for (const c of (s && s.fchg) || []) if (c.t <= t + 1e-6 && c.f && c.f[fieldId] !== undefined) v = String(c.f[fieldId]);
+  return v;
+}
 export function untilNextChange(show, curIndex, pos, field) {
   const order = (show && show.setlist && show.setlist.order) || [];
   if (curIndex < 0 || curIndex >= order.length) return null;
   const val = (i) => fieldValue(show, order[i].id, field);
   const songOf = (i) => show.songs[order[i].id] || { len: 0, name: "" };
-  const here = val(curIndex);
-  let j = curIndex + 1;
-  while (j < order.length && val(j) === here) j++;
-  if (j >= order.length) return null;
-  // the time until song j starts: the rest of this song + the songs in between. A Stop or Auto-next anywhere before
-  // song j makes it unknowable: "after <the last such song>" (from then on the time is exact).
+  const inner = (i) => (songOf(i).fchg || []).filter((c) => c.f && c.f[field] !== undefined).map((c) => ({ t: c.t, v: String(c.f[field]) }));
+  const here = fieldValueAt(show, order[curIndex].id, field, pos);
+  const res = (j, at, value, after, progress) => ({ value, fromValue: here, songId: order[j].id, songName: songOf(j).name, index: j, inSec: after === null ? at : null, after, progress, inSong: j === curIndex });
+  // 9b: later in this song (a preset change in the middle of it)
+  const mine = inner(curIndex);
+  const last = mine.filter((c) => c.t <= pos + 1e-6).pop();
+  for (const c of mine) if (c.t > pos + 1e-6 && c.v !== here) { const from = last ? last.t : 0; return res(curIndex, c.t - pos, c.v, null, c.t > from ? Math.min(1, Math.max(0, (pos - from) / (c.t - from))) : 0); }
+  // the next songs: at their start, or inside them. A Stop or Auto-next anywhere before makes the time unknowable:
+  // "after <the last such song>" (from then on the time is exact).
   let t = Math.max(0, songOf(curIndex).len - pos), after = null;
-  for (let k = curIndex; k < j; k++) {
-    if (k > curIndex) t += songOf(k).len;
-    const a = order[k].after || { mode: "stop" };
-    if (a.mode === "stop" || a.mode === "auto") after = songOf(k).name;
+  const a0 = order[curIndex].after || { mode: "stop" };
+  if (a0.mode === "stop" || a0.mode === "auto") after = songOf(curIndex).name;
+  // progress since the last change: from the first song with this value (going back) to the change
+  const progressTo = (endT) => { let s0 = curIndex; if (!last) while (s0 > 0 && val(s0 - 1) === here && !inner(s0 - 1).length) s0--;
+    let span = 0, done = 0; for (let k = s0; k < curIndex; k++) { span += songOf(k).len; done += songOf(k).len; }
+    const from = last ? last.t : 0; span += Math.max(0, songOf(curIndex).len - from) + endT; done += Math.max(0, Math.min(pos, songOf(curIndex).len) - from);
+    return span > 0 ? Math.min(1, done / span) : 0; };
+  let between = 0;
+  for (let j = curIndex + 1; j < order.length; j++) {
+    if (val(j) !== here) return res(j, t, val(j), after, progressTo(between));
+    for (const c of inner(j)) if (c.v !== here) return res(j, t + c.t, c.v, after, progressTo(between + c.t));
+    t += songOf(j).len; between += songOf(j).len;
+    const a = order[j].after || { mode: "stop" };
+    if (a.mode === "stop" || a.mode === "auto") after = songOf(j).name;
+    // the value at the end of song j (its last inner change) carries on
+    const ins = inner(j); if (ins.length && ins[ins.length - 1].v !== here) return res(j, t, ins[ins.length - 1].v, after, progressTo(between));
   }
-  // progress since the last change: from the first song with this value (going back) to song j
-  let s = curIndex; while (s > 0 && val(s - 1) === here) s--;
-  let span = 0, done = 0;
-  for (let k = s; k < j; k++) { const L = songOf(k).len; span += L; if (k < curIndex) done += L; }
-  done += Math.min(pos, songOf(curIndex).len);
-  return { value: val(j), fromValue: here, songId: order[j].id, songName: songOf(j).name, index: j, inSec: after === null ? t : null, after, progress: span > 0 ? Math.min(1, done / span) : 0 };
+  return null;
 }
 
 // ---------------------------------------------------------------- curfew

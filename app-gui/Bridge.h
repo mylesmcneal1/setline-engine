@@ -103,6 +103,7 @@ private:
     void preparePeaks(const juce::var& refs, const juce::File& sessionFile);
     bool dirty = false;
     std::shared_ptr<Bridge*> alive = std::make_shared<Bridge*>(this); // cleared on destruction (async callbacks)
+    juce::String uiTiming; // 9b: the page's Show timing summary, for Diagnostics
 };
 
 } // namespace setline::gui

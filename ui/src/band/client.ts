@@ -191,7 +191,7 @@ function frame() {
       case "curfew": { const fb = show && show.setlist.finishBy; const c = show ? L.curfew(show, st.idx, pos, Date.now(), fb) : null;
         if (!c || c.overSec === null) h = big("–", "Curfew", "no finish time set");
         else { const over = c.overSec > 0; h = `<div class="cap">Curfew ${esc(fb)}</div><div class="big" style="color:${over ? "var(--red)" : "var(--green)"};font-size:${fit("+0:00", r.width - 20, r.height - 34)}px">${over ? "+" : "−"}${L.fmtTime(Math.abs(c.overSec))}</div><div class="sub">${over ? "over" : "under"}${c.talking ? " + talking" : ""}</div>`; } break; }
-      case "field": { const sid = cfg.which === "next" ? st.next && st.next.id : songId; h = big(cfg.field ? fieldOf(sid, cfg.field) || "–" : "Pick a field", cfg.field ? fname(cfg.field) + (cfg.which === "next" ? " · next song" : "") : ""); break; }
+      case "field": { const sid = cfg.which === "next" ? st.next && st.next.id : songId; h = big(cfg.field ? (cfg.which !== "next" && sid && show ? L.fieldValueAt(show, sid, cfg.field, st.playing ? pos : 0) : fieldOf(sid, cfg.field)) || "–" : "Pick a field", cfg.field ? fname(cfg.field) + (cfg.which === "next" ? " · next song" : "") : ""); break; }
       case "until": { if (!cfg.field) { h = big("Pick a field"); break; }
         const u = show ? L.untilNextChange(show, st.idx, st.playing ? pos : 0, cfg.field) : null;
         if (!u) { h = big("No change", fname(cfg.field), "for the rest of the set"); break; }

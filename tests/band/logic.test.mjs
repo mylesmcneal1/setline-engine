@@ -1,5 +1,5 @@
 // Unit tests for the band screens' shared logic (ui/src/band/logic.js): node tests/band/logic.test.mjs
-import { ClockSync, untilNextChange, curfew, allowed, mergeFields, preset, WIDGETS, barBeatAt, changesAhead, predictPos } from "../../ui/src/band/logic.js";
+import { ClockSync, untilNextChange, fieldValueAt, curfew, allowed, mergeFields, preset, WIDGETS, barBeatAt, changesAhead, predictPos } from "../../ui/src/band/logic.js";
 
 let failed = 0, passed = 0;
 const check = (name, ok, detail) => { if (ok) passed++; else failed++; console.log((ok ? "ok   " : "FAIL ") + name + (ok || detail === undefined ? "" : "  " + JSON.stringify(detail))); };
@@ -47,6 +47,17 @@ const show = {
   live.songs.b.fields = mergeFields({ tun: "Drop D" }, { tun: "E std" });
   const u4 = untilNextChange(live, 0, 50, "tun");
   check("Until next change: the version's value wins over the song's", u4 && u4.songName === "B" && near(u4.inSec, 150), u4);
+  // 9b: a preset change in the middle of a song changes an inherited field from that point
+  const mid = JSON.parse(JSON.stringify(show));
+  mid.songs.a.fchg = [{ t: 120, f: { tun: "Drop C#" } }];
+  const m1 = untilNextChange(mid, 0, 50, "tun");
+  check("Until next change: a preset change inside this song comes first (70 s), with its progress", m1 && m1.value === "Drop C#" && m1.songName === "A" && near(m1.inSec, 70) && m1.inSong && near(m1.progress, 50 / 120), m1);
+  const m2 = untilNextChange(mid, 0, 130, "tun");
+  check("Until next change: after it, the value is the preset's; the next change is B's start (Drop D again)", m2 && m2.fromValue === "Drop C#" && m2.value === "Drop D" && m2.songName === "B" && near(m2.inSec, 70), m2);
+  check("fieldValueAt: the song's value, then the preset change's", fieldValueAt(mid, "a", "tun", 10) === "Drop D" && fieldValueAt(mid, "a", "tun", 121) === "Drop C#");
+  const mid2 = JSON.parse(JSON.stringify(show)); mid2.songs.b.fchg = [{ t: 60, f: { tun: "Drop C" } }];
+  const m3 = untilNextChange(mid2, 0, 50, "tun");
+  check("Until next change: a change inside a later song counts its time into that song (150 + 60 s)", m3 && m3.value === "Drop C" && m3.songName === "B" && near(m3.inSec, 210), m3);
   check("mergeFields: empty version values don't override", mergeFields({ a: "1", b: "2" }, { a: "", b: "3" }).a === "1" && mergeFields({ a: "1", b: "2" }, { a: "", b: "3" }).b === "3");
 }
 

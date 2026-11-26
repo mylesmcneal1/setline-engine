@@ -1145,6 +1145,7 @@
 </style>
 <script src="ui.js"></script>
 <script src="modeler.js"></script>
+<link rel="stylesheet" href="show9.css">
 </head>
 <body>
 
@@ -1660,7 +1661,7 @@ function renameSong(id){ const s=songs.find(x=>x.id===id); open.add(id); select(
   nm.innerHTML=`<input value="${esc(s.name)}" style="font:inherit;width:100%;height:26px;padding:2px 6px">`; const i=nm.firstChild; i.onclick=e=>e.stopPropagation(); i.onpointerdown=e=>e.stopPropagation(); i.focus(); i.select();
   const done=()=>{ s.name=i.value.trim()||s.name; refresh(); }; i.onblur=done; i.onkeydown=e=>{ if(e.key==='Enter') i.blur(); if(e.key==='Escape'){ i.value=s.name; i.blur(); } }; }
 function dupSong(id){ const s=songs.find(x=>x.id===id), n=JSON.parse(JSON.stringify(s,function(k,v){ return this===s&&(k==='bars'||k==='secPos'||k==='_yy')?undefined:v; }));
-  n.id='s'+Date.now(); n.name=s.name+' (copy)'; n.origMap=JSON.stringify(n.tmap); Object.keys(n.malts||{}).forEach(t=>{ const a=n.malts[t].find(x=>x.id===n.muse[t])||n.malts[t][0]; n.midi[t]=a.events; });
+  n.id=freshSongId(); n.name=s.name+' (copy)'; n.origMap=JSON.stringify(n.tmap); Object.keys(n.malts||{}).forEach(t=>{ const a=n.malts[t].find(x=>x.id===n.muse[t])||n.malts[t][0]; n.midi[t]=a.events; });
   buildBars(n); songs.push(n); open.add(n.id); select(n.id,false); refresh(); document.querySelector(`.folder[data-id="${n.id}"]`)?.scrollIntoView({block:'center',behavior:'smooth'}); toast(`Duplicated as “${n.name}”`); }
 function deleteSong(id){ const s=songs.find(x=>x.id===id), inLists=setlists.filter(l=>l.order.includes(id));
   confirmBox(`Delete “${esc(s.name)}”?`,`Removes the song with all its versions, sections, MIDI and audio edits from this session${inLists.length?`, and from ${inLists.map(l=>'“'+esc(l.name)+'”').join(', ')}`:''}. The stem files on disk aren’t touched.`,'Delete song',()=>{
@@ -2100,12 +2101,15 @@ function secOrd(s,id){ const v=curVer(s); if(v.custom||isFullVer(s,v)) return 0;
   return JSON.stringify(src)===JSON.stringify(mine)&&!on.some(o=>o.k==='x')?0:i+1; }
 function verSkipHTML(s,x){ const v=curVer(s); if(v.custom||isFullVer(s,v)) return '';
   return s.secPos.filter(p=>secOff(s,p.id)).map(p=>`<i class="vskip" style="left:calc(var(--head) + ${x(p.start)}px);width:${x(p.start+p.bars)-x(p.start)}px" title="Not in “${esc(v.name)}”"></i>`).join(''); }
-function renderFolders(){
-  const sc=$('scroller'); sc.style.setProperty('--vw',sc.clientWidth+'px'); const keepT=sc.scrollTop, keepL=sc.scrollLeft; sc.innerHTML='';
-  $('sessCount').textContent=`${songs.length} song${songs.length===1?'':'s'}`;
+// 9b: renderFolders(list, into) draws just those songs into a container (one folder row opening or closing);
+// ui/public/show9.js wraps it with the Cards / Folders views
+function renderFolders(listIn,into){
+  const sc=into||$('scroller'); if(!into) sc.style.setProperty('--vw',sc.clientWidth+'px'); const keepT=sc.scrollTop, keepL=sc.scrollLeft; sc.innerHTML='';
+  if(!into){ $('sessCount').textContent=`${songs.length} song${songs.length===1?'':'s'}`;
   renderHero(); sc.classList.toggle('focus',!!focusSong()); $('crumbSong').innerHTML=focusSong()?`<i>›</i>${esc(focusSong().name)}`:''; $('crumb').classList.toggle('in',!!focusSong());
-  if(!songs.length){ sc.innerHTML=`<div class="emptyarr"><div class="blank"><div class="bt">No songs yet</div><div class="bs">Add a song from its stems. Each song gets its own tempo map, sections, tracks and MIDI.</div><button class="btn pri" id="firstSong">＋ Add your first song</button></div></div>`; $('firstSong').onclick=()=>openNewSong(); return; }
-  const FS=focusSong(), list=FS?[FS]:[...songs].sort(byName);
+  }
+  if(!into&&!songs.length){ sc.innerHTML=`<div class="emptyarr"><div class="blank"><div class="bt">No songs yet</div><div class="bs">Add a song from its stems. Each song gets its own tempo map, sections, tracks and MIDI.</div><button class="btn pri" id="firstSong">＋ Add your first song</button></div></div>`; $('firstSong').onclick=()=>openNewSong(); return; }
+  const FS=focusSong(), list=listIn||(FS?[FS]:[...songs].sort(byName));
   const W=Math.max(...list.map(x=>Math.ceil(Math.max(x.len,x.audio)*PXS)+40));
   list.forEach(s=>{
     const id=s.id, x=bar=>s.bars[bar-1].t*PXS, si=setOrder.indexOf(id), ch=s.tmap.length-1;
@@ -2152,7 +2156,7 @@ function renderFolders(){
     h+=`</div><div class="ph"></div></div>`;
     sc.insertAdjacentHTML('beforeend',h);
   });
-  sc.scrollTop=keepT; sc.scrollLeft=keepL; viewM=null;
+  if(!into){ sc.scrollTop=keepT; sc.scrollLeft=keepL; } viewM=null;
   wireVerSelects(sc); wireAltSelects(sc);
   sc.querySelectorAll('.fh').forEach(hd=>hd.oncontextmenu=e=>{ e.preventDefault(); songMenu(e,hd.closest('.folder').dataset.id,'list'); });
   sc.querySelectorAll('.fh').forEach(hd=>hd.onclick=e=>{ if(e.target.closest('.fplay')) return; const id=hd.closest('.folder').dataset.id; if(songRowClick(e,id,'folders',folderOrder())) return; open.has(id)?open.delete(id):open.add(id); select(id,false); renderFolders(); });
@@ -3732,11 +3736,13 @@ function wireRig(){ const q=id=>$(id), re=()=>renderSettings();
 let BAND={network:'',pin:'',screens:[]};
 const fieldVal=(s,fid,v)=>{ const vv=v&&v.fields&&v.fields[fid]; if(vv!==undefined&&vv!==null&&vv!=='') return String(vv); const x=s&&s.fields&&s.fields[fid]; return x===undefined||x===null?'':String(x); };
 function setFieldVal(s,fid,val,v){ snap(); const o=v||s; o.fields=o.fields||{}; if(val==='') delete o.fields[fid]; else o.fields[fid]=val; if(!Object.keys(o.fields).length) delete o.fields; refresh(); }
-function fieldInput(f,val,attrs){ if(f.type==='list') return `<select ${attrs}><option value="" ${val?'':'selected'}>–</option>${(f.options||[]).map(o=>`<option ${o===val?'selected':''}>${esc(o)}</option>`).join('')}${val&&!(f.options||[]).includes(val)?`<option selected>${esc(val)}</option>`:''}</select>`;
+// 9b: a value the song inherits from the preset it starts with: {v, from: '17A'} (the first preset that sets it)
+function fieldInh(s,f){ if(!window.MODUI||!window.SLMod||typeof MODP==='undefined') return null; for(const u of MODUI.presetsUsed(s)){ const e=(MODP[u.dev]||{})[u.preset], v=e&&e.fields?e.fields[f.id]:undefined; if(v!==undefined&&v!=='') return {v:String(v),from:SLMod.presetLabel(u.dev,u.preset)}; } return null; }
+function fieldInput(f,val,attrs,blank){ if(f.type==='list') return `<select ${attrs}><option value="" ${val?'':'selected'}>${blank?esc(blank):'–'}</option>${(f.options||[]).map(o=>`<option ${o===val?'selected':''}>${esc(o)}</option>`).join('')}${val&&!(f.options||[]).includes(val)?`<option selected>${esc(val)}</option>`:''}</select>`;
   return `<input ${attrs} value="${esc(val)}" spellcheck="false">`; }
 function fieldsCard(s,V){ const vs=versOf(s);
   if(!FIELDS.length) return rcard('Fields','<p class="rnote">Song fields (Tuning, Guitar, Click…) show on the band’s screens.</p><div class="racts"><button class="btn line" id="fEdit">Add song fields…</button></div>');
-  return rcard('Fields',FIELDS.map(f=>rrow(esc(f.name),`<span style="display:flex;gap:4px;min-width:0">${fieldInput(f,(s.fields||{})[f.id]??'',`data-fs="${f.id}" title="This song" style="width:${vs.length>1?'92px':'150px'}"`)}${vs.length>1?fieldInput(f,(V.fields||{})[f.id]??'',`data-fv="${f.id}" title="Only in “${esc(V.name)}”: wins over the song’s value" placeholder="${esc(V.name)}" style="width:92px"`):''}</span>`)).join('')
+  return rcard('Fields',FIELDS.map(f=>{ const own=(s.fields||{})[f.id]??'', ih=own===''?fieldInh(s,f):null; return rrow(esc(f.name)+(ih?`<em class="inhn">from preset ${esc(ih.from)}</em>`:''),`<span style="display:flex;gap:4px;min-width:0">${fieldInput(f,own,`data-fs="${f.id}" ${ih?`class="inh9" placeholder="${esc(ih.v)}" title="From preset ${esc(ih.from)}. Type to give this song its own value."`:'title="This song"'} style="width:${vs.length>1?'92px':'150px'}"`,ih?ih.v:'')}${vs.length>1?fieldInput(f,(V.fields||{})[f.id]??'',`data-fv="${f.id}" title="Only in “${esc(V.name)}”: wins over the song’s value" placeholder="${esc(V.name)}" style="width:92px"`):''}</span>`); }).join('')
     +(vs.length>1?`<p class="rnote">Left: the song. Right: only in “${esc(V.name)}” (wins over the song’s).</p>`:'')+'<div class="racts"><button class="btn line" id="fTable">Song fields table…</button></div>'); }
 function wireFieldsCard(s,V){ if($('fEdit')) $('fEdit').onclick=()=>openSettings('band'); if($('fTable')) $('fTable').onclick=()=>fieldsTable();
   document.querySelectorAll('#insp [data-fs]').forEach(i=>i.onchange=()=>setFieldVal(s,i.dataset.fs,i.value.trim()));
@@ -3756,7 +3762,7 @@ function fieldsTable(){ document.querySelectorAll('.fieldsTbl').forEach(x=>x.rem
       inp.onkeydown=e=>{ if(e.key==='Enter'){ e.preventDefault(); inp.dispatchEvent(new Event('change')); const n=bg.querySelector(`.ftc[data-r="${i+1}"][data-c="${k}"]`)||bg.querySelector(`.ftc[data-r="0"][data-c="${k+1}"]`); if(n){ n.focus(); if(n.select) n.select(); } } }; });
     bg.querySelector('[data-a=ok]').onclick=()=>bg.remove(); bg.querySelector('[data-a=fields]').onclick=()=>{ bg.remove(); openSettings('band'); }; };
   document.body.appendChild(bg); draw(); bg.onclick=e=>{ if(e.target===bg) bg.remove(); }; }
-function newField(name){ const id='f'+Date.now().toString(36)+Math.floor(Math.random()*99); FIELDS.push({id,name:name||'Field '+(FIELDS.length+1),type:'text',options:[]}); return id; }
+function newField(name){ let id; do{ id='f'+Date.now().toString(36)+Math.floor(Math.random()*1e6).toString(36); }while(FIELDS.some(f=>f.id===id)); FIELDS.push({id,name:name||'Field '+(FIELDS.length+1),type:'text',options:[]}); return id; }
 
 // ---- curfew: each setlist has a "finish by" time ----
 function finishByBox(){ const L=curSetObj(); const bg=document.createElement('div'); bg.className='cfbg';
@@ -3820,6 +3826,10 @@ function bandShow(){ const L=curSetObj(), out={t:'show',lib:'',setlist:{id:L.id,
     if(!map.length) doc.bars.push([0,4,4,120]);
     const vt=x=>{ for(const [a,b,v0] of srcToVer) if(x>=a-1e-6&&x<b-1e-6) return v0+(x-a); return null; };
     (s.cues||[]).forEach(c=>{ const x=vt(cueT(s,c)); if(x!==null) doc.cues.push({t:+x.toFixed(3),text:c.text}); });
+    // 9b: a preset change in the middle of the song: the fields it sets (that the song / version don't) from that point
+    if(window.MODUI&&typeof MODP!=='undefined'){ const own=SLBandMerge(s.fields||{},v&&v.fields||{}), ch=[];
+      s.tracks.filter(t=>isMidiTrack(s,t)&&MODUI.dev(s,t)).forEach(t=>{ const d=MODUI.dev(s,t); (s.midi[t]||[]).filter(e=>e.mod==='preset').forEach(e=>{ const x=vt(evTime(s,e)); if(x===null||x<=0.01) return; const pf=((MODP[d]||{})[e.preset]||{}).fields||{}, f={}; Object.entries(pf).forEach(([k,val])=>{ if(val!==''&&(own[k]===undefined||own[k]==='')) f[k]=String(val); }); if(Object.keys(f).length) ch.push({t:+x.toFixed(3),f}); }); });
+      if(ch.length) doc.fchg=ch.sort((a,b)=>a.t-b.t); }
     s.tracks.filter(t=>isMidiTrack(s,t)).forEach(t=>{ const l=(s.midi[t]||[]).filter(e=>e.kind==='pc').map(e=>{ const x=vt(evTime(s,e)); return x===null?null:{t:+x.toFixed(3),name:evName(e,s,t)}; }).filter(Boolean).sort((a,b)=>a.t-b.t); if(l.length) doc.patches[t]=l; });
     return doc; };
   L.order.forEach(id=>{ const s=songs.find(x=>x.id===id); if(!s) return; const v=entryVer(s); out.setlist.order.push({id,ver:v?v.id:'',after:afterOf(s)}); out.songs[id]=add(s,v); });
@@ -4646,5 +4656,6 @@ try{ document.fonts.ready.then(()=>renderFolders()); }catch(e){}
 try{ const q=new URLSearchParams(location.search).get('settings'); if(q) setTimeout(()=>openSettings(q),300); }catch(e){}
 </script>
 <script src="modeler-ui.js"></script>
+<script src="show9.js"></script>
 </body>
 </html>

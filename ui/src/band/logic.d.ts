@@ -15,6 +15,7 @@ export function nextSection(song: any, t: number): any;
 export function barsUntil(song: any, t: number, tEnd: number): number;
 export function changesAhead(song: any, t: number, n?: number): { inBars: number; text: string }[];
 export function fieldValue(show: any, songId: string, fieldId: string): string;
+export function fieldValueAt(show: any, songId: string, fieldId: string, t: number): string;
 export function mergeFields(a: any, b: any): Record<string, any>;
 export function untilNextChange(show: any, curIndex: number, pos: number, field: string): null | { value: string; fromValue: string; songId: string; songName: string; index: number; inSec: number | null; after: string | null; progress: number };
 export function curfew(show: any, curIndex: number, pos: number, nowMs: number, finishBy: string): { endsAt: number; finishAt: number | null; overSec: number | null; talking: boolean; leftSec: number };

@@ -189,6 +189,7 @@ juce::String Bridge::diagnostics()
     { const auto ri = rig.info(); t.add("Backup rig: " + ri["role"].toString() + (rig.paired() ? ", paired with " + ri["peer"].toString() + ", clock offset " + juce::String((double) ri["offsetMs"], 2) + " ms, worst drift " + juce::String((double) ri["driftWorstMs"], 2) + " ms" + ((bool) ri["failover"] ? ", BACKUP IS LIVE" : "") : juce::String(rig.role() == "off" ? "" : ", not paired"))); }
     t.add("MIDI in: " + (midiControl.inputs().isEmpty() ? juce::String("no inputs") : midiControl.inputs().joinIntoString(", ")) + ", " + juce::String(midiControl.mappings().size()) + " mappings" + (midiActCount ? ", " + juce::String(midiActCount) + " pedal actions, slowest " + juce::String(midiActMax, 1) + " ms" : juce::String()));
     t.add("Pedals (fast path): " + (fastCount ? juce::String(fastCount) + " actions straight to the engine, average " + juce::String(fastSum / fastCount, 2) + " ms, worst " + juce::String(fastMax, 2) + " ms (" + fastWorst + ")" : juce::String("none yet")));
+    t.add("Show timing (9b): " + (uiTiming.isNotEmpty() ? uiTiming : juce::String("nothing measured yet")));
     t.add("Kokoro voices: " + kokoro::stateName(kokoro::status().state) + "; voice picker: " + cues.voiceListInfo());
     t.add("");
     t.add("Log (last 200 lines of " + applog::current().getFullPathName() + "):");
@@ -384,6 +385,7 @@ Bridge::Options Bridge::addTo(Options o)
     o = add(o, "sendMidiNow", [this](const juce::var& a) { return audio.sendMidiNow(a["port"].toString(), a["msgs"]); });
     // Listen on this computer (AudioHost.h): the state, change it, the computer's output devices at a rate.
     // Diagnostics (About / Help): text only, no audio or show contents.
+    o = add(o, "uiTiming", [this](const juce::var& a) { uiTiming = a["text"].toString().substring(0, 400); return juce::var(true); }); // 9b: folder open / close, zoom frames
     o = add(o, "diagnostics", [this](const juce::var&) { auto* r = new juce::DynamicObject(); r->setProperty("text", diagnostics()); return juce::var(r); });
     o = add(o, "copyDiagnostics", [this](const juce::var&) {
         juce::SystemClipboard::copyTextToClipboard(diagnostics());
