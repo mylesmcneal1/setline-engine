@@ -160,7 +160,7 @@
     const tun = tuningOf(s), pre = firstPreset(s);
     return `${divider ? `<div class="div9">Not in this set</div>` : ""}<div class="row9 ${o ? "open" : ""} ${s.id === selId ? "cur" : ""} ${s.id === playId ? "playing" : ""} ${sel ? "msel" : ""}" data-row="${s.id}" style="--c:${s.col || "#5a5f6a"}">
       <div class="r9h fh" data-id="${s.id}"><span class="ck9 ${sel ? "on" : ""}"></span><span class="chev9" aria-hidden="true">›</span>
-        <b class="r9n" title="${esc(s.name)}">${si >= 0 ? `<em>${si + 1}</em>` : ""}${esc(s.name)}</b>
+        <b class="r9n" title="${esc(s.name)}">${si >= 0 ? `<em>${si + 1}</em>` : ""}<span class="r9nm">${esc(s.name)}</span></b>
         <span class="r9m mono">${fmtBpm(s.tmap[0].bpm)} BPM · ${esc(meterChip(s).split(" ")[0])} · ${fmt(lenOf(s))}</span>
         <span class="r9t">${esc([tun, pre].filter(Boolean).join(" · ") || "–")}</span>
         ${secBar(s)}<button class="r9x" data-id="${s.id}" title="Song options" aria-label="Song options">⋯</button></div>

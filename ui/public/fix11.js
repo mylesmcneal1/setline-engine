@@ -173,7 +173,7 @@
   setTimeout(pullLibs, 1500); setInterval(() => { if (!document.hidden) pullLibs(); }, 8000);
   function renameLibrary(name) {
     const cur = LIBS.find((l) => l.current); if (!cur || cur.name !== name) { toast("Open that library to rename it (Library › Switch library)"); return; }
-    const el = $("crumbAll");
+    const el = $("crumbAll") && ($("crumbAll").querySelector(".libnm11") || $("crumbAll"));
     if (vis(el) && mod().renameLibrary) rename(el, name, (v) => { mod().renameLibrary(v).then?.(pullLibs); }, { row: "#crumb", maxRight: innerWidth - 8, label: "Library name" });
     else if (mod().renameLibrary) mod().renameLibrary();
   }
@@ -186,7 +186,7 @@
       return [
         ...(inSet ? [{ id: "v11play", label: `Play in ${L.name}`, act: () => pickVersion(s, vid), check: entryVerId(s) === vid }] : []),
         { id: "v11show", label: "Show", act: () => { snap(); showVer(s, vid); refresh(); }, check: curVer(s).id === vid },
-        { id: "v11ren", label: "Rename…", key: "return", act: () => { const el = [...document.querySelectorAll(`.vstrip .vr[data-v="${vid}"] .vnm11`)].find(vis) || (entryVerId(s) === vid ? [...document.querySelectorAll(`#songs .song[data-id="${s.id}"] .vsw11`)].find(vis) : null); renameVerBox(s, vid, el || null); } },
+        { id: "v11ren", label: "Rename…", key: "return", act: () => { const el = [...document.querySelectorAll(`.vstrip .vr[data-v="${vid}"] .vnm11`)].find(vis) || (entryVerId(s) === vid ? [...document.querySelectorAll(`#songs .song[data-id="${s.id}"] .vsw11 .vsn11`)].find(vis) : null); renameVerBox(s, vid, el || null); } },
         { id: "v11dup", label: "Duplicate", act: () => { snap(); showVer(s, vid); const n = newVer(s); refresh(); toast(`Added the version “${n.name}”`, undo); } },
         { id: "v11def", label: "Make it the main version", dis: !!v.def, act: () => { snap(); vs.forEach((x) => { x.def = x.id === vid; }); refresh(); toast(`“${v.name}” is ${s.name}’s main version`, undo); } },
         { sep: 1 },
@@ -373,7 +373,7 @@
     CUR = { kind: "version", a: s, b: cur };
     ctxMenu({ clientX: r.left, clientY: r.bottom + 4 }, [{ cap: `${s.name} · plays in ${curSetObj().name}` },
       ...vs.map((v) => ({ label: `${v.name}  ·  ${fmt(verLen(s, v))}`, icon: v.id === cur ? "✓" : "", act: () => { if (v.id !== cur) pickVersion(s, v.id); } })),
-      "-", { label: "Rename this version…", icon: "", act: () => { const el = [...document.querySelectorAll(`#songs .song[data-id="${s.id}"] .vsw11`)].find(vis); renameVerBox(s, cur, el || null); } },
+      "-", { label: "Rename this version…", icon: "", act: () => { const el = [...document.querySelectorAll(`#songs .song[data-id="${s.id}"] .vsw11 .vsn11`)].find(vis); renameVerBox(s, cur, el || null); } },
       { label: "More version options ▸", icon: "", act: () => menuAt("version", { clientX: r.left, clientY: r.bottom + 4 }, s, cur) }]);
   }, true);
   // the switcher is a button in the row: no drag, no open-the-song from it
@@ -508,14 +508,28 @@
 
   // ================================================================ 11. headers, the scrollbar, M / S
   // the output picker keeps "Out 1" when the header is narrow (the name gives way first); its full name in the tooltip
+  // 11b: the track name gets room first (about 90 px, or all of its own text if shorter). When it hasn't, in this
+  // order: the level slider becomes a small knob, the output chip says "Out 1", then just "1" (the full output in
+  // its tooltip); M / S stay; only then does the name shorten with "…". Measured in layout pixels (clientWidth /
+  // scrollWidth), which Text size's zoom doesn't disturb.
+  const NAMEW = 90;
+  function fitHeader(lh) {
+    const tn = lh.querySelector(".tn"), b = lh.querySelector(".ochip"); if (!tn) return;
+    let full = "";
+    if (b) { full = b.dataset.full11 || b.textContent; if (!b.dataset.full11) { b.dataset.full11 = full; if (!b.title || /^(Output|MIDI)/.test(b.title)) b.title = (b.title ? b.title + ": " : "") + full.replace(/ ▾$/, ""); } }
+    const chip = (t) => { if (b && b.textContent !== t) b.textContent = t; };
+    const shortOut = (x) => x.replace(/^Output(s)?\s+/, "Out ").replace(/^No output/, "No out");
+    const tiny = (x) => { const m = x.match(/Ch\s*(\d+)/); if (/^Out(put)?s?\s/.test(x)) return x.replace(/^Out(put)?s?\s+/, ""); if (m) return "Ch " + m[1] + " ▾"; if (/^No output/.test(x)) return "– ▾"; return x; };
+    lh.classList.remove("nm1", "nm2"); chip(full);
+    const ok = () => tn.clientWidth >= Math.min(NAMEW, tn.scrollWidth) - 1;
+    if (ok()) return 0;
+    lh.classList.add("nm1"); if (ok()) return 1;
+    if (b) { chip(shortOut(full)); if (ok()) return 2; lh.classList.add("nm2"); chip(tiny(full)); }
+    return 3;
+  }
   function headers() {
-    document.querySelectorAll(".row.trk > .lh").forEach((lh) => {
-      const b = lh.querySelector(".ochip"); if (!b) return;
-      const full = b.dataset.full11 || b.textContent; if (!b.dataset.full11) { b.dataset.full11 = full; if (!b.title || /^(Output|MIDI)/.test(b.title)) b.title = (b.title ? b.title + ": " : "") + full.replace(/ ▾$/, ""); }
-      const narrow = lh.getBoundingClientRect().width < 330;
-      const want = narrow ? full.replace(/^Output(s)?\s+/, "Out ").replace(/^No output/, "No out") : full;
-      if (b.textContent !== want) b.textContent = want;
-    });
+    if (window.SL10a && SL10a.editing && SL10a.editing()) return; // not while a name is being typed
+    document.querySelectorAll(".row.trk > .lh").forEach(fitHeader);
     decorateVers();
     // a song without a click track: "＋ Click track" stands out
     document.querySelectorAll(".folder[data-id] .add .addT[data-k=\"click\"]").forEach((b) => { const s = songOf(b.dataset.song); b.classList.toggle("sug11", !!s && !clickTracks(s).length); if (s && !clickTracks(s).length) b.textContent = "＋ Add click track"; });
@@ -524,5 +538,13 @@
   const watch = () => { const sc = $("scroller"); if (sc && !sc._fix11) { sc._fix11 = true; new MutationObserver(later).observe(sc, { childList: true, subtree: true }); } };
   watch(); setTimeout(() => { watch(); later(); }, 300); addEventListener("resize", later);
 
-  window.SL11 = { renameBreak, items, current, run, palette, objects, fullName: tfull, straighten, overlaps, fixSong, repair, last: () => LAST, cleanNames, shortName, delVersion, pickVersion, delTempo, delMeter, delSetlist, delPreset, delCueWord, renameSetlist, okName, libs: () => LIBS, pullLibs, countNum, pause: (on) => { PAUSE = !!on; }, forget: () => { seen = new Set(); store.set("fix11", []); } };
+  // 11b: while a name is being edited in place, the page doesn't redraw (it would replace the element being typed
+  // in); what was asked for runs once the edit ends
+  let held = false;
+  for (const f of ["refresh", "renderSetlist", "renderFolders", "renderInsp"]) {
+    const F = window[f]; if (typeof F !== "function") continue;
+    window[f] = function () { if (window.SL10a && SL10a.editing && SL10a.editing()) { held = true; return; } return F.apply(this, arguments); };
+  }
+  if (window.SL10a && SL10a.onEnd) SL10a.onEnd(() => { if (held) { held = false; setTimeout(() => { if (!SL10a.editing()) refresh(); }, 0); } later(); });
+  window.SL11 = { fitHeader, renameBreak, items, current, run, palette, objects, fullName: tfull, straighten, overlaps, fixSong, repair, last: () => LAST, cleanNames, shortName, delVersion, pickVersion, delTempo, delMeter, delSetlist, delPreset, delCueWord, renameSetlist, okName, libs: () => LIBS, pullLibs, countNum, pause: (on) => { PAUSE = !!on; }, forget: () => { seen = new Set(); store.set("fix11", []); } };
 })();

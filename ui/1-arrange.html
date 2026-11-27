@@ -1205,7 +1205,7 @@
   <!-- EDIT -->
   <section class="edit">
     <div class="etool">
-      <nav class="crumb" id="crumb"><button id="crumbAll">Library</button><span id="crumbSong"></span></nav><span class="dirtymk" id="dirtyMk" hidden>● Not saved</span><span class="savemk" id="saveMk" hidden title="Every change is saved to the library as you work">Saved</span><span class="copymk" id="copyMk" hidden title="Copying audio into the library. You can keep working; quitting stops it and the next open finishes it."><span id="copyTxt"></span><i><b id="copyBar"></b></i></span><span class="muted" id="sessCount"></span>
+      <nav class="crumb" id="crumb"><button id="crumbAll"><span class="libnm11">Library</span></button><span id="crumbSong"></span></nav><span class="dirtymk" id="dirtyMk" hidden>● Not saved</span><span class="savemk" id="saveMk" hidden title="Every change is saved to the library as you work">Saved</span><span class="copymk" id="copyMk" hidden title="Copying audio into the library. You can keep working; quitting stops it and the next open finishes it."><span id="copyTxt"></span><i><b id="copyBar"></b></i></span><span class="muted" id="sessCount"></span>
       <div class="igrp"><button class="ib2" id="undoB" title="Undo  ⌘Z">↶</button><button class="ib2" id="redoB" title="Redo  ⇧⌘Z">↷</button></div>
       <div class="igrp gridc" title="Grid: what clips, splits, fades, the playhead and MIDI events snap to"><button class="ib2 on" id="snapB" title="Snap to the grid (on). Hold Alt while dragging to place freely."><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 5h12M2 11h12M5 2v12M11 2v12"/></svg></button><button class="gbtn" id="gridBtn" title="Grid size">Auto ▾</button><select id="gridSel" title="Grid size" style="display:none" aria-hidden="true"></select></div>
       <div class="zoom" title="Zoom  − / =  (or Ctrl + scroll)"><button id="zOut">−</button><input type="range" id="zoom" min="0" max="1000" step="1" value="0"><button id="zIn">+</button></div>
@@ -1663,7 +1663,7 @@ function deleteSongs(ids,from){ ids=ids.filter(id=>songs.some(s=>s.id===id)); if
   confirmBox('Delete '+(n>1?n+' songs':'“'+esc(names[0])+'”')+'?',body,n>1?'Delete '+n+' songs':'Delete song',del); }
 // New songs get the palette colour after the last song's (6d).
 function nextSongCol(){ const last=songs[songs.length-1], i=last?PAL.indexOf(String(last.col).toLowerCase()):-1; return PAL[(i>=0?i+1:songs.length)%PAL.length]; }
-function renameVerBox(s,id,el){ const v=versOf(s).find(x=>x.id===id); if(!v) return; const nm=el&&el.querySelector&&el.querySelector('.vnm11'); renameAt(nm||el,v.name,n=>{ if(!n||n===v.name) return; const old=v.name; snap(); v.name=n; refresh(); toast(`Renamed the version “${old}” to “${n}”`,undo); },{row:'.vr, .song, #hero'}); }
+function renameVerBox(s,id,el){ const v=versOf(s).find(x=>x.id===id); if(!v) return; const nm=el&&el.querySelector&&(el.querySelector('.vnm11')||el.querySelector('.vsn11')); renameAt(nm||el,v.name,n=>{ if(!n||n===v.name) return; const old=v.name; snap(); v.name=n; refresh(); toast(`Renamed the version “${old}” to “${n}”`,undo); },{row:'.vr, .song, #hero'}); }
 function renameSong(id){ const s=songs.find(x=>x.id===id); open.add(id); select(id,false); renderFolders(); const nm=document.querySelector(`.folder[data-id="${id}"] .fh .nm`); if(!nm) return;
   nm.innerHTML=`<input value="${esc(s.name)}" style="font:inherit;width:100%;height:26px;padding:2px 6px">`; const i=nm.firstChild; i.onclick=e=>e.stopPropagation(); i.onpointerdown=e=>e.stopPropagation(); i.focus(); i.select();
   const done=()=>{ s.name=i.value.trim()||s.name; refresh(); }; i.onblur=done; i.onkeydown=e=>{ if(e.key==='Enter') i.blur(); if(e.key==='Escape'){ i.value=s.name; i.blur(); } }; }
@@ -1754,7 +1754,7 @@ function renderSetlist(){
     const s=songs.find(x=>x.id===id);
     // a song with 2+ versions is a stack of cards: the front card says which version this set plays (‹ › or the wheel flips it)
     const vs=versOf(s), ev=entryVer(s), many=vs.length>1, vi=vs.indexOf(ev), xtra=!ev.custom&&verParts(s,ev).some(p=>p.extra);
-    el.insertAdjacentHTML('beforeend',`<div class="song ${s.id===selId?'on':''} ${many?'stk':''}" data-id="${s.id}"><span class="n">${i+1}</span><span class="sbar" style="background:${s.col||'#5a5a62'}"></span><span class="t"><span class="nm11">${esc(s.name)}</span>${many?`<span class="vrow11"><button class="vn vsw11" data-id="${s.id}" title="Version this setlist plays (click to choose)  ⌥[ ⌥]">${esc(ev.name)}${xtra?' ◆':''} ▾</button><span class="vlen11">${fmt(verLen(s,ev))}</span><span class="dots" aria-label="${vs.length} versions">${vs.map((_,j)=>`<i class="${j===vi?'on':''}"></i>`).join('')}</span></span>`:''}</span>${many?'':`<span class="d">${fmt(verLen(s,ev))}</span>`}</div>`);
+    el.insertAdjacentHTML('beforeend',`<div class="song ${s.id===selId?'on':''} ${many?'stk':''}" data-id="${s.id}"><span class="n">${i+1}</span><span class="sbar" style="background:${s.col||'#5a5a62'}"></span><span class="t"><span class="nm11">${esc(s.name)}</span>${many?`<span class="vrow11"><button class="vn vsw11" data-id="${s.id}" title="Version this setlist plays (click to choose)  ⌥[ ⌥]"><span class="vsn11">${esc(ev.name)}</span>${xtra?' ◆':''} ▾</button><span class="vlen11">${fmt(verLen(s,ev))}</span><span class="dots" aria-label="${vs.length} versions">${vs.map((_,j)=>`<i class="${j===vi?'on':''}"></i>`).join('')}</span></span>`:''}</span>${many?'':`<span class="d">${fmt(verLen(s,ev))}</span>`}</div>`);
     const al=afterLabel(afterOf(s)); if(al&&i<setOrder.length-1) el.insertAdjacentHTML('beforeend',`<div class="tr ${afterOf(s).mode}" data-id="${s.id}" title="After this song (right-click the song to change)">${al}</div>`);
   });
   el.querySelectorAll('.song.stk').forEach(row=>{ const s=songs.find(x=>x.id===row.dataset.id); const flip=d=>{ flipVer(s,d); row.classList.remove('fl','fr'); };
@@ -2494,7 +2494,7 @@ function wireRegLane(cv){ const s=songs.find(x=>x.id===cv.dataset.song), t=s.tra
       setPick({kind:'cue',song:s.id,track:t,id:c.id}); const sx=e.clientX, ot=cueT(s,c), pre=ser(); let mv=false;
       cv.setPointerCapture(e.pointerId); cv.onpointermove=m=>{ if(Math.abs(m.clientX-sx)<3&&!mv) return; mv=true; const p=cueAt(s,snapT(s,ot+(m.clientX-sx)/PXS,m.altKey)); c.bar=p.bar; c.beat=p.beat; drawLane(cv); showTip(`“${c.text}” at ${cuePos(c)}${m.altKey?' · free':''}`,m); };
       cv.onpointerup=()=>{ cv.onpointermove=null; hideTip(); if(mv){ undoS.push(pre); redoS=[]; } }; };
-    cv.ondblclick=e=>{ const c=hit(lx(cv,e)), r=cv.getBoundingClientRect(); if(c){ const L=(cv._cues||[]).find(o=>o.t===c.text&&Math.abs(o.x0+2-cueT(s,c)*PXS)<1), X=r.left-(+cv.dataset.vx||0)+cueT(s,c)*PXS; renameAt(L&&L.w?{left:X,top:r.top+L.y,width:L.w,height:L.h}:{left:X,top:r.top+r.height/2-10,width:120,height:20},c.text,v=>{ if(v){ snap(); c.text=v; drawLane(cv); } },{font:'600 10.5px Inter, sans-serif',pad:7,maxRight:innerWidth-8}); return; }
+    cv.ondblclick=e=>{ const c=hit(lx(cv,e)), r=cv.getBoundingClientRect(); if(c){ const L=(cv._cues||[]).find(o=>o.t===c.text&&Math.abs(o.x0+2-cueT(s,c)*PXS)<1), X=cueT(s,c)*PXS; renameAt({lane:cv.parentElement,x:X,y:L?L.y:cv.height/2-10,w:L&&L.w?L.w:110,h:L?L.h:20,font:'600 10.5px Inter, sans-serif'},c.text,v=>{ if(v){ snap(); c.text=v; drawLane(cv); } },{label:'Cue'}); return; }
       const p=cueAt(s,snapT(s,lx(cv,e)/PXS,e.altKey)); cuePicker(s,t,p,e.clientX,e.clientY+6); }; // the phrase picker (6d)
     cv.oncontextmenu=e=>{ e.preventDefault(); const c=hit(lx(cv,e)), xx=lx(cv,e), into=Math.max(2,nearestBoundary(s,xx/PXS));
       if(!c){ ctxMenu(e,[{label:'Add cue here…',icon:'“',act:()=>cuePicker(s,t,cueAt(s,snapT(s,xx/PXS,false)),e.clientX,e.clientY)},{label:'Add count-in…',icon:'①',act:()=>countInBox(s,into)}]); return; }
@@ -4100,7 +4100,7 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
     songs.forEach(x=>{ if(x.showVer){ const w=x.showVer; delete x.showVer; showVer(x,w,true); } });
     regSeq=Math.max(regSeq,(pre.r||0)+1,(pre.c||0)+1); setSeq=Math.max(setSeq,(pre.L||0)+1); pid=Math.max(pid,(pre.u||0)+1);
     undoS=[]; redoS=[]; if(!songs.find(x=>x.id===selId)) selId=songs[0]&&songs[0].id; open.clear(); if(selId) open.add(selId); refresh(); },
-  setSessionName(n){ $('crumbAll').textContent=n||'Library'; },
+  setSessionName(n){ $('crumbAll').innerHTML='<span class="libnm11">'+esc(n||'Library')+'</span>'; },
   routeLog:()=>ROUTE_LOG,
   // 6e: versions and the setlist flow (src/pages/arrange.ts)
   ver:{ play:s=>playVer(s), cur:s=>curVer(s), payload:(s,v)=>verPayload(s,v), map:(s,v)=>verMap(s,v), fields:(s,v)=>verFields(s,v), inVer:(s,t,v)=>trackInVer(s,t,v), nextOf:s=>(window.SLBreaks&&SLBreaks.after(s.id))?null:nextInSet(s), after:s=>afterOf(s) }, // 9d: a break after s: nothing is queued (no segue into the next song)

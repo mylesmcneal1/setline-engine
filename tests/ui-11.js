@@ -167,40 +167,7 @@ async function check11() {
     log.push(`overlap check: ${pairs.length} font pairings × cards, Folders and a song with the click editor: ${found.size} overlap${found.size === 1 ? "" : "s"}`);
     [...found].slice(0, 12).forEach((x) => P.push("overlapping controls: " + x)); }
 
-  // ================================================================ 4. rename in place: the field on the name's box
-  { const boxes = [];
-    const tryRename = async (what, el, start) => {
-      if (!vis(el)) { P.push(`rename in place: no ${what} on screen`); return; }
-      const r = R(el); start(); await frames(2);
-      const f = document.querySelector("input.ren10"); if (!f) { P.push(`rename in place (${what}): no field`); return; }
-      const q = R(f), d = Math.max(Math.abs(q.left - r.left), Math.abs(q.top - r.top), Math.abs(q.height - r.height), Math.abs(q.width - r.width));
-      boxes.push(`${what} ${d.toFixed(1)}`);
-      ok(d <= 2, `rename in place (${what}): the field is on the name's box (off by ${d.toFixed(1)} px: ${Math.round(q.left)},${Math.round(q.top)} ${Math.round(q.width)}×${Math.round(q.height)} vs ${Math.round(r.left)},${Math.round(r.top)} ${Math.round(r.width)}×${Math.round(r.height)})`);
-      ok(getComputedStyle(f).fontSize === getComputedStyle(el).fontSize && getComputedStyle(f).fontWeight === getComputedStyle(el).fontWeight, `rename in place (${what}): same font size and weight`);
-      ok(document.activeElement === f && f.selectionStart === 0 && f.selectionEnd === f.value.length, `rename in place (${what}): the text is selected`);
-      f.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); await frames(1);
-      ok(!document.querySelector("input.ren10") && el.style.visibility !== "hidden", `rename in place (${what}): Esc cancels and the name is back`);
-    };
-    SL9.setMode("cards"); closeSong(); renderSetlist(); await frames(2);
-    await tryRename("setlist row", document.querySelector('#songs .song[data-id="sat"] .nm11'), () => SL10a.renameSong("sat", document.querySelector('#songs .song[data-id="sat"] .nm11')));
-    await tryRename("card", document.querySelector('.card9[data-id="low"] .c9h b'), () => renameSong("low"));
-    await tryRename("setlist name", document.querySelector("#setSel span"), () => renameSet());
-    if (window.SLBreaks) { SLBreaks.add(SLBreaks.LABELS[0]); renderSetlist(); await frames(2); const bk = document.querySelector("#songs .brk9[data-b] .bt"); await tryRename("break", bk, () => SL11.renameBreak(bk.closest(".brk9").dataset.b)); undo(); await frames(1); }
-    SL9.setMode("folders"); await frames(3); document.querySelector('.row9[data-row="copper"] .r9n').scrollIntoView({ block: "center" }); await frames(2);
-    await tryRename("Folders row", document.querySelector('.row9[data-row="copper"] .r9n'), () => SL10a.renameSong("copper", document.querySelector('.row9[data-row="copper"] .r9n')));
-    const g = S("glass"); openSong(g.id); await wait(250);
-    await tryRename("song title", document.querySelector("#hero .htitle h2"), () => renameSong(g.id));
-    await tryRename("track header", document.querySelector(`.row.trk > .lh[data-song="${g.id}"][data-track="Drums"] .tnm11`), () => renameTrackBox(g, "Drums", document.querySelector(`.row.trk > .lh[data-song="${g.id}"][data-track="Drums"] .tn`)));
-    await tryRename("section", document.querySelector(`.secs .lane[data-song="${g.id}"] .sec[data-sid="${g.secs[1].id}"] .snm11`), () => renameSec(g, g.secs[1].id));
-    await tryRename("version", document.querySelector(`.vstrip .vr[data-song="${g.id}"] .vnm11`), () => { const r = document.querySelector(`.vstrip .vr[data-song="${g.id}"]`); renameVerBox(g, r.dataset.v, r.querySelector(".vnm")); });
-    // ↩ saves; the row doesn't move
-    const el = document.querySelector(`.row.trk > .lh[data-song="${g.id}"][data-track="Bass"] .tnm11`), r0 = R(el.closest(".lh"));
-    renameTrackBox(g, "Bass", el.parentElement); await frames(2); const f = document.querySelector("input.ren10"); f.value = "Bass DI"; f.dispatchEvent(new Event("input"));
-    ok(R(el.closest(".lh")).top === r0.top && R(el.closest(".lh")).height === r0.height, "typing doesn't move or resize the row");
-    f.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); await frames(2);
-    ok(S("glass").tracks.includes("Bass DI"), "↩ saves the track's new name"); undo(); await frames(1);
-    log.push("rename boxes (px off): " + boxes.join(", "));
-    closeSong(); await wait(100); }
+  // 4. renaming in place: tests/ui-11b.js (11b: the name element itself is the field)
 
   // ================================================================ 6 / 7. suggested sections; sections never overlap
   { const s = S("paper"); snap(); s.secs = []; s.cues = [{ id: "c1", bar: 1, beat: 1, text: "One" }, { id: "c2", bar: 1, beat: 2, text: "Two" }, { id: "c3", bar: 2, beat: 3.5, text: "Verse" }, { id: "c4", bar: 11, beat: 1, text: "Chorus" }, { id: "c5", bar: 19, beat: 1, text: "Bridge" }];

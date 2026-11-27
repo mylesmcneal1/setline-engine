@@ -312,55 +312,83 @@
   // had just re-drawn. Now every place edits the name where it is: a card, a Folders row, a setlist row, the big
   // title of the opened song.
   // 11: the name in the place that was double-clicked (the setlist row, not the card behind it)
-  const nameIn = (h) => { const el = h.sel.startsWith("#songs") ? document.querySelector(`#songs .song[data-id="${h.id}"] .nm11`) : h.sel.startsWith(".card9") ? document.querySelector(`.card9[data-id="${h.id}"] .c9h b`) : h.sel.startsWith(".row9") ? document.querySelector(`.row9[data-row="${h.id}"] .r9n`) : null; return el && el.getBoundingClientRect().width > 0 ? el : null; };
+  const nameIn = (h) => { const el = h.sel.startsWith("#songs") ? document.querySelector(`#songs .song[data-id="${h.id}"] .nm11`) : h.sel.startsWith(".card9") ? document.querySelector(`.card9[data-id="${h.id}"] .c9h b`) : h.sel.startsWith(".row9") ? (document.querySelector(`.row9[data-row="${h.id}"] .r9n .r9nm`) || document.querySelector(`.row9[data-row="${h.id}"] .r9n`)) : null; return el && el.getBoundingClientRect().width > 0 ? el : null; };
   function nameEl(id) {
-    if (area === "set") { const r = document.querySelector(`#songs .song[data-id="${id}"] .nm11`); if (r && r.getBoundingClientRect().width > 0) return r; } // ↩ in the setlist: its row
+    const inSet = document.activeElement && document.activeElement.closest && document.activeElement.closest("#songs");
+    if (inSet || (area === "set" && !(typeof focusSong === "function" && focusSong() && focusSong().id === id))) { const r = document.querySelector(`#songs .song[data-id="${id}"] .nm11`); if (r && r.getBoundingClientRect().width > 0) return r; } // ↩ in the setlist: its row (the open song: its title)
     const FS = typeof focusSong === "function" ? focusSong() : null;
-    const c = [FS && FS.id === id && document.querySelector("#hero .htitle h2"), document.querySelector(`.card9[data-id="${id}"] .c9h b`), document.querySelector(`.row9[data-row="${id}"] .r9n`),
+    const c = [FS && FS.id === id && document.querySelector("#hero .htitle h2"), document.querySelector(`.card9[data-id="${id}"] .c9h b`), document.querySelector(`.row9[data-row="${id}"] .r9n .r9nm`) || document.querySelector(`.row9[data-row="${id}"] .r9n`),
       document.querySelector(`#songs .song[data-id="${id}"] .nm11`), document.querySelector(`.folder[data-id="${id}"] .fh .nm`)];
     return c.find((x) => x && x.getBoundingClientRect().width > 0) || null;
   }
   let editor = null;
-  // an input over el (its own font and size); ↩ or clicking away saves, Esc cancels
-  // 11: the name itself becomes editable where it is: the field takes the name's exact box (left, top, height,
-  // width), font, size, weight, colour and padding, and the name under it hides; it grows to the right as you
-  // type (up to its row's edge), so nothing moves or resizes. el can also be a plain rect ({left, top, width,
-  // height}) for a name drawn on a canvas (a cue), with o.font.
-  const opaqueBg = (el) => { for (let e = el; e && e.nodeType === 1; e = e.parentElement) { const c = getComputedStyle(e).backgroundColor; if (c && c !== "transparent" && !/rgba\([^)]*,\s*0\)$/.test(c)) return c; } return "#111214"; };
+  // 11b: the name element itself becomes the text field (one helper for every rename). Nothing is measured or
+  // positioned: 11's overlay copied the name's getBoundingClientRect() onto a fixed input, and under Customize ›
+  // Text size (CSS zoom on the app) macOS 12's WebKit reports those coordinates in other units, so the box landed
+  // off the name, over other controls, with the name still showing. Now: contenteditable on the name (plain text
+  // only), its own font and box; ↩ or clicking away saves, Esc puts the old name back. While it's being edited the
+  // page doesn't redraw (fix11.js holds refresh / renderSetlist / renderFolders / renderInsp until it's done).
+  // el: the name element; or {lane, x, y, w, h, font} for a label drawn on a canvas (a cue): a field inside the lane
+  // at the label's spot (lane coordinates, so it moves and zooms with the lane); or null: a small name box.
+  const PLAIN = (() => { try { const d = document.createElement("div"); d.contentEditable = "plaintext-only"; return d.contentEditable === "plaintext-only"; } catch (e) { return false; } })();
+  let onEnd = null;
   function editInline(el, value, done, o = {}) {
-    if (editor) editor.end(false);
-    document.body.classList.add("ren11on"); // no ✎ hint in the name's box while it's measured
-    const isEl = !!(el && el.nodeType === 1);
-    let r = isEl ? el.getBoundingClientRect() : el;
-    if (!r || !r.width || !r.height) { r = { left: innerWidth / 2 - 140, top: innerHeight / 3, width: 280, height: 30 }; el = null; }
-    const cs = isEl && el ? getComputedStyle(el) : null;
-    const i = document.createElement("input"); i.className = "ren10"; i.value = value; i.spellcheck = false; i.maxLength = o.max || 80;
-    i.setAttribute("aria-label", o.label || "Name");
-    const row = isEl && el ? el.closest(o.row || "#songs > .song, #songs > .brk9, .card9, .r9h, .row.trk > .lh, .sec, .vr, .folder .fh, .setpick, .mkr, #hero, .lh, li, tr") : null;
-    const maxR = Math.min(innerWidth - 4, o.maxRight || (row ? row.getBoundingClientRect().right - 2 : r.left + Math.max(r.width, 260)));
-    const st = { left: r.left + "px", top: r.top + "px", width: r.width + "px", height: r.height + "px" };
-    if (cs) Object.assign(st, { fontFamily: cs.fontFamily, fontSize: cs.fontSize, fontWeight: cs.fontWeight, fontStyle: cs.fontStyle, letterSpacing: cs.letterSpacing, textTransform: cs.textTransform,
-      color: cs.color, paddingLeft: cs.paddingLeft, paddingRight: cs.paddingRight, paddingTop: "0px", paddingBottom: "0px", textAlign: cs.textAlign === "center" ? "center" : "left", borderRadius: cs.borderRadius, background: opaqueBg(el) });
-    else if (o.font) Object.assign(st, { font: o.font, paddingLeft: (o.pad || 0) + "px", paddingRight: "0px", background: o.bg || "#2a2f37", color: o.color || "#fff", borderRadius: "5px" });
-    Object.assign(i.style, st);
-    document.body.appendChild(i);
-    // the field grows with its text (never smaller than the name was)
-    const meas = document.createElement("canvas").getContext("2d");
-    const fit = () => { const c = getComputedStyle(i); meas.font = `${c.fontStyle} ${c.fontWeight} ${c.fontSize} ${c.fontFamily}`;
-      const w = meas.measureText(i.value).width + parseFloat(c.paddingLeft) + parseFloat(c.paddingRight) + 6;
-      i.style.width = Math.max(r.width, Math.min(maxR - r.left, w)) + "px"; };
-    i.addEventListener("input", fit);
-    const hid = isEl && el ? el : null; if (hid) hid.style.visibility = "hidden";
+    if (editor) editor.end(true);
+    if (el && el.lane) return laneField(el, value, done, o);
+    if (!el || el.nodeType !== 1 || !el.isConnected) {
+      if (typeof nameBox === "function") nameBox({ title: o.title || "Rename", value, hint: o.hint || "" }, (r) => { if (r && r.name && r.name.trim() !== value) done(r.name.trim()); else if (o.cancel) o.cancel(); });
+      return null;
+    }
+    const old = el.innerHTML, oldTitle = el.getAttribute("title");
+    el.textContent = value; el.removeAttribute("title");
+    el.setAttribute("contenteditable", PLAIN ? "plaintext-only" : "true"); el.spellcheck = false;
+    el.setAttribute("role", "textbox"); el.setAttribute("aria-label", o.label || "Name"); el.classList.add("ren11b");
+    const max = o.max || 80;
+    const sel = () => { const r = document.createRange(); r.selectNodeContents(el); const S = getSelection(); S.removeAllRanges(); S.addRange(r); };
     let over = false;
-    const end = (save) => { if (over) return; over = true; editor = null; document.body.classList.remove("ren11on"); const v = i.value.trim(); i.remove(); if (hid) hid.style.visibility = ""; if (save && v && v !== value) done(v); else if (o.cancel) o.cancel(); };
-    editor = { end, input: i };
-    i.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); end(true); } else if (e.key === "Escape") { e.preventDefault(); end(false); } });
+    const end = (save) => {
+      if (over) return; over = true; editor = null;
+      const v = el.textContent.replace(/\s+/g, " ").trim();
+      el.removeEventListener("blur", blur); el.removeAttribute("contenteditable"); el.removeAttribute("role"); el.removeAttribute("aria-label"); el.classList.remove("ren11b");
+      el.innerHTML = old; if (oldTitle !== null) el.setAttribute("title", oldTitle);
+      try { const S = getSelection(); if (S && el.contains(S.anchorNode)) S.removeAllRanges(); } catch (e) {}
+      if (onEnd) try { onEnd(); } catch (e) {}
+      if (save && v && v !== value) done(v); else if (o.cancel) o.cancel();
+    };
+    const blur = () => setTimeout(() => { if (!over && document.activeElement !== el) end(true); }, 0);
+    el.addEventListener("blur", blur);
+    editor = { end, el, input: el, value };
+    el.focus({ preventScroll: true }); sel();
+    setTimeout(() => { if (!over && document.activeElement !== el) { el.focus({ preventScroll: true }); sel(); } }, 30);
+    return el;
+  }
+  // a cue's word drawn on the canvas: an input in the lane, at the label (lane coordinates)
+  function laneField(L, value, done, o) {
+    const i = document.createElement("input"); i.className = "ren11lane"; i.value = value; i.spellcheck = false; i.maxLength = o.max || 80; i.setAttribute("aria-label", o.label || "Name");
+    Object.assign(i.style, { left: L.x + "px", top: L.y + "px", width: Math.max(60, L.w) + "px", height: L.h + "px", font: L.font || "600 10.5px Inter, sans-serif" });
+    L.lane.appendChild(i);
+    let over = false;
+    const end = (save) => { if (over) return; over = true; editor = null; const v = i.value.trim(); i.remove(); if (onEnd) try { onEnd(); } catch (e) {} if (save && v && v !== value) done(v); else if (o.cancel) o.cancel(); };
+    editor = { end, el: i, input: i, value };
     i.addEventListener("blur", () => end(true));
-    ["pointerdown", "click", "dblclick", "mousedown"].forEach((t) => i.addEventListener(t, (e) => e.stopPropagation()));
-    requestAnimationFrame(() => { i.focus(); i.select(); });
-    setTimeout(() => { if (document.activeElement !== i && !over) { i.focus(); i.select(); } }, 30);
+    i.addEventListener("input", () => { i.style.width = Math.max(60, L.w, i.value.length * 7 + 16) + "px"; });
+    i.focus({ preventScroll: true }); i.select();
     return i;
   }
+  // while a name is being edited: its keys and clicks are the field's (the page's shortcuts, drags and row clicks
+  // don't see them); ↩ saves, Esc cancels; pasting is plain text, one line
+  const inEd = (t) => !!editor && !!t && (t === editor.el || (editor.el.contains && editor.el.contains(t)));
+  window.addEventListener("keydown", (e) => {
+    if (!inEd(e.target)) return;
+    if (e.key === "Enter") { e.preventDefault(); e.stopImmediatePropagation(); editor.end(true); return; }
+    if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); editor.end(false); return; }
+    if (e.key === "Tab") { e.preventDefault(); e.stopImmediatePropagation(); editor.end(true); return; }
+    e.stopPropagation(); // typing (space, letters, ⌫) never reaches the page's shortcuts
+  }, true);
+  ["pointerdown", "mousedown", "click", "dblclick", "pointerup", "mouseup", "contextmenu", "dragstart"].forEach((t) => window.addEventListener(t, (e) => { if (inEd(e.target)) e.stopPropagation(); }, true));
+  document.addEventListener("paste", (e) => { if (!editor || !inEd(e.target) || editor.el.tagName === "INPUT") return; e.preventDefault(); const t = ((e.clipboardData || window.clipboardData).getData("text/plain") || "").replace(/[\r\n\t]+/g, " "); document.execCommand("insertText", false, t); }, true);
+  document.addEventListener("input", (e) => { if (!editor || !inEd(e.target) || editor.el.tagName === "INPUT") return; const el = editor.el;
+    if (el.childNodes.length > 1 || (el.firstChild && el.firstChild.nodeType !== 3) || /[\r\n]/.test(el.textContent) || el.textContent.length > 80) { const t = el.textContent.replace(/[\r\n]+/g, " ").slice(0, 80); el.textContent = t; const r = document.createRange(); r.selectNodeContents(el); r.collapse(false); const S = getSelection(); S.removeAllRanges(); S.addRange(r); } }, true);
   function renameSong(id, el) {
     const s = songOf(id); if (!s) return;
     el = el || nameEl(id);
@@ -426,5 +454,5 @@
   }
 
   window.SLDrag = { add: addDrag, active: () => !!D, items, moveItems, insertSongs, moveTrackTo, stepTrack, stepSet, moveSel, area: () => area, setArea: (a) => { area = a; } };
-  window.SL10a = { renameSong, editInline, nameEl, midiLast, sortMidi, aboveMidi, isMidi };
+  window.SL10a = { editing: () => (editor ? { el: editor.el, value: editor.value, end: editor.end } : null), onEnd: (f) => { onEnd = f; }, renameSong, editInline, nameEl, midiLast, sortMidi, aboveMidi, isMidi };
 })();

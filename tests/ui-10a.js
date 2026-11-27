@@ -61,7 +61,7 @@ async function check10a() {
     if (z.length) log.push(`zoom frames: ${z[Math.floor(z.length / 2)]} ms median, ${z[Math.floor(z.length * 0.9)]} p90 (${z.length})`); }
 
   // ================================================================ renaming a song
-  const typeName = async (v, key = "Enter") => { await frames(2); const i = document.querySelector(".ren10"); if (!i) return false; i.value = v; i.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })); await frames(2); return true; };
+  const typeName = async (v, key = "Enter") => { await frames(2); const ed = SL10a.editing && SL10a.editing(); if (!ed) return false; const i = ed.el; if (i.tagName === "INPUT") i.value = v; else i.textContent = v; i.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })); await frames(2); return true; };
   const click = (el, o = {}) => { const r = el.getBoundingClientRect(), x = r.left + Math.min(20, r.width / 2), y = r.top + r.height / 2;
     const p = { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, ...o };
     el.dispatchEvent(new PointerEvent("pointerdown", { ...p, pointerId: 1, buttons: 1 })); el.dispatchEvent(new MouseEvent("mousedown", p));

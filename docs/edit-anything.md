@@ -42,11 +42,28 @@ No ‹ › arrows: the version line ("Album ▾ · 4:24") is the switcher, the d
 has its own 30 px at the right edge; the row's × (hidden while hovering since 10b) is gone (⋯ › Remove from…, ⌫). No
 coloured outline around songs with versions; the playing song's number turns green with ▶.
 
-## Rename in place
-The field takes the name's own box (left, top, width, height within 2 px), font, weight, colour and padding; the name
-under it hides; it grows to the right as you type, up to its row's edge. ↩ or clicking away saves, Esc cancels. Used
-for setlist rows, cards, Folders rows, the song title, track headers, sections, versions, markers, cue words on the
-lane, the setlist name and the library name (the breadcrumb).
+## Rename in place (11b: the name itself)
+One helper (`SL10a.editInline` in `fix10a.js`) for every rename: the name element itself becomes the text field
+(`contenteditable="plaintext-only"`, plain "true" where that isn't supported, pasting kept to plain text on one line).
+Nothing is measured or positioned, so Text size (CSS zoom), scrolling and WebKit's rounding can't move it. The text is
+selected; ↩, Tab or clicking away saves; Esc puts the old name back; the row keeps its size (long names scroll inside).
+While a name is edited the page doesn't redraw (`fix11.js` holds refresh / renderSetlist / renderFolders / renderInsp
+until it's done) and its keys and clicks don't reach the page's shortcuts or drags.
+- **Why 11's box was misplaced:** it measured the name with getBoundingClientRect() and put a separate input at those
+  coordinates on top of the page. Customize › Text size zooms the app area with CSS `zoom`, and macOS 12's WebKit
+  reports positions inside a zoomed area in different units from the ones the page uses to place the box, so the
+  box landed off the name (over other controls) at the wrong font size, while the name it should have covered stayed
+  visible (its "…" too). The tests ran in browsers that report zoomed positions the new way, so they didn't see it.
+- Used for setlist rows, cards, Folders rows, the song title, track headers (and the track panel's title), sections,
+  versions (strip and the setlist row's "Album ▾"), breaks, the setlist name, the library name, markers. A cue's word
+  drawn on the Cues lane has no element: a field sits in the lane at the label (lane coordinates). Names not on
+  screen (presets, scenes, a cue word without its panel) are renamed in a small name box.
+- **Track headers:** the name gets about 90 px (or its whole text) first. When it hasn't: the level slider becomes a
+  small knob, the output chip says "Out 1" and then "1" (the full output in its tooltip); M / S stay; only then the name
+  shortens with "…". The song title wins over the version picker, a card's name over "IN SET".
+- Tests: `tests/ui-11b.js` (every spot at Text size 100 % and 120 %, scrolled, one song and Folders; the edited element
+  is the name element, nothing overlaps it; names ≥ 60 px). The WebKit CI run saves pictures of each spot before and
+  while editing (artifact `ui-layout-macos`, folder `rename`).
 
 ## Sections
 - **Why they stacked:** 10b's hover ⋯ gave section blocks `.ix10 { position: relative }`, which came after the page's

@@ -33,6 +33,8 @@ let fails = 0;
 for (const suite of pick(args)) {
   const pg = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
   const errs = []; pg.on("pageerror", (e) => errs.push(String(e).split("\n")[0]));
+  // 11b: the rename suite saves a picture of each spot before and while editing (CI artifact: rename/*.png)
+  if (shots) { await mkdir(join(shots, "rename"), { recursive: true }); await pg.exposeFunction("__shot", async (name, clip) => { try { await pg.screenshot({ path: join(shots, "rename", String(name).replace(/[^\w%-]+/g, "_") + ".png"), clip }); } catch (e) {} return true; }); }
   await pg.goto(base + "?webkit=" + Date.now()); await pg.waitForTimeout(800);
   let r;
   try { r = await pg.evaluate(`(async()=>{ ${await suiteCode(suite)} })()`); } catch (e) { r = { problems: ["error: " + String(e.message).split("\n")[0]], log: [] }; }

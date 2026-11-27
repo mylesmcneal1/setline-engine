@@ -79,3 +79,23 @@
 .scroller .row.trk > .lh { padding-right: 30px; }
 .row.trk > .lh .more10 { top: 50% !important; transform: translateY(-50%); right: 4px; }
 .row.trk > .lh .tdel9 { display: none !important; }
+
+/* 11b: renaming: the name itself is the field (same element, font and box); a ring outside it, nothing moves */
+.ren11b { outline: 1.5px solid var(--accent, #0a84ff) !important; outline-offset: 2px; border-radius: 2px; cursor: text !important; -webkit-user-select: text !important; user-select: text !important;
+  text-overflow: clip !important; caret-color: currentColor; background: rgba(10, 132, 255, .12); }
+.ren11b::after, .ren11b::before { content: none !important; }
+.ren11lane { position: absolute; z-index: 5; margin: 0; padding: 0 6px; border: 0; border-radius: 5px; box-sizing: border-box; background: #2a2f37; color: #fff; outline: 1.5px solid var(--accent, #0a84ff); }
+
+/* 11b: track headers: the name gets room first (fix11.js fitHeader: nm1 = small level knob, nm2 = chip "1") */
+.row.trk > .lh .tn { min-width: 44px; }
+.row.trk > .lh.nm1 .hf { width: 22px; }
+.row.trk > .lh.nm1 .hf i { opacity: .55; }
+.row.trk > .lh .ochip { overflow: visible; text-overflow: clip; }
+.row.trk > .lh.nm2 .ochip { padding-left: 5px; padding-right: 5px; }
+.scroller .row.trk > .lh { padding-right: 26px; }
+
+/* 11b: the name wins over secondary text: the song title over the version picker, a card's name over "IN SET" */
+.htitle h2 { flex: 0 1 auto; min-width: 3em; }
+.htitle .xs.vsel, .htitle .vsel { flex: 0 50 auto; min-width: 26px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.htitle .hnum { flex: none; }
+.card9 .c9h .inset9 { flex: 0 50 auto; min-width: 0; overflow: hidden; text-overflow: clip; white-space: nowrap; }
