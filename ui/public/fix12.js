@@ -41,7 +41,7 @@
     return GS;
   }
   // the zoom factor k relative to the start, applied as a stretch of what's drawn
-  function gSet(k) {
+  function gSet(k, ended) {
     const g = GS; if (!g) return; const t0 = performance.now();
     const [mn, mx] = ZLIM(); k = Math.max(mn / g.z0, Math.min(mx / g.z0, k)); g.k = k;
     const tx = g.ax - k * (g.hx + g.ax);
@@ -49,7 +49,8 @@
     for (const l of g.lanes) l.style.transform = tf;
     g.ph.forEach((p) => { p.style.visibility = "hidden"; });
     g.frames.push(performance.now() - t0); g.last = performance.now();
-    clearTimeout(g.timer); g.timer = setTimeout(gEnd, 120);
+    clearTimeout(g.timer); if (!ended) g.timer = setTimeout(gEnd, 120); // a pinch says when it ends; a wheel burst ends after 120 ms of quiet
+    else g.timer = setTimeout(gEnd, 1500); // (a pinch whose end never came)
   }
   // the gesture ended: the real zoom at the new scale, drawn sharp once
   function gEnd() {
@@ -76,10 +77,11 @@
   function pinch(m) {
     if (!m || !openSongs().length) return;
     const ph = String(m.phase || "");
-    if (ph === "begin" || !NP) { NP = { acc: 0 }; gStart((m.x != null ? m.x : laneLeft() + 200) - laneLeft()); }
+    if (ph === "begin" || !NP) { NP = { acc: 0, base: 0 }; gStart((m.x != null ? m.x : laneLeft() + 200) - laneLeft()); }
+    else if (!GS) { NP.base = NP.acc; gStart((m.x != null ? m.x : laneLeft() + 200) - laneLeft()); } // it went on after a redraw: from here
     if (ph === "end" || ph === "cancel") { NP = null; if (GS) { clearTimeout(GS.timer); gEnd(); } return; }
     NP.acc += +m.m || 0;
-    gSet(Math.exp(NP.acc * speed()));
+    gSet(Math.exp((NP.acc - NP.base) * speed()), true);
   }
   // Ctrl / ⌘ + wheel (a Windows / Chrome pinch arrives this way) and ⌥ + wheel: the same snapshot, one gesture per burst
   let WG = null;
@@ -95,7 +97,7 @@
   // WebKit's own pinch events (Safari, the page in a browser): the same, from their scale
   let WK = null;
   document.addEventListener("gesturestart", (e) => { if (!openSongs().length || !inLanes(e.clientX == null ? laneLeft() + 10 : e.clientX, e.clientY == null ? sc.getBoundingClientRect().top + 10 : e.clientY)) return; e.preventDefault(); e.stopImmediatePropagation(); WK = 1; gStart((e.clientX == null ? laneLeft() + 200 : e.clientX) - laneLeft()); }, { capture: true, passive: false });
-  document.addEventListener("gesturechange", (e) => { if (!WK) return; e.preventDefault(); e.stopImmediatePropagation(); if (e.scale > 0) gSet(Math.pow(e.scale, speed() / SPEED.normal)); }, { capture: true, passive: false });
+  document.addEventListener("gesturechange", (e) => { if (!WK) return; e.preventDefault(); e.stopImmediatePropagation(); if (e.scale > 0) gSet(Math.pow(e.scale, speed() / SPEED.normal), true); }, { capture: true, passive: false });
   document.addEventListener("gestureend", (e) => { if (!WK) return; e.preventDefault(); e.stopImmediatePropagation(); WK = null; if (GS) { clearTimeout(GS.timer); gEnd(); } }, { capture: true, passive: false });
   // waveform detail for the song(s) on screen, every level, ahead of the zoom (fetched in the background)
   function prefetch() {
