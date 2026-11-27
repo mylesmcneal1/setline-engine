@@ -178,7 +178,7 @@
     const hA = Math.max(2, (mid - y0) - 2), hC = Math.max(2, (y1 - mid) - 2);
     for (const n of C.notes) {
       if (n.tk < a0 || n.tk > a1) continue;
-      const X = tkTime(s, n.tk) * PXS, w = Math.max(1.5, Math.min(6, n.len / PPQ * (PXS * 60 / 120) * 0.25));
+      const X = TX.col(tkTime(s, n.tk) * PXS), w = Math.max(1.5, Math.min(6, n.len / PPQ * (PXS * 60 / 120) * 0.25));
       g.fillStyle = off ? "#3a3f48" : n.a ? "#f2f3f6" : "#f5c518";
       const h = (n.a ? hA : hC) * (0.45 + 0.55 * (n.v || 127) / 127);
       g.fillRect(X, n.a ? mid - 1 - h : mid + 1, w, h);
@@ -199,26 +199,27 @@
   const GRIDS = [["1/4", PPQ], ["1/8", PPQ / 2], ["1/16", PPQ / 4], ["Triplet", PPQ / 3]];
   const ROWH = 46, BARS = 15, METER = 13, RULER = BARS + METER, VELH = 54; // 11: bar numbers, then a time-signature row
   const store = { get: (k, d) => { try { const v = localStorage.getItem("setline." + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }, set: (k, v) => { try { localStorage.setItem("setline." + k, JSON.stringify(v)); } catch (e) {} } };
-  function open(s, t) {
+  function open(s, t, restore) {
     t = t || clickTracksOf(s)[0];
     if (!t) { if (typeof toast === "function") toast(`“${s.name}” has no click track: Track › Add click track`); return; }
     const same = ED && ED.s === s && ED.t === t;
+    if (window.ED13) ED13.open(VID, s, restore); // 13 §5: opening frames what the timeline shows (§7: reopening the song: as it was)
     if (!same) ED = { s, t, mode: "select", grid: store.get("clkGrid2", -1), tri: !!store.get("clkTri", false), snapOn: store.get("clkSnap", true) !== false, dens: store.get("clkDens", 0), sel: new Set(), h: store.get("clkH", 250), ins: null };
     build(); redrawLanes();
   }
   // 12: Undo / Redo rebuild the songs: the editor follows at once (not on the next tick), the selection by position
   function live() { if (!ED || songs.includes(ED.s)) return; const s2 = songOf(ED.s.id); if (!s2) return; const keys = [...ED.sel].map((n) => n.tk + "|" + n.a); ED.s = s2; const N = view(s2, ED.t).notes; ED.sel = new Set(N.filter((n) => keys.includes(n.tk + "|" + n.a))); }
-  function close() { ED = null; const p = $("clk10"); if (p) p.remove(); redrawLanes(); }
+  function close() { if (ED && window.ED13) ED13.closed(VID, ED.s, ED.t); ED = null; const p = $("clk10"); if (p) p.remove(); redrawLanes(); }
   const redrawLanes = () => document.querySelectorAll("canvas[data-t]").forEach((cv) => { const s = songOf(cv.dataset.song), t = s && s.tracks[+cv.dataset.t]; if (s && t && isClick(s, t)) window.drawLane(cv); });
   function build() {
     let p = $("clk10"); const sc = $("scroller");
-    if (!p) { p = document.createElement("div"); p.id = "clk10"; p.tabIndex = -1; p.dataset.keys = "own"; sc.parentElement.insertBefore(p, sc.nextSibling); }
+    if (!p) { p = document.createElement("div"); p.id = "clk10"; p.tabIndex = -1; p.dataset.keys = "own"; p.dataset.editor = VID; sc.parentElement.insertBefore(p, sc.nextSibling); }
     p.style.height = ED.h + "px";
-    p.innerHTML = `<i class="crz10" title="Drag to resize"></i><div class="ch10"><b>${esc(ED.t)} · MIDI clip</b><span class="cbars10"></span>
+    p.innerHTML = `<i class="crz10" title="Drag to resize"></i><div class="ch10"><b>${esc(ED.t)} · MIDI clip</b>${window.ED13 ? ED13.trHTML(ED.s.id) : ""}<span class="cbars10"></span>
       <div class="seg10" data-k="mode"><button data-v="draw" title="Draw mode: click to add, drag to paint, ⌥-drag to erase  B">✎ Draw</button></div>
       <span class="clab10">Grid</span><div class="seg10" data-k="grid"><button data-v="-1" title="Adaptive: follows the zoom  ⌘1 narrower · ⌘2 wider">Adaptive</button>${GRIDS.slice(0, 3).map(([n], i) => `<button data-v="${i}">${n}</button>`).join("")}</div><div class="seg10" data-k="tri"><button data-v="true" title="Triplets  ⌘3">3</button></div><div class="seg10" data-k="snapOn"><button data-v="true" title="Snap to the grid  ⌘4 (⌘-drag: free)">Snap</button></div>
       <button class="btn line cfill10" title="Fill from time signature: an accent on beat 1 (each group in odd meters), a click on the other beats">Fill ▾</button>
-      <button class="btn line cpat10">Pattern ▾</button><button class="ibtn cmore10" title="More" aria-label="More">⋯</button><button class="ibtn cx10" title="Close  Esc" aria-label="Close">✕</button></div>
+      <button class="btn line cpat10">Pattern ▾</button>${window.ED13 ? ED13.linkHTML(VID) : ""}<button class="ibtn cmore10" title="More" aria-label="More">⋯</button><button class="ibtn cx10" title="Close  Esc" aria-label="Close">✕</button></div>
       <div class="chint10" hidden>Time signature changed: <b>Refill click?</b><button class="btn line" data-a="refill">Refill</button><button class="btn line" data-a="keep">Keep as drawn</button></div>
       <div class="cb10"><div class="cl10"><div class="crl10" style="height:${RULER}px"><span>Bar</span><span>Time sig.</span></div><div class="crow10" style="height:${ROWH}px"><i style="background:#f2f3f6"></i><b>Accent</b><em>C3</em></div><div class="crow10" style="height:${ROWH}px"><i style="background:#f5c518"></i><b>Click</b><em>C#3</em></div><div class="cvl10">Velocity</div></div><canvas class="cc10"></canvas></div>`;
     const seg = (k, v) => p.querySelectorAll(`.seg10[data-k="${k}"] button`).forEach((b) => b.classList.toggle("on", b.dataset.v === String(v)));
@@ -230,6 +231,7 @@
       else if (k === "snapOn") { ED.snapOn = !ED.snapOn; store.set("clkSnap", ED.snapOn); }
       segs(); draw(); });
     p.querySelector(".cx10").onclick = close;
+    if (window.ED13) ED13.bindLink(p, VID, () => { last = ""; draw(); redrawLanes(); });
     p.querySelector(".cfill10").onclick = (e) => { const r = e.currentTarget.getBoundingClientRect(), at = { clientX: r.left, clientY: r.bottom + 4 }, sel = selSpan();
       ctxMenu(at, [{ cap: "Fill from time signature" }, { label: "Whole song", icon: "", act: () => doFill(0, endTk(ED.s)) }, { label: "Selection", icon: "", dis: !sel, act: () => doFill(sel[0], sel[1]) }]); };
     p.querySelector(".cpat10").onclick = (e) => { const r = e.currentTarget.getBoundingClientRect(), at = { clientX: r.left, clientY: r.bottom + 4 }, span = selSpan() || visSpanTk();
@@ -254,25 +256,27 @@
   const step = () => { const base = ED.grid < 0 ? adaptive() : GRIDS[ED.grid][1]; return ED.tri && ED.grid !== 3 ? base * 2 / 3 : base; };
   const snapTk = (tk, how = "round", free) => { if (free || !ED.snapOn) return Math.max(0, Math.round(tk)); const { bar } = barOf(ED.s, tk), b0 = barTk(ED.s, bar), st = step(); return Math.max(0, Math.round(b0 + Math[how]((tk - b0) / st + 1e-9) * st)); };
   const selSpan = () => { if (!ED || !ED.sel.size) return null; const L = [...ED.sel].map((n) => n.tk); const a = Math.min(...L), b = Math.max(...L); return [barTk(ED.s, barOf(ED.s, a).bar), barTk(ED.s, barOf(ED.s, b).bar + 1)]; };
-  const visSpanTk = () => { const sc = $("scroller"), w = window.TL9 ? TL9.viewW() : 800; const a = timeTk(ED.s, sc.scrollLeft / PXS), b = timeTk(ED.s, Math.min(ED.s.len, (sc.scrollLeft + w) / PXS)); return [barTk(ED.s, barOf(ED.s, a).bar), barTk(ED.s, barOf(ED.s, b).bar + 1)]; };
+  const visSpanTk = () => { const G = geo(), w = G ? G.w : 800, v = G ? G.v : TX.main(); const a = timeTk(ED.s, Math.max(0, TX.t(0, v))), b = timeTk(ED.s, Math.min(ED.s.len, TX.t(w, v))); return [barTk(ED.s, barOf(ED.s, a).bar), barTk(ED.s, barOf(ED.s, b).bar + 1)]; };
   // geometry: the canvas sits under the timeline's lanes (same left edge, the same sideways position and zoom)
   function geo() {
     const p = $("clk10"), cv = p && p.querySelector(".cc10"); if (!cv) return null;
     const pr = p.querySelector(".cb10").getBoundingClientRect(), L = window.TL9 ? TL9.laneLeft() : pr.left + 200, W = window.TL9 ? TL9.viewW() : pr.width - 200;
-    return { cv, left: L - pr.left, top: 0, w: Math.max(50, Math.min(W, pr.right - L)), h: pr.height, hx: $("scroller").scrollLeft };
+    return { cv, left: L - pr.left, top: 0, w: Math.max(50, Math.min(W, pr.right - L)), h: pr.height, v: TX.view(VID) };
   }
-  const xOfTk = (G, tk) => tkTime(ED.s, tk) * PXS - G.hx;
-  const tkOfX = (G, x) => timeTk(ED.s, Math.max(0, (x + G.hx) / PXS));
+  // 13 §1 / §5: the one time <-> x calculation (tx13.js) with the editor's own view (its own zoom and scroll)
+  const VID = "click";
+  const xOfTk = (G, tk) => TX.x(tkTime(ED.s, tk), G.v);
+  const tkOfX = (G, x) => timeTk(ED.s, Math.max(0, TX.t(x, G.v)));
   const rowOfY = (y) => (y < RULER ? -1 : y < RULER + ROWH ? 1 : y < RULER + 2 * ROWH ? 0 : y < RULER + 2 * ROWH + 6 ? -1 : 2); // 1 accent, 0 click, 2 velocity
   let last = "";
   let looping = false;
-  function loop() { if (!ED || !$("clk10")) { looping = false; return; } looping = true; const G = geo(); const k = G ? [PXS, G.hx, G.w, G.h, ED.s.bars.length, ED.v || 0].join() : ""; if (k !== last || (ED.ins != null && !ED.sel.size)) { last = k; draw(); } requestAnimationFrame(loop); }
+  function loop() { if (!ED || !$("clk10")) { looping = false; return; } looping = true; const G = geo(); const k = G ? [G.v.pxs, G.v.hx, G.w, G.h, ED.s.bars.length, ED.v || 0, ED.hover ? ED.hover.tk + "|" + ED.hover.a : "", typeof pos === "number" && typeof playing !== "undefined" && playing ? pos : ""].join() : ""; if (k !== last || (ED.ins != null && !ED.sel.size)) { last = k; draw(); } requestAnimationFrame(loop); }
   function draw() {
     if (!ED) return; live(); const G = geo(); if (!G) return; const s = ED.s, C = view(s, ED.t), cv = G.cv, dpr = window.devicePixelRatio || 1;
     cv.style.left = G.left + "px"; cv.style.width = G.w + "px"; cv.style.height = G.h + "px";
     if (cv.width !== Math.round(G.w * dpr) || cv.height !== Math.round(G.h * dpr)) { cv.width = Math.round(G.w * dpr); cv.height = Math.round(G.h * dpr); }
     const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, G.w, G.h);
-    const tA = G.hx / PXS, tB = (G.hx + G.w) / PXS, b0 = barOf(s, timeTk(s, Math.max(0, tA))).bar, b1 = Math.min(s.total, barOf(s, timeTk(s, Math.min(s.len, tB))).bar);
+    const tA = TX.t(0, G.v), tB = TX.t(G.w, G.v), b0 = barOf(s, timeTk(s, Math.max(0, tA))).bar, b1 = Math.min(s.total, barOf(s, timeTk(s, Math.min(s.len, tB))).bar);
     const p = $("clk10"); p.querySelector(".cbars10").textContent = `Bars ${b0}–${b1} on screen (of ${s.total})`;
     const hint = p.querySelector(".chint10"); hint.hidden = !(C.notes.length && C.sig !== sigKey(s));
     const yA = RULER, yC = RULER + ROWH, yV = RULER + 2 * ROWH + 6, hV = Math.max(20, G.h - yV - 4);
@@ -302,7 +306,7 @@
       const txt = c.sig.join("/"), tw = g.measureText(txt).width + 6; if (x < mEnd) return; const at = Math.max(x, Math.min(0, nx - tw));
       g.fillStyle = "#64d2ff"; g.fillText(txt, at + 3, BARS + 10); mEnd = at + tw + 2; });
     // playhead
-    if (typeof playId !== "undefined" && playId === s.id && typeof pos === "number") { const x = pos * PXS - G.hx; if (x >= 0 && x <= G.w) { g.fillStyle = "rgba(255,255,255,.7)"; g.fillRect(Math.round(x), 0, 1, G.h); } }
+    if (typeof playId !== "undefined" && playId === s.id && typeof pos === "number") { const x = TX.x(pos, G.v); if (x >= 0 && x <= G.w) { g.fillStyle = "rgba(255,255,255,.7)"; g.fillRect(TX.col(x), 0, 1, G.h); } }
     // notes and velocities: blocks when there's room, thin ticks under ~4 px, a density strip when zoomed far out
     const a0 = timeTk(s, Math.max(0, tA)) - PPQ, a1 = timeTk(s, Math.min(s.len, tB)) + PPQ;
     const vis = C.notes.filter((n) => n.tk >= a0 && n.tk <= a1);
@@ -321,9 +325,10 @@
       for (const n of vis) {
         const x = xOfTk(G, n.tk), sel = ED.sel.has(n), y = n.a ? yA : yC;
         g.fillStyle = n.a ? colA : colC; g.globalAlpha = 0.55 + 0.45 * (n.v || 127) / 127;
-        if (mode === "ticks") { g.fillRect(Math.round(x), y + 8, 1.5, ROWH - 16); g.globalAlpha = 1; if (sel) { g.fillStyle = "#5a8cff"; g.fillRect(Math.round(x) - 1, y + 4, 3.5, 3); } continue; }
+        if (mode === "ticks") { g.fillRect(TX.col(x), y + 8, 1.5, ROWH - 16); g.globalAlpha = 1; if (ED.hover === n) { g.fillStyle = "rgba(255,255,255,.22)"; g.fillRect(TX.col(x) - 3, y + 4, 8, ROWH - 8); } if (sel) { g.fillStyle = "#5a8cff"; g.fillRect(Math.round(x) - 1, y + 4, 3.5, 3); } continue; }
         const w = Math.max(4, Math.min(18, noteW(n)));
         g.beginPath(); g.roundRect(x, y + 6, w, ROWH - 12, 3); g.fill(); g.globalAlpha = 1;
+        if (ED.hover === n && !sel) { g.strokeStyle = "rgba(255,255,255,.85)"; g.lineWidth = 1; g.beginPath(); g.roundRect(x - 1.5, y + 4.5, w + 3, ROWH - 9, 4); g.stroke(); }
         if (sel) { g.strokeStyle = "#fff"; g.lineWidth = 2; g.beginPath(); g.roundRect(x - 1, y + 5, w + 2, ROWH - 10, 4); g.stroke(); g.strokeStyle = "#2f6df6"; g.lineWidth = 1; g.stroke(); }
       }
     }
@@ -342,8 +347,11 @@
     if (!C.notes.length) { g.fillStyle = "#9aa0ab"; g.font = "13px Inter, sans-serif"; g.fillText("No click in this song yet: Fill from time signature, or draw notes", 12, yC + 8); }
   }
   let BOX = null;
-  const noteAt = (G, x, y) => { const row = rowOfY(y); if (row !== 0 && row !== 1) return null; const C = view(ED.s, ED.t); let best = null, bd = 7;
-    for (const n of C.notes) { if (!!n.a !== (row === 1)) continue; const nx = xOfTk(G, n.tk), w = Math.max(4, Math.min(18, xOfTk(G, n.tk + (n.len || 120)) - nx)); if (x < nx - 2 || x > nx + w + 2) continue; const d = Math.abs(x - (nx + w / 2)); if (d < bd + w) { bd = d - w; best = n; } } return best; };
+  const noteAt = (G, x, y) => { const row = rowOfY(y); if (row !== 0 && row !== 1) return null; const C = view(ED.s, ED.t); let best = null, bd = 1e9;
+    // 13 §2: every note takes the pointer over at least 8 px, centred on it when it's drawn as a thin tick; nearest wins
+    for (const n of C.notes) { if (!!n.a !== (row === 1)) continue; const nx = xOfTk(G, n.tk), w = noteDrawW(G, n), a = w < 6 ? nx + w / 2 - 4 : nx - 1, b = w < 6 ? nx + w / 2 + 4 : nx + w + 1; if (x < a || x > b) continue; const d = x < nx ? nx - x : x > nx + w ? x - nx - w : 0; if (d < bd) { bd = d; best = n; } } return best; };
+  // the width a note is drawn at: a thin tick (1.5 px) when its block would be under 4 px, else 4-18 px
+  const noteDrawW = (G, n) => { const w = xOfTk(G, n.tk + (n.len || 120)) - xOfTk(G, n.tk); return ED.drawMode === "ticks" || w < 4 ? 1.5 : Math.max(4, Math.min(18, w)); };
   const velAt = (G, x) => { const C = view(ED.s, ED.t); let best = null, bd = 4; for (const n of C.notes) { const d = Math.abs(xOfTk(G, n.tk) + 2 - x); if (d < bd) { bd = d; best = n; } } return best; };
   // 12 (conventions §9): double-click empty grid adds a note, a note: deletes it. Select mode (the default): a note
   // selects (⇧ adds), drags (snapped; ⌘ free; up / down changes its row; ⌥: a copy, or straight up / down: its velocity);
@@ -352,14 +360,15 @@
   // pointer's offset in the canvas (Text size's zoom can't shift them).
   const isCmd = (e) => (MAC ? e.metaKey : e.ctrlKey);
   function wireCanvas(cv) {
-    const pt = (ev) => (ev.target === cv ? { x: ev.offsetX, y: ev.offsetY } : (() => { const r = cv.getBoundingClientRect(); return { x: ev.clientX - r.left, y: ev.clientY - r.top }; })());
+    const pt = (ev) => ({ x: TX.local(ev, cv), y: TX.localY(ev, cv) }); // 13: through tx13.js
     const yVel = () => { const G = geo(); const yV = RULER + 2 * ROWH + 6; return { yV, hV: Math.max(20, G.h - yV - 4) }; };
     const sortN = (C) => C.notes.sort((p, q) => p.tk - q.tk || q.a - p.a);
     cv.ondblclick = (e) => {
-      if (!ED) return; live(); e.preventDefault(); const G = geo(), { x, y } = pt(e), row = rowOfY(y); if (row !== 0 && row !== 1) return;
+      if (!ED) return; live(); e.preventDefault(); if (ED.mode === "draw") return; const G = geo(), { x, y } = pt(e), row = rowOfY(y); if (row !== 0 && row !== 1) return;
       const C = view(ED.s, ED.t), hit = noteAt(G, x, y);
       if (hit) { change("Deleted a click note", () => { const C2 = view(ED.s, ED.t); C2.notes = C2.notes.filter((n) => !(n.tk === hit.tk && n.a === hit.a)); ED.sel.clear(); }); return; }
-      const tk = snapTk(tkOfX(G, x), "floor", isCmd(e)); if (tk >= endTk(ED.s)) return;
+      const tk = snapTk(tkOfX(G, x), "round", isCmd(e)); if (tk >= endTk(ED.s)) return;
+      if (C.notes.some((n) => n.tk === tk && !!n.a === (row === 1))) return; // (one there already)
       change("Added a click note", () => { const C2 = view(ED.s, ED.t); const n = { tk, a: row, v: 127, len: 120 }; C2.notes.push(n); sortN(C2); ED.sel = new Set([n]); });
     };
     cv.onpointerdown = (e) => {
@@ -374,7 +383,7 @@
       }
       if (row !== 0 && row !== 1) return;
       if (ED.mode === "draw") {
-        const cell = (xx) => snapTk(tkOfX(G, xx), "floor", isCmd(e)), hit0 = noteAt(G, x, y);
+        const cell = (xx) => snapTk(tkOfX(G, xx), "round", isCmd(e)), hit0 = noteAt(G, x, y);
         snap(); keep(ED.s, ED.t); const erase = e.altKey || !!hit0; const done = new Set();
         const apply = (xx, yy) => { const rw = rowOfY(yy); if (rw !== row) return; const tk = cell(xx), key = tk; if (done.has(key)) return; done.add(key);
           const C2 = view(ED.s, ED.t), ex = C2.notes.filter((n) => !!n.a === (row === 1) && Math.abs(n.tk - tk) < step() / 2);
@@ -411,12 +420,11 @@
         for (const n of view(ED.s, ED.t).notes) { const nx = xOfTk(G, n.tk), ny = n.a ? RULER + ROWH / 2 : RULER + ROWH * 1.5; if (nx >= xa - 2 && nx <= xb && ny >= ya && ny <= yb) ED.sel.add(n); else if (!e.shiftKey) ED.sel.delete(n); } draw(); };
       cv.onpointerup = () => { cv.onpointermove = null; BOX = null; draw(); };
     };
-    // scrolling and zooming here move the timeline too (one position, one zoom)
-    cv.addEventListener("wheel", (e) => {
-      if (e.altKey || e.ctrlKey || e.metaKey) return; // the zoom gesture (fix12.js)
-      e.preventDefault(); const sc = $("scroller");
-      sc.scrollLeft += Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
-    }, { passive: false });
+    // 13 §5: scrolling and zooming here move the editor's own view (linked: the timeline's); ED13 does the gestures
+    if (window.ED13) ED13.wire(cv, VID, () => (ED ? ED.s : null), draw);
+    // hovering highlights the note under the pointer (what a click or double-click would take)
+    cv.addEventListener("pointermove", (e) => { if (!ED || e.buttons) return; const G = geo(); if (!G) return; const { x, y } = pt(e), h = ED.mode === "draw" ? null : noteAt(G, x, y); if (h !== ED.hover) { ED.hover = h; cv.style.cursor = h ? "pointer" : ""; draw(); } });
+    cv.addEventListener("pointerleave", () => { if (ED && ED.hover) { ED.hover = null; draw(); } });
   }
   // keys while the editor has focus (conventions §9): ⌫, ⌘A, ⌘C / ⌘V (at the insert marker), ⌘D, ← → nudge (⇧: a
   // bar), ↑ ↓ the other row, B Draw mode, Esc (Draw mode off, then the selection, then the editor), ⌘1 / ⌘2 the grid
@@ -445,6 +453,8 @@
     if (!cmd && (e.key === "ArrowUp" || e.key === "ArrowDown") && ED.sel.size) { take(); const L = [...ED.sel], a2 = e.key === "ArrowUp" ? 1 : 0;
       change(`Moved ${L.length} click note${L.length > 1 ? "s" : ""} to ${a2 ? "Accent" : "Click"}`, () => { L.forEach((n) => { n.a = a2; }); sortN(view(ED.s, ED.t)); }); return; }
   }, true);
+  // 13 §7: the editor closes with its song (and comes back with it, as it was)
+  if (window.ED13) ED13.register("click", { current: () => (ED ? { song: ED.s.id, track: ED.t } : null), close: () => close(), reopen: (s, t) => { if (s.tracks.includes(t)) open(s, t, true); } });
   // follow the song shown: the editor closes when its song goes
   setInterval(() => { if (ED && (!songs.includes(ED.s) || !ED.s.tracks.includes(ED.t))) { const s = songOf(ED.s.id); if (s && s.tracks.includes(ED.t)) { ED.s = s; ED.sel.clear(); draw(); } else close(); } }, 500);
 

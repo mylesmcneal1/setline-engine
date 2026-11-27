@@ -1145,6 +1145,8 @@
 </style>
 <script src="ui.js"></script>
 <script src="modeler.js"></script>
+<script src="tx13.js"></script>
+<script src="ed13.js"></script>
 <link rel="stylesheet" href="show9.css">
 <link rel="stylesheet" href="look9.css">
 <link rel="stylesheet" href="breaks9.css">
@@ -1154,6 +1156,7 @@
 <link rel="stylesheet" href="c10.css">
 <link rel="stylesheet" href="fix11.css">
 <link rel="stylesheet" href="fix12.css">
+<link rel="stylesheet" href="fix13.css">
 </head>
 <body>
 
@@ -2061,23 +2064,23 @@ function secMenu(e,s,id){ const so=secObj(s,id), nx=s.secs.find(x=>x.start>so.st
     {label:'Duplicate after',icon:'⧉',dis:room<so.bars,act:()=>{ snap(); const c={...JSON.parse(JSON.stringify(so)),id:sid++,start:so.start+so.bars}; s.secs.push(c); buildBars(s); selSec={song:s.id,id:c.id}; refresh(); }},
     {label:'Split at playhead',icon:'✂',dis:!(playId===s.id&&barAtTime(s,pos)>so.start&&barAtTime(s,pos)<so.start+so.bars),act:()=>splitAt(s,id,nearestBoundary(s,pos))},
     {label:'Delete section',icon:'⌫',danger:true,act:()=>deleteSec(s,id)}]); }
-function wireSecLane(lane){ const s=songs.find(x=>x.id===lane.dataset.song), tAt=cx=>(cx-lane.getBoundingClientRect().left)/PXS, xOf=bar=>s.bars[Math.min(bar,s.total+1)-1].t*PXS;
-  lane.onpointerdown=e=>{ if(e.button!==0||e.target.closest('.sec')) return; const b0=barAtTime(s,tAt(e.clientX)), r=freeRange(s,b0); if(!r) return; e.preventDefault();
+function wireSecLane(lane){ const s=songs.find(x=>x.id===lane.dataset.song), tAt=ev=>TX.timeAt(ev,lane), xOf=bar=>TX.songX(s.bars[Math.min(bar,s.total+1)-1].t);
+  lane.onpointerdown=e=>{ if(e.button!==0||e.target.closest('.sec')) return; const b0=barAtTime(s,tAt(e)), r=freeRange(s,b0); if(!r) return; e.preventDefault();
     const g=document.createElement('div'); g.className='secghost'; lane.appendChild(g); let a=b0,z=b0+1, moved=false;
     const upd=()=>{ g.style.left=(xOf(a)+1)+'px'; g.style.width=(xOf(z)-xOf(a)-2)+'px'; g.textContent=`${z-a} bar${z-a>1?'s':''}`; }; upd();
-    const mv=m=>{ moved=true; const bb=Math.max(r[0],Math.min(r[1]-1,barAtTime(s,tAt(m.clientX)))); a=Math.min(b0,bb); z=Math.max(b0,bb)+1; upd(); showTip(`New section · bars ${a}–${z-1}`,m); };
+    const mv=m=>{ moved=true; const bb=Math.max(r[0],Math.min(r[1]-1,barAtTime(s,tAt(m)))); a=Math.min(b0,bb); z=Math.max(b0,bb)+1; upd(); showTip(`New section · bars ${a}–${z-1}`,m); };
     const up=()=>{ document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up); hideTip(); g.remove(); addSecAt(s,a,moved?z-a:Math.min(8,r[1]-b0)); };
     document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); };
   lane.querySelectorAll('.sec').forEach(el=>{ const id=+el.dataset.sid;
     el.onmousedown=e=>{ if(e.detail>=2){ e.stopPropagation(); setTimeout(()=>renameSec(s,id),0); } };
     el.oncontextmenu=e=>{ e.preventDefault(); e.stopPropagation(); selectSec(s.id,id); setTimeout(()=>secMenu(e,s,id),0); };
     el.onpointerdown=e=>{ if(e.button!==0||e.detail>=2) return; e.stopPropagation(); const so=secObj(s,id);
-      if(tool==='split'){ splitNear(s,id,tAt(e.clientX)); return; }
-      const mode=e.target.classList.contains('l')?'l':e.target.classList.contains('r')?'r':'m', o={start:so.start,bars:so.bars}, sx=e.clientX, pre=ser(); let moved=false;
+      if(tool==='split'){ splitNear(s,id,tAt(e)); return; }
+      const mode=e.target.classList.contains('l')?'l':e.target.classList.contains('r')?'r':'m', o={start:so.start,bars:so.bars}, sx=e.clientX, t00=tAt(e), pre=ser(); let moved=false;
       const pv=s.secs.filter(x=>x!==so&&x.start<so.start).pop(), nx=s.secs.find(x=>x!==so&&x.start>so.start), lo=pv?pv.start+pv.bars:1, hi=nx?nx.start:s.total+1;
-      const mv=m=>{ if(Math.abs(m.clientX-sx)<3&&!moved) return; moved=true; const t0=xOf(o.start)/PXS+(m.clientX-sx)/PXS;
+      const mv=m=>{ if(Math.abs(m.clientX-sx)<3&&!moved) return; moved=true; const dT=tAt(m)-t00, t0=s.bars[o.start-1].t+dT;
         if(mode==='m'){ let ns=nearestBoundary(s,t0); ns=Math.max(lo,Math.min(hi-o.bars,ns)); so.start=ns; }
-        else if(mode==='r'){ const end=Math.max(o.start+1,Math.min(hi,nearestBoundary(s,(xOf(o.start+o.bars)+(m.clientX-sx))/PXS))); so.bars=end-o.start; }
+        else if(mode==='r'){ const end=Math.max(o.start+1,Math.min(hi,nearestBoundary(s,s.bars[Math.min(o.start+o.bars,s.total+1)-1].t+dT))); so.bars=end-o.start; }
         else { const st=Math.max(lo,Math.min(o.start+o.bars-1,nearestBoundary(s,t0))); so.start=st; so.bars=o.start+o.bars-st; }
         el.style.left=(xOf(so.start)+1)+'px'; el.style.width=(xOf(so.start+so.bars)-xOf(so.start)-2)+'px'; showTip(`${so.name} · bars ${so.start}–${so.start+so.bars-1} (${so.bars})`,m); };
       const up=()=>{ document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up); hideTip(); if(moved){ undoS.push(pre); redoS=[]; buildBars(s); } selectSec(s.id,id); };
@@ -2117,7 +2120,7 @@ function meterRowHTML(s,W){ const all=[{bar:1,sig:sigAt(s,1),grp:(sigEntryAt(s,1
   const tip=c=>`${c.sig.join('/')}${c.grp&&c.grp.length?' ('+c.grp.join('+')+')':''} from bar ${c.bar}: click to change`;
   return `<div class="row meter9"><div class="lh" data-tip="Click a time signature to change it · double-click or right-click the row to add one">Time signature<span class="lhv mcur9" data-song="${s.id}">${sigAt(s,1).join('/')}</span></div><div class="lane" data-song="${s.id}" style="width:${W}px;${lanePos()}">${all.map(c=>`<b class="msig9" data-bar="${c.bar}" style="left:${s.bars[c.bar-1].t*PXS}px" title="${esc(tip(c))}">${c.sig.join('/')}</b>`).join('')}<b class="mstk9" hidden></b></div></div>`; }
 function wireMeterRows(sc){ sc.querySelectorAll('.meter9 .lane').forEach(l=>{ const s=songs.find(x=>x.id===l.dataset.song); if(!s) return;
-  const barAt=e=>{ const t=(e.clientX-l.getBoundingClientRect().left)/PXS; return s.bars.slice(0,s.total).reduce((a,x)=>Math.abs(x.t-t)<Math.abs(a.t-t)?x:a,s.bars[0]).bar; };
+  const barAt=e=>{ const t=TX.timeAt(e,l); return s.bars.slice(0,s.total).reduce((a,x)=>Math.abs(x.t-t)<Math.abs(a.t-t)?x:a,s.bars[0]).bar; };
   l.querySelectorAll('.msig9,.mstk9').forEach(m=>{ m.onpointerdown=e=>e.stopPropagation(); m.onclick=e=>{ e.stopPropagation(); openMpop(s,+m.dataset.bar||1,e); }; });
   l.ondblclick=e=>{ if(e.target.closest('.msig9,.mstk9')) return; openMpop(s,barAt(e),e); };
   l.oncontextmenu=e=>{ e.preventDefault(); const at=barAt(e); ctxMenu(e,[{cap:'Bar '+at},{label:'Add time signature…',icon:'count',act:()=>openMpop(s,at,e)}]); }; }); }
@@ -2184,7 +2187,7 @@ function renderFolders(listIn,into){
   sc.querySelectorAll('.fplay').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const s=songs.find(x=>x.id===b.dataset.song); locate(s,0); if(!playing) toggle(); });
   sc.querySelectorAll('.fsec i[data-t]').forEach(i=>i.onclick=e=>{ e.stopPropagation(); const s=songs.find(x=>x.id===i.closest('.freg').dataset.song); locate(s,+i.dataset.t); });
   wireTempo(sc); wireMeterRows(sc);
-  sc.querySelectorAll('.tempo .lane').forEach(l=>l.ondblclick=e=>{ if(e.target.closest('.tp')) return; const s=songs.find(x=>x.id===l.dataset.song), t=(e.clientX-l.getBoundingClientRect().left)/PXS;
+  sc.querySelectorAll('.tempo .lane').forEach(l=>l.ondblclick=e=>{ if(e.target.closest('.tp')) return; const s=songs.find(x=>x.id===l.dataset.song), t=TX.timeAt(e,l);
     const b=s.bars.find((bb,i)=>t>=bb.t&&t<s.bars[i+1]?.t); if(!b||b.bar===1) return; addPoint(s,{bar:b.bar,bpm:Math.round(bpmAt(s,b.bar))}); tsel={song:s.id,i:s.tmap.findIndex(x=>x.bar===b.bar)}; setTimeout(()=>openTpop(true),30); });
   sc.querySelectorAll('.addT').forEach(b=>b.onclick=()=>addTrack(songs.find(x=>x.id===b.dataset.song),b.dataset.k));
   sc.querySelectorAll('.vstrip .vr').forEach(r=>{ r.onclick=()=>{ const s=songs.find(x=>x.id===r.dataset.song); snap(); showVer(s,r.dataset.v); selId=s.id; selSec=null; trackOpen=null; refresh(); if(window.SLE&&SLE.nextChanged) SLE.nextChanged(); };
@@ -2208,10 +2211,9 @@ function renderFolders(listIn,into){
   sc.querySelectorAll('canvas.rcv').forEach(drawRuler);
   sc.querySelectorAll('canvas.fgrid').forEach(drawGrid);
   wireVol(sc);
-  const scrub=(el,s)=>{ el.onpointerdown=e=>{ if(e.button!==0) return; const r=()=>el.getBoundingClientRect(); locate(s,snapT(s,(e.clientX-r().left)/PXS,e.altKey)); el.setPointerCapture(e.pointerId); el.onpointermove=m=>locate(s,snapT(s,(m.clientX-r().left)/PXS,m.altKey)); el.onpointerup=()=>el.onpointermove=null; }; };
-  sc.querySelectorAll('.ruler .lane').forEach(l=>scrub(l,songs.find(x=>x.id===l.dataset.song)));
+  // (the ruler's click, drag and hover: fix12 / tx13)
   sc.querySelectorAll('.ruler .lane').forEach(l=>{ const s=songs.find(x=>x.id===l.dataset.song); if(!s) return;
-    l.oncontextmenu=e=>{ e.preventDefault(); const t=(e.clientX-l.getBoundingClientRect().left)/PXS; const b=(s.bars.slice(0,s.total).filter(x=>x.t<=t+1e-6).pop()||s.bars[0]);
+    l.oncontextmenu=e=>{ e.preventDefault(); const t=TX.timeAt(e,l.querySelector('canvas.rcv')||l); const b=(s.bars.slice(0,s.total).filter(x=>x.t<=t+1e-6).pop()||s.bars[0]);
       const near=s.bars.slice(0,s.total).reduce((a,x)=>Math.abs(x.t-t)<Math.abs(a.t-t)?x:a,s.bars[0]), at=Math.max(1,near.bar);
       ctxMenu(e,[{cap:'Bar '+at},{label:'Add time signature…',icon:'count',act:()=>openMpop(s,at,e)},{label:'Add tempo change…',icon:'timer',act:()=>{ snap(); if(!s.tmap.some(x=>x.bar===at&&x.bpm)){ const ex=s.tmap.find(x=>x.bar===at); if(ex) ex.bpm=+bpmAt(s,at).toFixed(3); else s.tmap.push({bar:at,bpm:+bpmAt(s,at).toFixed(3)}); } buildBars(s); tsel={song:s.id,i:s.tmap.findIndex(x=>x.bar===at)}; tempoRefresh(); setTimeout(()=>openTpop(true),30); }},
         {label:'Add marker…',icon:'cue',act:()=>floatInput(e.clientX,e.clientY-2,180,24,'',n=>{ if(!n||!n.trim()) return; snap(); (s.marks||(s.marks=[])).push({name:n.trim().slice(0,40),bar:b.bar,beat:1}); s.marks.sort((a,c)=>a.bar-c.bar||a.beat-c.beat); renderFolders(); })}]); };
@@ -2219,8 +2221,8 @@ function renderFolders(listIn,into){
     l.querySelectorAll('.mkr').forEach(m=>{ m.onpointerdown=e=>e.stopPropagation(); m.oncontextmenu=e=>{ e.preventDefault(); e.stopPropagation(); const i=+m.dataset.i, mk=s.marks[i];
       ctxMenu(e,[{cap:mk.name},{label:'Rename marker…',icon:'edit',act:()=>{ renameAt(m.querySelector('u')||m,mk.name,n=>{ if(!n||!n.trim()) return; snap(); mk.name=n.trim().slice(0,40); renderFolders(); },{row:'.mkr',maxRight:innerWidth-8}); }},{label:'Delete marker',icon:'del',danger:true,act:()=>{ snap(); s.marks.splice(i,1); renderFolders(); }}]); };
       m.onclick=e=>{ e.stopPropagation(); locate(s,evTime(s,s.marks[+m.dataset.i])); }; }); });
-  sc.querySelectorAll('.trk canvas').forEach(c=>{ if(wireRegLane(c)) return; if(wireClipLane(c)) return; c.onclick=e=>{ const s=songs.find(x=>x.id===c.dataset.song); laneClick(s,snapT(s,lx(c,e)/PXS,e.altKey)); }; });
-  sc.querySelectorAll('.freg').forEach(f=>f.onclick=e=>{ const s=songs.find(x=>x.id===f.dataset.song); locate(s,(e.clientX-f.getBoundingClientRect().left)/PXS); });
+  sc.querySelectorAll('.trk canvas').forEach(c=>{ if(wireRegLane(c)) return; if(wireClipLane(c)) return; c.onclick=e=>{ const s=songs.find(x=>x.id===c.dataset.song); laneClick(s,snapT(s,lx(c,e)/PXS,freeKey(e))); }; });
+  sc.querySelectorAll('.freg').forEach(f=>f.onclick=e=>{ const s=songs.find(x=>x.id===f.dataset.song); locate(s,TX.timeAt(e,f)); });
   sc.querySelectorAll('.secs .lane').forEach(wireSecLane);
   sc.querySelectorAll('.lhadd').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const s=songs.find(x=>x.id===b.dataset.song); addSecAt(s,playId===s.id?barAtTime(s,pos):1); });
   updateGridSel(); lcd();
@@ -2240,9 +2242,9 @@ function clip(g,x,w,H,col,label,off){ const top=3,h=H-6,r=6; g.fillStyle=off?'rg
 // The scroll position and visible width, read once per task (reading them after resizing a canvas would
 // force a layout per lane).
 let viewM=null; function viewMetrics(){ if(!viewM){ const sc=$('scroller'); viewM={sl:sc.scrollLeft,w:(window.TL9?TL9.viewW():sc.clientWidth-headW())+2}; Promise.resolve().then(()=>{ viewM=null; }); } return viewM; }
-function laneView(cv){ const full=+cv.dataset.w||1, vm=viewMetrics(), vw=Math.max(1,Math.min(full,vm.w)), vx=Math.max(0,Math.min(full-vw,vm.sl));
+function laneView(cv){ const full=+cv.dataset.w||1, vm=viewMetrics(), vw=Math.ceil(Math.max(1,Math.min(full,vm.w))), /* 13: whole pixels: a canvas a fraction wider than its pixels stretches its lines off their times */ vx=Math.max(0,Math.min(full-vw,vm.sl));
   if(cv.width!==vw){ cv.width=vw; cv.style.width=vw+'px'; } cv.dataset.vx=vx; cv.style.transform=`translateX(${cv.classList.contains('fgrid')?vx-vm.sl:vx}px)`; const g=cv.getContext('2d'); g.setTransform(1,0,0,1,-vx,0); return {g,vx,vw}; }
-const lx=(cv,e)=>e.offsetX+(+cv.dataset.vx||0);
+const lx=(cv,e)=>TX.canvasSongX(e,cv);
 let viewRaf=0;
 function redrawView(force){ const sc=$('scroller'), r=sc.getBoundingClientRect(); viewM=null; const vm=viewMetrics(), todo=[];
   sc.querySelectorAll('canvas[data-t],canvas.rcv,canvas.fgrid').forEach(cv=>{ const full=+cv.dataset.w||1, want=Math.max(0,Math.min(full-Math.min(full,vm.w),vm.sl));
@@ -2412,7 +2414,7 @@ const GRIDS=[['auto','Auto'],['bar','Bar'],['1/2','1/2'],['1/4','1/4'],['1/8','1
 const gridQOf=v=>{ if(v==='bar') return 'bar'; const m=v.match(/^1\/(\d+)(T?)$/); return 4/ +m[1]*(m[2]?2/3:1); };
 // Auto: the finest of 1/16, 1/8, 1/4, 1/2 that's at least 14 px wide at this zoom (else bars).
 function gridName(s){ if(GRID!=='auto') return GRID; const b=(s&&s.bars&&s.bars[0])||null; if(!b) return '1/4'; const qSec=b.dur/b.sig[0]*b.sig[1]/4;
-  for(const v of ['1/16','1/8','1/4','1/2']) if(qSec*gridQOf(v)*PXS>=14) return v; return 'bar'; }
+  for(const v of ['1/16','1/8','1/4','1/2']) if(qSec*gridQOf(v)*PXS>=40) return v; return 'bar'; }
 const gridQ=s=>gridQOf(gridName(s));
 const gridLabel=s=>{ const v=gridName(s); return v==='bar'?'bar':v.replace('T',' triplet')+' note'; };
 // The time of a position q (in quarter notes from the bar's start) within bar b.
@@ -2427,9 +2429,7 @@ function barIdx(s,time){ let lo=0,hi=Math.min(s.bars.length,s.total+1)-1; while(
 function laneClick(s,t){ if(window.SL12&&SL12.laneClick) return SL12.laneClick(s,t); locate(s,t); }
 const freeKey=e=>!!e&&(/Mac/.test(navigator.platform)?!!e.metaKey:!!e.ctrlKey);
 // Snapped time: the nearest grid point (or the song's end); free (⌘) or Snap off: as is, to the millisecond.
-function snapT(s,time,free){ if(free||!SNAP) return Math.round(time*1000)/1000; const i=barIdx(s,time); let best=time,bd=1e9;
-  for(const b of [s.bars[i-1],s.bars[i],s.bars[i+1]]) if(b) for(const x of barGrid(s,b)){ const d=Math.abs(x-time); if(d<bd){ bd=d; best=x; } }
-  if(Math.abs(s.audio-time)<bd) best=s.audio; return best; }
+function snapT(s,time,free){ return TX.snap(s,time,free); }
 // A time as bar + beat (1-based, fractional: 2.5 = halfway between beats 2 and 3).
 function barBeatAt(s,time){ const b=s.bars[barIdx(s,time)]; let k=0; b.beatT.forEach((x,i)=>{ if(time>=x-1e-9) k=i; }); const t1=k+1<b.beatT.length?b.beatT[k+1]:b.t+b.dur;
   return {bar:b.bar,beat:Math.round((1+k+Math.max(0,Math.min(1,(time-b.beatT[k])/(t1-b.beatT[k]))))*1e6)/1e6}; }
@@ -2497,8 +2497,8 @@ function wireRegLane(cv){ const s=songs.find(x=>x.id===cv.dataset.song), t=s.tra
     cv.onpointerdown=e=>{ if(e.button!==0) return; const c=hit(lx(cv,e)); if(!c){ const tt=lx(cv,e)/PXS, alt=freeKey(e); boxOrClick(e,s,()=>{ setPick(null); laneClick(s,snapT(s,tt,alt)); }); return; }
       if(e.shiftKey||e.ctrlKey||e.metaKey){ toggleSel('cue',s,t,c); return; }
       if(multiOn()&&isMulti('cue',s.id,t,c.id)){ groupDrag(e,s,cv,{kind:'cue',t,o:c}); return; }
-      setPick({kind:'cue',song:s.id,track:t,id:c.id}); const sx=e.clientX, ot=cueT(s,c), pre=ser(); let mv=false;
-      try{ cv.setPointerCapture(e.pointerId); }catch(x){} cv.onpointermove=m=>{ if(Math.abs(m.clientX-sx)<3&&!mv) return; mv=true; const p=cueAt(s,snapT(s,ot+(m.clientX-sx)/PXS,freeKey(m))); c.bar=p.bar; c.beat=p.beat; drawLane(cv); showTip(`“${c.text}” at ${cuePos(c)}${freeKey(m)?' · free':''}`,m); };
+      setPick({kind:'cue',song:s.id,track:t,id:c.id}); const sx=e.clientX, x00=lx(cv,e), ot=cueT(s,c), pre=ser(); let mv=false;
+      try{ cv.setPointerCapture(e.pointerId); }catch(x){} cv.onpointermove=m=>{ if(Math.abs(m.clientX-sx)<3&&!mv) return; mv=true; const p=cueAt(s,snapT(s,ot+(lx(cv,m)-x00)/PXS,freeKey(m))); c.bar=p.bar; c.beat=p.beat; drawLane(cv); showTip(`“${c.text}” at ${cuePos(c)}${freeKey(m)?' · free':''}`,m); };
       cv.onpointerup=()=>{ cv.onpointermove=null; hideTip(); if(mv){ undoS.push(pre); redoS=[]; } }; };
     cv.ondblclick=e=>{ const c=hit(lx(cv,e)), r=cv.getBoundingClientRect(); if(c){ const L=(cv._cues||[]).find(o=>o.t===c.text&&Math.abs(o.x0+2-cueT(s,c)*PXS)<1), X=cueT(s,c)*PXS; renameAt({lane:cv.parentElement,x:X,y:L?L.y:cv.height/2-10,w:L&&L.w?L.w:110,h:L?L.h:20,font:'600 10.5px Inter, sans-serif'},c.text,v=>{ if(v){ snap(); c.text=v; drawLane(cv); } },{label:'Cue'}); return; }
       const p=cueAt(s,snapT(s,lx(cv,e)/PXS,freeKey(e))); cuePicker(s,t,p,e.clientX,e.clientY+6); }; // the phrase picker (6d)
@@ -2512,11 +2512,11 @@ function wireRegLane(cv){ const s=songs.find(x=>x.id===cv.dataset.song), t=s.tra
     if(e.shiftKey||e.ctrlKey||e.metaKey){ toggleSel(k,s,t,r); return; }
     if(tool!=='split'&&multiOn()&&isMulti(k,s.id,t,r.id)){ groupDrag(e,s,cv,{kind:k,t,o:r}); return; }
     if(tool==='split'){ const b=nearestBoundary(s,lx(cv,e)/PXS); if(b>r.bar&&b<r.bar+r.bars){ snap(); const nr={...JSON.parse(JSON.stringify(r)),id:'r'+regSeq++,bar:b,bars:r.bar+r.bars-b}; if(k==='ck'){ nr.notes=r.notes.filter(n=>n.b>=b-r.bar).map(n=>({...n,b:n.b-(b-r.bar)})); r.notes=r.notes.filter(n=>n.b<b-r.bar); } r.bars=b-r.bar; list().push(nr); list().sort((a,b)=>a.bar-b.bar); redrawSong(s); } return; }
-    setPick({kind:k,song:s.id,track:t,id:r.id}); const x0=xOf(r.bar),x1=xOf(r.bar+r.bars), mode=x1-lx(cv,e)<7?'r':lx(cv,e)-x0<7?'l':'m', o={bar:r.bar,bars:r.bars}, sx=e.clientX, pre=ser(); let mv=false;
+    setPick({kind:k,song:s.id,track:t,id:r.id}); const x0=xOf(r.bar),x1=xOf(r.bar+r.bars), mode=x1-lx(cv,e)<7?'r':lx(cv,e)-x0<7?'l':'m', o={bar:r.bar,bars:r.bars}, sx=e.clientX, x00=lx(cv,e), pre=ser(); let mv=false;
     const others=list().filter(q=>q!==r), lo=Math.max(1,...others.filter(q=>q.bar<r.bar).map(q=>q.bar+q.bars)), hi=Math.min(s.total+1,...others.filter(q=>q.bar>r.bar).map(q=>q.bar));
     const evs=k==='mreg'?evIn(s.midi[t],r).map(ev=>[ev,ev.bar]):[];
     try{ cv.setPointerCapture(e.pointerId); }catch(x){}
-    cv.onpointermove=m=>{ if(Math.abs(m.clientX-sx)<3&&!mv) return; mv=true; const dx=m.clientX-sx;
+    cv.onpointermove=m=>{ if(Math.abs(m.clientX-sx)<3&&!mv) return; mv=true; const dx=lx(cv,m)-x00;
       if(mode==='m'){ const nb=Math.max(lo,Math.min(hi-o.bars,nearestBoundary(s,(xOf(o.bar)+dx)/PXS))); r.bar=nb; evs.forEach(([ev,b0])=>{ ev.bar=b0+(nb-o.bar); ev.anchor='free'; }); }
       else if(mode==='r'){ r.bars=Math.max(1,Math.min(hi,nearestBoundary(s,(xOf(o.bar+o.bars)+dx)/PXS))-o.bar); }
       else { const nb=Math.max(lo,Math.min(o.bar+o.bars-1,nearestBoundary(s,(x0+dx)/PXS))); if(k==='ck'){ const d=nb-r.bar; r.notes=r.notes.map(n=>({...n,b:n.b-d})).filter(n=>n.b>=0); } r.bar=nb; r.bars=o.bar+o.bars-nb; }
@@ -2715,12 +2715,12 @@ function boxSelect(s,[x0,y0,x1,y1],add){ const found=add?selItems().filter(it=>i
   if(!found.length){ clearMulti(); setPick(null); selectClip(s,null,null); return; } setMulti(s,found); }
 // the selected items move together (by the dragged one's snapped amount); a step that would overlap
 // something not selected, or leave the song, is skipped
-function groupDrag(e,s,cv,anchor){ const items=selItems().filter(it=>it.s===s), sx=e.clientX, pre=ser(); let moved=false;
+function groupDrag(e,s,cv,anchor){ const items=selItems().filter(it=>it.s===s), sx=e.clientX, x00=lx(cv,e), pre=ser(); let moved=false;
   const barT=b=>s.bars[Math.min(Math.max(1,b),s.total+1)-1].t;
   const orig=items.map(it=>({it,start:it.o.start,end:it.o.end,bar:it.o.bar,beat:it.o.beat,t0:it.kind==='cue'?cueT(s,it.o):it.kind==='audio'?it.o.start:barT(it.o.bar),evs:it.kind==='mreg'?evIn(s.midi[it.t],it.o).map(ev=>[ev,ev.bar]):[]}));
   const a0=orig.find(x=>x.it.o===anchor.o)||orig[0];
   try{ cv.setPointerCapture(e.pointerId); }catch(x){}
-  cv.onpointermove=m=>{ if(Math.abs(m.clientX-sx)<3&&!moved) return; moved=true; const dt=(m.clientX-sx)/PXS, free=freeKey(m);
+  cv.onpointermove=m=>{ if(Math.abs(m.clientX-sx)<3&&!moved) return; moved=true; const dt=(lx(cv,m)-x00)/PXS, free=freeKey(m);
     let d; if(a0.it.kind==='audio'||a0.it.kind==='cue') d=snapT(s,a0.t0+dt,free)-a0.t0; else d=barT(nearestBoundary(s,a0.t0+dt))-a0.t0;
     // click / MIDI clips move by whole bars: then the whole group does (it keeps its shape)
     const r0=a0.it.kind==='ck'||a0.it.kind==='mreg'?a0:orig.find(x=>x.it.kind==='ck'||x.it.kind==='mreg'); if(r0) d=barT(nearestBoundary(s,r0.t0+dt))-r0.t0;
@@ -2836,7 +2836,7 @@ function wireClipLane(cv){ const s=songs.find(x=>x.id===cv.dataset.song), t=s.tr
     selectClip(s,t,cl); const pre=ser(), o={...cl}, list=clipsOf(s,t), i=list.indexOf(cl), prevEnd=i>0?list[i-1].end:0, nextStart=i<list.length-1?list[i+1].start:1e9, sx=e.clientX; let moved=false;
     try{ cv.setPointerCapture(e.pointerId); }catch(x){}
     let copied=null;
-    cv.onpointermove=m=>{ const dx=(m.clientX-sx)/PXS; if(Math.abs(m.clientX-sx)>2) moved=true; if(!moved) return; const free=freeKey(m);
+    cv.onpointermove=m=>{ const dx=(lx(cv,m)-x)/PXS; if(Math.abs(m.clientX-sx)>2) moved=true; if(!moved) return; const free=freeKey(m);
       if(mode==='move'&&e.altKey&&!copied){ copied={...o,id:clipSeq++}; list.push(copied); } // ⌥: the copy stays, the clip moves
       if(mode==='move'){ let ns=snapT(s,o.start+dx,free); const len=o.end-o.start; ns=Math.max(prevEnd,Math.min(nextStart===1e9?s.len+60:nextStart-len,ns)); if(copied) ns=ns>=o.start?Math.max(ns,o.end):Math.min(ns,o.start-len); cl.start=ns; cl.end=ns+len; showTip(`${t} · starts ${posTxt(s,cl.start)} (${fmtMs(cl.start)})${free?' · free':''}`,m); }
       else if(mode==='l'){ let ns=snapT(s,o.start+dx,free); ns=Math.max(prevEnd,o.start-o.off,Math.min(o.end-0.1,ns)); cl.off=o.off+(ns-o.start); cl.start=ns; cl.fi=Math.min(cl.fi,(cl.end-cl.start)/2); showTip(`Trim start · ${posTxt(s,cl.start)} · ${fmtMs(cl.end-cl.start)} long`,m); }
@@ -2883,14 +2883,14 @@ function barsIn(s,vx,vw){ const a=Math.max(0,barIdx(s,vx/PXS)-1), b=Math.min(s.t
 function drawGrid(cv){ const s=songs.find(x=>x.id===cv.dataset.song), fb=cv.parentElement, W=Math.ceil(Math.max(s.len,s.audio)*PXS)+40, H=fb.offsetHeight;
   cv.dataset.w=W; cv.height=H; cv.style.height=H+'px'; const {g,vx,vw}=laneView(cv); g.clearRect(vx,0,vw,H);
   barsIn(s,vx,vw).forEach(b=>{ const grid=barGrid(s,b), sub=grid.length>1&&(grid[1]-grid[0])*PXS>=4;
-    if(sub) grid.slice(1).forEach(x=>{ if(!b.beatT.some(bt=>Math.abs(bt-x)<1e-6)){ g.fillStyle='#111317'; g.fillRect(Math.round(x*PXS),0,1,H); } });
-    if(b.dur/b.sig[0]*PXS>8) b.beatT.slice(1).forEach(bt=>{ g.fillStyle='#15181c'; g.fillRect(Math.round(bt*PXS),0,1,H); });
-    g.fillStyle=(b.bar-1)%4===0?'#23272e':'#1b1e23'; g.fillRect(Math.round(b.t*PXS),0,1,H); });
+    if(sub) grid.slice(1).forEach(x=>{ if(!b.beatT.some(bt=>Math.abs(bt-x)<1e-6)){ g.fillStyle='#111317'; g.fillRect(TX.col(x*PXS),0,1,H); } });
+    if(b.dur/b.sig[0]*PXS>8) b.beatT.slice(1).forEach(bt=>{ g.fillStyle='#15181c'; g.fillRect(TX.col(bt*PXS),0,1,H); });
+    g.fillStyle=(b.bar-1)%4===0?'#23272e':'#1b1e23'; g.fillRect(TX.col(b.t*PXS),0,1,H); });
   g.fillStyle='rgba(0,0,0,.35)'; g.fillRect(s.audio*PXS,0,W,H); }
 function drawRuler(cv){ const s=songs.find(x=>x.id===cv.dataset.song), H=cv.height, {g,vx,vw}=laneView(cv); g.clearRect(vx,0,vw,H);
-  barsIn(s,vx,vw).forEach(b=>{ const X=Math.round(b.t*PXS); g.fillStyle=(b.bar-1)%4===0?'#6b7280':'#3a3f48'; g.fillRect(X,(b.bar-1)%4===0?H-13:H-8,1,H);
-    if(b.dur/b.sig[0]*PXS>5) b.beatT.slice(1).forEach(bt=>{ g.fillStyle='#2a2f37'; g.fillRect(Math.round(bt*PXS),H-5,1,5); });
-    const grid=barGrid(s,b); if(grid.length>1&&(grid[1]-grid[0])*PXS>=4) grid.slice(1).forEach(x=>{ if(!b.beatT.some(bt=>Math.abs(bt-x)<1e-6)){ g.fillStyle='#22262d'; g.fillRect(Math.round(x*PXS),H-3,1,3); } }); });
+  barsIn(s,vx,vw).forEach(b=>{ const X=TX.col(b.t*PXS); g.fillStyle=(b.bar-1)%4===0?'#6b7280':'#3a3f48'; g.fillRect(X,(b.bar-1)%4===0?H-13:H-8,1,H);
+    if(b.dur/b.sig[0]*PXS>5) b.beatT.slice(1).forEach(bt=>{ g.fillStyle='#2a2f37'; g.fillRect(TX.col(bt*PXS),H-5,1,5); });
+    const grid=barGrid(s,b); if(grid.length>1&&(grid[1]-grid[0])*PXS>=4) grid.slice(1).forEach(x=>{ if(!b.beatT.some(bt=>Math.abs(bt-x)<1e-6)){ g.fillStyle='#22262d'; g.fillRect(TX.col(x*PXS),H-3,1,3); } }); });
   g.fillStyle='#050607'; g.fillRect(vx,H-1,vw,1); }
 
 // ======================= INSPECTOR =======================
@@ -4179,7 +4179,7 @@ function loopRange(s){ if(!loopOn||s.id!==(playId||selId)) return sectionLoopRan
 function barAtPos(s){ return s.bars.find((bb,i)=>pos>=bb.t&&pos<s.bars[i+1]?.t)||s.bars[0]; }
 function follow(){ if(!playing) return; const sc=$('scroller'), f=document.querySelector(`.folder.open[data-id="${playId}"]`); if(!f) return; const X=pos*PXS, vis=window.TL9?TL9.viewW():sc.clientWidth-headW(); if(X<sc.scrollLeft||X>sc.scrollLeft+vis-40) sc.scrollLeft=Math.max(0,X-40); }
 function placePH(){ follow(); const hp=$('hph'), fs=focusSong(); if(hp&&fs){ hp.style.display=playId===fs.id?'block':'none'; hp.style.left=(pos/fs.len*100)+'%'; } document.querySelectorAll('[data-ph]').forEach(el=>{ el.style.left=(el.dataset.ph===playId?pos*PXS:0)+'px'; });
-  const ph=document.querySelector(`.folder[data-id="${playId}"] .ph`); if(ph){ const X=pos*PXS-$('scroller').scrollLeft; ph.style.left=`calc(var(--head) + ${X}px)`; ph.style.visibility=X<0?'hidden':''; } }
+  const ph=document.querySelector(`.folder[data-id="${playId}"] .ph`); if(ph){ const X=TX.x(pos); ph.style.left=`calc(var(--head) + ${TX.lineLeft(X,1.5)}px)`; ph.style.visibility=X<0?'hidden':''; } }
 function lcd(){ const s=songs.find(x=>x.id===(playId||selId)); if(!s){ $('lcdSong').textContent='No song'; $('lcdSec').textContent='–'; $('lcdBar').textContent='1 . 1 . 1'; $('lcdBpm').textContent='–'; $('lcdSig').textContent='–'; $('lcdTime').textContent='0:00.000'; return; }
   const p0=s.id===playId?pos:0, b=s.bars.find((bb,i)=>p0>=bb.t&&p0<s.bars[i+1]?.t)||s.bars[0]; let k=0; b.beatT.forEach((bt,i)=>{ if(p0>=bt) k=i; });
   const bl=b.dur/b.sig[0], six=Math.min(4,Math.floor((p0-b.beatT[k])/bl*4)+1), sec=secOfBar(s,b.bar);

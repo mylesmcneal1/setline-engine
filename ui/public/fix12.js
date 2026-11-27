@@ -108,29 +108,28 @@
 
   // ================================================================ 2. the ruler
   // the lane x (song pixels) under a pointer event on the ruler: from the pointer's offset in the element hit
+  // 13: through the one calculation (tx13.js), read against the canvas that draws the ruler's lines
   function rulerX(e, lane) {
-    const t = e.target;
-    if (t && t.classList && t.classList.contains("rcv")) return e.offsetX + (+t.dataset.vx || 0);
-    if (t === lane) return e.offsetX;
     const cv = lane.querySelector("canvas.rcv"); // (labels don't take the pointer: fix12.css)
-    return cv ? e.clientX - cv.getBoundingClientRect().left + (+cv.dataset.vx || 0) : e.offsetX;
+    return cv ? TX.canvasSongX(e, cv) : TX.local(e, lane);
   }
-  // the beat nearest to time t (or t itself, free)
+  // 13: the NEAREST grid line (the Snap grid: the bar by default, Adaptive when zoomed in), or t itself (⌘)
   function nearestBeatT(s, t, free) {
-    t = Math.max(0, Math.min(s.len || s.audio, t)); if (free) return t;
-    let best = 0, bd = 1e9;
-    for (const b of s.bars) { if (b.t > t + b.dur) break; if (b.t + b.dur < t - b.dur) continue; for (const x of [...b.beatT, b.t + b.dur]) { const d = Math.abs(x - t); if (d < bd) { bd = d; best = x; } } }
-    return Math.min(best, Math.max(0, (s.audio || s.len) - 0.01));
+    t = Math.max(0, Math.min(s.len || s.audio, t));
+    return Math.min(TX.snap(s, t, free), Math.max(0, (s.audio || s.len) - 0.01));
   }
   const bbLabel = (s, t) => { if (typeof barBeatAt !== "function") return ""; const x = barBeatAt(s, t); const beat = Math.floor(x.beat + 1e-6), frac = x.beat - beat; return `${x.bar}.${beat}${frac > 0.02 ? "." + (1 + Math.floor(frac * 4)) : ""}`; };
   // the ghost line (hover) and its label
   function ghost(s, t) {
     const f = document.querySelector(`.folder[data-id="${s.id}"]`); if (!f) return;
     let g = f.querySelector(".gh12"); if (!g) { g = document.createElement("i"); g.className = "gh12"; g.innerHTML = "<b></b>"; f.appendChild(g); }
-    const X = t * PXS - sc.scrollLeft; g.style.left = `calc(var(--head) + ${X}px)`; g.style.display = X < 0 ? "none" : "block"; g.firstChild.textContent = bbLabel(s, t);
+    const X = TX.x(t); g.style.left = `calc(var(--head) + ${TX.lineLeft(X, 1)}px)`; g.style.display = X < 0 ? "none" : "block"; g.firstChild.textContent = bbLabel(s, t);
   }
   const unghost = () => document.querySelectorAll(".gh12").forEach((g) => { g.style.display = "none"; });
   window.addEventListener("pointermove", (e) => {
+    // 13: also over a track lane's empty space (where a click puts the insert line)
+    const tl = !e.buttons && e.target.tagName === "CANVAS" && e.target.closest && e.target.closest(".row.trk .lane") ? e.target : null;
+    if (tl && tl.dataset.song) { const s = songOf(tl.dataset.song), tt = s && TX.canvasSongX(e, tl) / PXS; if (s && !(typeof clipAt === "function" && s.tracks[+tl.dataset.t] && isAudio(s, s.tracks[+tl.dataset.t]) && clipAt(s, s.tracks[+tl.dataset.t], tt))) { ghost(s, nearestBeatT(s, tt, cmdKey(e))); return; } }
     const lane = e.target.closest && e.target.closest(".ruler .lane"); if (!lane || e.buttons || e.target.closest(".mkr")) { if (!e.buttons) unghost(); return; }
     const s = songOf(lane.dataset.song); if (!s) return; ghost(s, nearestBeatT(s, rulerX(e, lane) / PXS, cmdKey(e)));
   }, true);
@@ -514,7 +513,7 @@
     document.querySelectorAll(".ins12").forEach((x) => { if (!INS || x.closest(".folder").dataset.id !== INS.song) x.remove(); });
     if (!INS) return; const f = document.querySelector(`.folder[data-id="${INS.song}"]`); if (!f) return;
     let el = f.querySelector(".ins12"); if (!el) { el = document.createElement("i"); el.className = "ins12"; f.appendChild(el); }
-    const X = INS.t * PXS - sc.scrollLeft; el.style.left = `calc(var(--head) + ${X}px)`; el.style.display = X < 0 ? "none" : "block";
+    const X = TX.x(INS.t); el.style.left = `calc(var(--head) + ${TX.lineLeft(X, 1)}px)`; el.style.display = X < 0 ? "none" : "block";
   }
   setInterval(() => { if (INS) drawIns(); }, 250);
   const insert = (s) => (INS && s && INS.song === s.id ? INS.t : null);
@@ -540,7 +539,7 @@
     const lane = m.closest(".lane"), cv = lane && lane.querySelector("canvas.rcv"), cx = e.clientX, i = +m.dataset.i; let moved = false;
     const mv = (ev) => { if (!s.marks || !s.marks[i] || !m.isConnected || !(ev.buttons & 1)) { up(); return; } // gone, or the button is up
       if (!moved && Math.abs(ev.clientX - cx) < 4) return; if (!moved) { moved = true; snap(); }
-      const x = cv ? ev.clientX - cv.getBoundingClientRect().left + (+cv.dataset.vx || 0) : 0, t = nearestBeatT(s, x / PXS, cmdKey(ev)), bb = barBeatAt(s, t);
+      const x = cv ? TX.canvasSongX(ev, cv) : 0, t = nearestBeatT(s, x / PXS, cmdKey(ev)), bb = barBeatAt(s, t);
       const mk = s.marks[i]; mk.bar = bb.bar; mk.beat = +bb.beat.toFixed(3); m.style.left = evTime(s, mk) * PXS + "px"; ghost(s, t); };
     let done = false;
     const up = () => { if (done) return; done = true; removeEventListener("pointermove", mv, true); removeEventListener("pointerup", up, true); unghost(); if (moved && s.marks && s.marks[i]) { s.marks.sort((a, b) => a.bar - b.bar || a.beat - b.beat); refresh(); toast(`Moved the marker to ${bbLabel(s, evTime(s, s.marks.find((x) => x === s.marks[i]) || s.marks[0]))}`, undo); } };

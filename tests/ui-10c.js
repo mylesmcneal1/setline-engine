@@ -48,7 +48,7 @@ async function check10c() {
   // ================================================================ the editor: draw, select, move, copy, velocity, duplicate, delete
   { const s = S(Q); openSong(s.id); await wait(250); SL9.zoomNow(160 / (s.bars[1].t - s.bars[0].t)); await frames(2); document.getElementById("scroller").scrollLeft = 0; // 160 px a bar: an 8th is 20 px
     C.open(s, "Click"); await frames(3); C.setMode("draw"); C.setGrid(1); await frames(2);
-    const G = C.geo(), cv = G.cv, r = cv.getBoundingClientRect(), X = (tk) => r.left + C.tkTime(S(Q), tk) * PXS - G.hx + 3;
+    const G = C.geo(), cv = G.cv, r = cv.getBoundingClientRect(), X = (tk) => r.left + TX.x(C.tkTime(S(Q), tk), G.v) + 3;
     const T0 = C.TOP || 20, yA = r.top + T0 + 23, yC = r.top + T0 + 46 + 23, yV = r.top + T0 + 92 + 6; // 11: the top rows (bar numbers, time signatures)
     const pe = (t, x, y, o = {}) => cv.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, buttons: t === "pointerup" ? 0 : 1, pointerId: 5, ...o }));
     const notes = () => C.clipOf(S(Q), "Click").notes, at = (tk, a) => notes().filter((n) => n.tk === tk && n.a === a);
@@ -80,7 +80,8 @@ async function check10c() {
     key("Backspace"); await frames(1); ok(notes().length === n0, "⌫ deletes the selection");
     // the lane on the timeline shows the notes; the editor follows the timeline's position and zoom
     const G2 = C.geo(); ok(Math.abs((r.left + G2.left - r.left) - (TL9.laneLeft() - panel.querySelector(".cb10").getBoundingClientRect().left)) < 1.5, "the editor's grid starts where the timeline's lanes do");
-    document.getElementById("scroller").scrollLeft = 300; await frames(3); ok(C.geo().hx === 300, "…and scrolls with them");
+    const hx0 = C.geo().v.hx; document.getElementById("scroller").scrollLeft = 300; await frames(3); ok(C.geo().v.hx === hx0, "13 §5: the editor keeps its own scroll when the timeline scrolls");
+    ED13.setLinked("click", true); await frames(2); ok(C.geo().v.hx === 300 && C.geo().v.pxs === PXS, "…linked (the chain), it follows the timeline"); ED13.setLinked("click", false);
     C.close(); closeSong(); await wait(150); }
 
   // ================================================================ new songs start filled; the Ableton mapping

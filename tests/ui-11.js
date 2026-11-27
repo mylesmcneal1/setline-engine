@@ -212,7 +212,7 @@ async function check11() {
     const lastBar = s.bars.filter((b) => b.t * PXS <= sc.scrollLeft + TL9.viewW() - 1).pop().bar;
     ok(m && +m[1] === 1 && Math.abs(+m[2] - Math.min(s.total, lastBar)) <= 1, `the header says which bars are on screen, as the timeline shows them: “${hdr}” (timeline to bar ${lastBar})`);
     // zoomed in, blocks again
-    SL9.zoomNow(160 / (s.bars[1].t - s.bars[0].t)); await frames(4);
+    SL9.zoomNow(160 / (s.bars[1].t - s.bars[0].t)); SLClick.close(); SLClick.open(s, "Click"); await frames(4); // (13: its own zoom; opening frames the timeline)
     ok(SLClick.drawMode() === "blocks", "zoomed in: note blocks (" + SLClick.drawMode() + ")");
     SLClick.close(); await frames(1); }
   // the bottom track with the editor open: reachable; the line between them resizes, and it's remembered

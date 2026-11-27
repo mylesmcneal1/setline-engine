@@ -23,9 +23,9 @@ async function check12() {
   for (const size of [100, 120]) {
     if (window.SLLook) SLLook.set({ size }); await frames(2);
     const s = S("glass"); openSong(s.id); await wait(250);
-    SL9.zoomNow(90 / (s.bars[1].t - s.bars[0].t)); await frames(2); sc.scrollLeft = s.bars[11].t * PXS; await frames(3);
+    SL9.zoomNow(200 / (s.bars[1].t - s.bars[0].t)); await frames(2); sc.scrollLeft = s.bars[11].t * PXS; // 13: beats 50 px apart (the grid is the beat) await frames(3);
     const cv = document.querySelector(`.ruler .lane[data-song="${s.id}"] canvas.rcv`), r = R(cv), y = r.top + r.height / 2;
-    const xOf = (t) => r.left + t * PXS - (+cv.dataset.vx || 0);
+    const xOf = (t) => TX.screenX(cv, t * PXS - (+cv.dataset.vx || 0)); // 13: through the one calculation (Text size included)
     let worst = 0;
     for (const [bar, beat, off] of [[13, 1, 0.08], [14, 2, -0.1], [15, 3, 0.2], [17, 4, -0.22], [20, 1, 0.3]]) {
       const b = S("glass").bars[bar - 1], want = b.beatT[beat - 1], t = want + off * (b.dur / b.sig[0]); // off: a fraction of a beat
@@ -122,7 +122,7 @@ async function check12() {
     ["clkGrid2", "clkTri", "clkSnap", "clkDens"].forEach((k) => localStorage.removeItem("setline." + k)); // a first-time user (earlier suites chose a grid)
     lane.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true, clientX: lr.left + 50, clientY: lr.top + 10 })); await frames(3);
     ok(SLClick.editing(), "double-click the Click lane: its editor opens");
-    const C = SLClick, G = C.geo(), cv = G.cv, r = R(cv), T0 = C.TOP, X = (tk) => r.left + C.tkTime(S("neon"), tk) * PXS - G.hx + 3;
+    const C = SLClick, G = C.geo(), cv = G.cv, r = R(cv), T0 = C.TOP, X = (tk) => r.left + TX.x(C.tkTime(S("neon"), tk), G.v) + 3;
     const yA = r.top + T0 + 23, yC = r.top + T0 + 46 + 23;
     ok(C.grid().grid === -1, "the grid is Adaptive by default");
     const notes = () => C.clipOf(S("neon"), "Click").notes, at = (tk, a) => notes().filter((n) => n.tk === tk && n.a === a);
