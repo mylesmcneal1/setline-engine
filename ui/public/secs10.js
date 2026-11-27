@@ -20,11 +20,15 @@
     for (const c of cuesOf(s)) { const k = wordKey(c.text); if (!k || isCount(c.text)) continue; if (!m.has(k)) m.set(k, { word: String(c.text).trim(), n: 0, type: cueSecType(c.text) }); m.get(k).n++; }
     return [...m.values()].map((x) => ({ ...x, on: !!x.type || DEFAULT_WORDS.some((d) => wordKey(x.word).startsWith(d.toLowerCase())) }));
   }
+  // 11: the bar line a section cue starts: its own bar, or the next one when it's in the second half of its bar (a
+  // pickup: "Verse" said a beat or two before the verse)
+  function barLine(s, c) { const bar = Math.max(1, Math.round(+c.bar || 1)), b = s.bars && s.bars[bar - 1], beats = b ? b.sig[0] : 4, beat = +c.beat || 1; return beat - 1 > beats / 2 ? bar + 1 : bar; }
   // the sections the cues make: [{start, bars, name, type, on}] (an Intro before the first one)
   function plan(s, on) {
     const W = new Map(words(s).map((w) => [wordKey(w.word), w])), ok = (t) => { const w = W.get(wordKey(t)); return w && (on ? on.has(wordKey(t)) : w.on); };
     const starts = [];
-    cuesOf(s).slice().sort((a, b) => a.bar - b.bar || (a.beat || 1) - (b.beat || 1)).forEach((c) => { if (!ok(c.text) || starts.some((x) => x.start === c.bar)) return; starts.push({ start: c.bar, name: String(c.text).trim(), type: cueSecType(c.text) || "verse" }); });
+    cuesOf(s).slice().sort((a, b) => a.bar - b.bar || (a.beat || 1) - (b.beat || 1)).forEach((c) => { if (!ok(c.text)) return; const st = barLine(s, c); if (st > s.total || starts.some((x) => x.start === st)) return; starts.push({ start: st, name: String(c.text).trim(), type: cueSecType(c.text) || "verse" }); });
+    starts.sort((a, b) => a.start - b.start);
     if (!starts.length) return [];
     if (starts[0].start > 1) { if (starts[0].type === "intro") starts[0].start = 1; else starts.unshift({ start: 1, name: "Intro", type: "intro" }); }
     return starts.map((x, i) => ({ ...x, bars: Math.max(1, (starts[i + 1] ? starts[i + 1].start : s.total + 1) - x.start), on: true }));
@@ -83,6 +87,11 @@
   }
 
   // ---- in the timeline: "From cues" in the Sections header; ghost sections in an empty Sections lane
+  // 11: "Dismiss" hides a song's suggestion (kept on this computer); "From cues" in the header brings it back
+  const DIS = (() => { try { return new Set(JSON.parse(localStorage.getItem("setline.secSugOff") || "[]")); } catch (e) { return new Set(); } })();
+  const saveDis = () => { try { localStorage.setItem("setline.secSugOff", JSON.stringify([...DIS].slice(-2000))); } catch (e) {} };
+  const dismissed = (s) => DIS.has(s.id);
+  function dismiss(s, on) { if (on) DIS.add(s.id); else DIS.delete(s.id); saveDis(); refresh(); }
   function decorate() {
     document.querySelectorAll(".row.secs > .lh").forEach((lh) => {
       const add = lh.querySelector(".lhadd"), s = add && songOf(add.dataset.song); if (!s || lh.querySelector(".lhcues10")) return;
@@ -90,23 +99,30 @@
       add.insertAdjacentHTML("beforebegin", `<button class="lhcues10" data-song="${s.id}" title="Make sections from the cues (Verse, Chorus…)">From cues</button>`);
     });
     document.querySelectorAll(".row.secs > .lane[data-song]").forEach((lane) => {
-      const s = songOf(lane.dataset.song); if (!s || lane.querySelector(".sec") || lane.querySelector(".ghost10")) return;
+      const s = songOf(lane.dataset.song); if (!s || lane.querySelector(".sec") || lane.querySelector(".gsec11") || dismissed(s)) return;
       const P = plan(s); if (!P.length) return;
       const xOf = (bar) => s.bars[Math.min(bar, s.total + 1) - 1].t * PXS;
-      const h = P.map((p) => `<div class="ghost10" style="left:${xOf(p.start) + 1}px;width:${Math.max(6, xOf(p.start + p.bars) - xOf(p.start) - 2)}px"><span>${esc(p.name)}</span></div>`).join("");
-      const at = Math.max((window.TL9 ? TL9.hx : 0) + 8, 8);
-      lane.insertAdjacentHTML("beforeend", h + `<div class="gact10" style="left:${at}px"><button class="btn pri" data-gs="${s.id}">✓ Make these ${P.length} sections</button><button class="btn line" data-ge="${s.id}">Edit…</button></div>`);
+      const h = P.map((p, i) => `<div class="gsec11" style="left:${xOf(p.start) + 1}px;width:${Math.max(6, xOf(p.start + p.bars) - xOf(p.start) - 2)}px;--sc:${SEC_C[p.type] || "#8a909b"}" title="Suggested from the cues: ${esc(p.name)}, bars ${p.start}–${p.start + p.bars - 1}">${i === 0 ? '<em class="gtag11">Suggested</em>' : ""}<span>${esc(p.name)}</span></div>`).join("");
+      lane.insertAdjacentHTML("beforeend", h);
       const hint = lane.querySelector(".lanehint"); if (hint) hint.hidden = true;
+      // the bar above the row: what's suggested and the three buttons, never over the section names
+      const row = lane.closest(".row.secs");
+      if (row && !(row.previousElementSibling && row.previousElementSibling.classList.contains("sug11")))
+        row.insertAdjacentHTML("beforebegin", `<div class="sug11" data-song="${s.id}" role="group" aria-label="Suggested sections"><span class="sgt11">✨ ${P.length} section${P.length === 1 ? "" : "s"} suggested from your cues</span><button class="sgb11 pri" data-gs="${s.id}">Use them</button><button class="sgb11" data-ge="${s.id}">Edit…</button><button class="sgb11" data-gd="${s.id}">Dismiss</button></div>`);
     });
+    // a bar whose song got sections (or was dismissed) goes
+    document.querySelectorAll(".sug11[data-song]").forEach((b) => { const s = songOf(b.dataset.song), row = b.nextElementSibling; if (!s || dismissed(s) || (row && row.querySelector(".sec")) || !plan(s).length) b.remove(); });
   }
   document.addEventListener("click", (e) => {
-    const b = e.target.closest && e.target.closest(".lhcues10, [data-gs], [data-ge]"); if (!b) return;
+    const b = e.target.closest && e.target.closest(".lhcues10, [data-gs], [data-ge], [data-gd]"); if (!b) return;
     e.preventDefault(); e.stopImmediatePropagation();
-    const s = songOf(b.dataset.song || b.dataset.gs || b.dataset.ge); if (!s) return;
+    const s = songOf(b.dataset.song || b.dataset.gs || b.dataset.ge || b.dataset.gd); if (!s) return;
+    if (b.dataset.gd) { dismiss(s, true); toast(`Hid the suggested sections for “${s.name}”: Sections › From cues brings them back`); return; }
+    if (b.classList.contains("lhcues10") && dismissed(s) && !(s.secs || []).length) { dismiss(s, false); return; } // back again
     if (b.dataset.gs) { snap(); const k = apply(s, plan(s), "replace"); refresh(); toast(`Made ${k} sections from the cues in “${s.name}”`, undo); }
     else editor(s);
   }, true);
-  document.addEventListener("pointerdown", (e) => { if (e.target.closest && e.target.closest(".gact10, .lhcues10")) e.stopPropagation(); }, true);
+  document.addEventListener("pointerdown", (e) => { if (e.target.closest && e.target.closest(".gact10, .lhcues10, .sug11")) e.stopPropagation(); }, true);
   // after any redraw of the timeline (a zoom frame, a row opening, a refresh): the lanes are new, decorate them again
   let pend = false;
   const later = () => { if (pend) return; pend = true; Promise.resolve().then(() => { pend = false; try { decorate(); } catch (x) {} }); };
@@ -129,5 +145,5 @@
       $("abSecs10").onclick = () => { batch(L); $("abSecs10").disabled = true; $("abSecs10").textContent = "Sections made ✓"; }; };
     SLAble.finish = function () { const r = FIN.apply(this, arguments); try { offer(); } catch (e) {} return r; };
   }
-  window.SLSecs = { words, plan, apply, fromCues, batch, editor, can, decorate };
+  window.SLSecs = { words, plan, apply, fromCues, batch, editor, can, decorate, dismiss, dismissed, barLine };
 })();

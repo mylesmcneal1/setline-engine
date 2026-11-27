@@ -31,6 +31,8 @@ public:
     // -> {name, root} | {error}
     juce::var create(const juce::String& name);
     juce::var rename(const juce::String& name);
+    // 11: moves another library (never the open one) to the Trash / Recycle Bin. -> {ok, name} | {error}
+    juce::var remove(const juce::String& name);
     // Writes the parts that changed: files {relative path: text}; remove: [relative path] (song folders / setlists
     // that were deleted). -> {ok, written, removed} | {error}
     juce::var write(const juce::var& files, const juce::var& remove);

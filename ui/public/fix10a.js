@@ -311,25 +311,48 @@
   // the 9b Cards / Folders views don't have, so nothing happened; a double-click landed on a row the first click
   // had just re-drawn. Now every place edits the name where it is: a card, a Folders row, a setlist row, the big
   // title of the opened song.
+  // 11: the name in the place that was double-clicked (the setlist row, not the card behind it)
+  const nameIn = (h) => { const el = h.sel.startsWith("#songs") ? document.querySelector(`#songs .song[data-id="${h.id}"] .nm11`) : h.sel.startsWith(".card9") ? document.querySelector(`.card9[data-id="${h.id}"] .c9h b`) : h.sel.startsWith(".row9") ? document.querySelector(`.row9[data-row="${h.id}"] .r9n`) : null; return el && el.getBoundingClientRect().width > 0 ? el : null; };
   function nameEl(id) {
+    if (area === "set") { const r = document.querySelector(`#songs .song[data-id="${id}"] .nm11`); if (r && r.getBoundingClientRect().width > 0) return r; } // ↩ in the setlist: its row
     const FS = typeof focusSong === "function" ? focusSong() : null;
     const c = [FS && FS.id === id && document.querySelector("#hero .htitle h2"), document.querySelector(`.card9[data-id="${id}"] .c9h b`), document.querySelector(`.row9[data-row="${id}"] .r9n`),
-      document.querySelector(`#songs .song[data-id="${id}"] .t`), document.querySelector(`.folder[data-id="${id}"] .fh .nm`)];
+      document.querySelector(`#songs .song[data-id="${id}"] .nm11`), document.querySelector(`.folder[data-id="${id}"] .fh .nm`)];
     return c.find((x) => x && x.getBoundingClientRect().width > 0) || null;
   }
   let editor = null;
   // an input over el (its own font and size); ↩ or clicking away saves, Esc cancels
+  // 11: the name itself becomes editable where it is: the field takes the name's exact box (left, top, height,
+  // width), font, size, weight, colour and padding, and the name under it hides; it grows to the right as you
+  // type (up to its row's edge), so nothing moves or resizes. el can also be a plain rect ({left, top, width,
+  // height}) for a name drawn on a canvas (a cue), with o.font.
+  const opaqueBg = (el) => { for (let e = el; e && e.nodeType === 1; e = e.parentElement) { const c = getComputedStyle(e).backgroundColor; if (c && c !== "transparent" && !/rgba\([^)]*,\s*0\)$/.test(c)) return c; } return "#111214"; };
   function editInline(el, value, done, o = {}) {
     if (editor) editor.end(false);
-    const r = el ? el.getBoundingClientRect() : { left: innerWidth / 2 - 140, top: innerHeight / 3, width: 280, height: 30 };
-    const cs = el ? getComputedStyle(el) : null;
+    document.body.classList.add("ren11on"); // no ✎ hint in the name's box while it's measured
+    const isEl = !!(el && el.nodeType === 1);
+    let r = isEl ? el.getBoundingClientRect() : el;
+    if (!r || !r.width || !r.height) { r = { left: innerWidth / 2 - 140, top: innerHeight / 3, width: 280, height: 30 }; el = null; }
+    const cs = isEl && el ? getComputedStyle(el) : null;
     const i = document.createElement("input"); i.className = "ren10"; i.value = value; i.spellcheck = false; i.maxLength = o.max || 80;
-    const h = Math.max(26, r.height + 6);
-    Object.assign(i.style, { left: r.left - 4 + "px", top: r.top + r.height / 2 - h / 2 + "px", width: Math.max(o.min || 180, Math.min(innerWidth - r.left - 12, r.width + 60)) + "px", height: h + "px" });
-    if (cs) Object.assign(i.style, { fontFamily: cs.fontFamily, fontSize: cs.fontSize, fontWeight: cs.fontWeight, letterSpacing: cs.letterSpacing, textTransform: cs.textTransform });
+    i.setAttribute("aria-label", o.label || "Name");
+    const row = isEl && el ? el.closest(o.row || "#songs > .song, #songs > .brk9, .card9, .r9h, .row.trk > .lh, .sec, .vr, .folder .fh, .setpick, .mkr, #hero, .lh, li, tr") : null;
+    const maxR = Math.min(innerWidth - 4, o.maxRight || (row ? row.getBoundingClientRect().right - 2 : r.left + Math.max(r.width, 260)));
+    const st = { left: r.left + "px", top: r.top + "px", width: r.width + "px", height: r.height + "px" };
+    if (cs) Object.assign(st, { fontFamily: cs.fontFamily, fontSize: cs.fontSize, fontWeight: cs.fontWeight, fontStyle: cs.fontStyle, letterSpacing: cs.letterSpacing, textTransform: cs.textTransform,
+      color: cs.color, paddingLeft: cs.paddingLeft, paddingRight: cs.paddingRight, paddingTop: "0px", paddingBottom: "0px", textAlign: cs.textAlign === "center" ? "center" : "left", borderRadius: cs.borderRadius, background: opaqueBg(el) });
+    else if (o.font) Object.assign(st, { font: o.font, paddingLeft: (o.pad || 0) + "px", paddingRight: "0px", background: o.bg || "#2a2f37", color: o.color || "#fff", borderRadius: "5px" });
+    Object.assign(i.style, st);
     document.body.appendChild(i);
+    // the field grows with its text (never smaller than the name was)
+    const meas = document.createElement("canvas").getContext("2d");
+    const fit = () => { const c = getComputedStyle(i); meas.font = `${c.fontStyle} ${c.fontWeight} ${c.fontSize} ${c.fontFamily}`;
+      const w = meas.measureText(i.value).width + parseFloat(c.paddingLeft) + parseFloat(c.paddingRight) + 6;
+      i.style.width = Math.max(r.width, Math.min(maxR - r.left, w)) + "px"; };
+    i.addEventListener("input", fit);
+    const hid = isEl && el ? el : null; if (hid) hid.style.visibility = "hidden";
     let over = false;
-    const end = (save) => { if (over) return; over = true; editor = null; const v = i.value.trim(); i.remove(); if (save && v && v !== value) done(v); };
+    const end = (save) => { if (over) return; over = true; editor = null; document.body.classList.remove("ren11on"); const v = i.value.trim(); i.remove(); if (hid) hid.style.visibility = ""; if (save && v && v !== value) done(v); else if (o.cancel) o.cancel(); };
     editor = { end, input: i };
     i.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); end(true); } else if (e.key === "Escape") { e.preventDefault(); end(false); } });
     i.addEventListener("blur", () => end(true));
@@ -354,18 +377,18 @@
   const NAMES = [
     [".card9[data-id] .c9h b", (el) => el.closest(".card9").dataset.id],
     [".row9[data-row] .r9n", (el) => el.closest(".row9").dataset.row],
-    ["#songs .song[data-id] .t", (el) => el.closest(".song").dataset.id],
+    ["#songs .song[data-id] .t", (el) => el.closest(".song").dataset.id], // the name (11: not the version switcher under it)
     ["#hero .htitle h2", () => { const FS = focusSong(); return FS && FS.id; }],
   ];
   let lastClick = null, renamedAt = 0;
-  const hitName = (e) => { for (const [sel, idOf] of NAMES) { const el = e.target.closest && e.target.closest(sel); if (el) { const id = idOf(el); if (id) return { sel, id }; } } return null; };
+  const hitName = (e) => { if (e.target.closest && e.target.closest(".vrow11")) return null; for (const [sel, idOf] of NAMES) { const el = e.target.closest && e.target.closest(sel); if (el) { const id = idOf(el); if (id) return { sel, id }; } } return null; };
   document.addEventListener("click", (e) => {
     if (e.button !== 0 || e.shiftKey || e.metaKey || e.ctrlKey || (window.SL9 && SL9.state.sel)) { lastClick = null; return; }
     const h = hitName(e); const now = performance.now();
     if (!h) { lastClick = null; return; }
     if (lastClick && lastClick.id === h.id && lastClick.sel === h.sel && now - lastClick.t < 500 && Math.hypot(e.clientX - lastClick.x, e.clientY - lastClick.y) < 8) {
       lastClick = null; renamedAt = now; e.preventDefault(); e.stopImmediatePropagation();
-      setTimeout(() => renameSong(h.id), 0); // after the page's own handlers have re-drawn
+      setTimeout(() => renameSong(h.id, nameIn(h)), 0); // after the page's own handlers have re-drawn; 11: on the name that was double-clicked
       return;
     }
     lastClick = { ...h, t: now, x: e.clientX, y: e.clientY };

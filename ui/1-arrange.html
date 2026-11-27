@@ -1152,6 +1152,7 @@
 <link rel="stylesheet" href="fix10a.css">
 <link rel="stylesheet" href="ix10.css">
 <link rel="stylesheet" href="c10.css">
+<link rel="stylesheet" href="fix11.css">
 </head>
 <body>
 
@@ -1600,8 +1601,8 @@ function renderSetHead(){ const h=$('setHead'); if(!h) return; const c=curSetObj
     else if(v==='__ren'){ renderSetHead(); renameSet(); }
     else if(v==='__del'){ renderSetHead(); confirmBox(`Delete the setlist “${esc(c.name)}”?`,'The songs stay in the session. Only this running order is removed.','Delete setlist',()=>{ const i=setlists.indexOf(c); setlists.splice(i,1); curSet=setlists[Math.max(0,i-1)].id; setOrder=curSetObj().order; refresh(); toast(`Deleted setlist “${c.name}”`,()=>{ setlists.splice(i,0,c); useSet(c.id); }); }); }
     else useSet(v); }; }
-function renameSet(){ const c=curSetObj(), h=$('setHead'); h.innerHTML=`<input id="setName" value="${esc(c.name)}" style="font-weight:600;width:170px;height:28px">`; const i=$('setName'); i.focus(); i.select();
-  const done=()=>{ c.name=i.value.trim()||c.name; renderSetHead(); }; i.onblur=done; i.onkeydown=e=>{ if(e.key==='Enter') i.blur(); if(e.key==='Escape'){ i.value=c.name; i.blur(); } }; }
+function renameSet(){ const c=curSetObj(); if(!$('setSel')) renderSetHead(); const el=document.querySelector('#setSel span'); if(!el) return;
+  renameAt(el,c.name,v=>{ const old=c.name; snap(); c.name=v; renderSetHead(); refresh(); toast(`Renamed the setlist “${old}” to “${v}”`,undo); },{row:'#setHead',maxRight:innerWidth-8}); }
 function ctxMenu(e,items){ document.querySelectorAll('.xm.ctx').forEach(x=>x.remove()); const m=document.createElement('div'); m.className='xm ctx';
   items.forEach(it=>{ if(it==='-'){ m.insertAdjacentHTML('beforeend','<div class="sep"></div>'); return; } if(it.cap){ const c=document.createElement('div'); c.className='cap'; c.textContent=it.cap; m.appendChild(c); return; } const d=document.createElement('div'); d.className='it'+(it.danger?' danger':'')+(it.dis?' dis':''); d.innerHTML=`<i>${iconOf(it.icon)}</i><span></span>${it.key?'<kbd></kbd>':''}`; d.querySelector(':scope>span').textContent=it.label; if(it.cur) d.classList.add('cur'); if(it.key) d.querySelector('kbd').textContent=it.key;
     if(!it.dis) d.onclick=ev=>{ ev.stopPropagation(); m.remove(); it.act(); }; m.appendChild(d); });
@@ -1662,7 +1663,7 @@ function deleteSongs(ids,from){ ids=ids.filter(id=>songs.some(s=>s.id===id)); if
   confirmBox('Delete '+(n>1?n+' songs':'“'+esc(names[0])+'”')+'?',body,n>1?'Delete '+n+' songs':'Delete song',del); }
 // New songs get the palette colour after the last song's (6d).
 function nextSongCol(){ const last=songs[songs.length-1], i=last?PAL.indexOf(String(last.col).toLowerCase()):-1; return PAL[(i>=0?i+1:songs.length)%PAL.length]; }
-function renameVerBox(s,id,el){ const v=versOf(s).find(x=>x.id===id); if(!v) return; const r=el.getBoundingClientRect(); floatInput(r.left,r.top-2,Math.max(160,r.width),24,v.name,n=>{ if(!n||n===v.name) return; snap(); v.name=n; refresh(); }); }
+function renameVerBox(s,id,el){ const v=versOf(s).find(x=>x.id===id); if(!v) return; const nm=el&&el.querySelector&&el.querySelector('.vnm11'); renameAt(nm||el,v.name,n=>{ if(!n||n===v.name) return; const old=v.name; snap(); v.name=n; refresh(); toast(`Renamed the version “${old}” to “${n}”`,undo); },{row:'.vr, .song, #hero'}); }
 function renameSong(id){ const s=songs.find(x=>x.id===id); open.add(id); select(id,false); renderFolders(); const nm=document.querySelector(`.folder[data-id="${id}"] .fh .nm`); if(!nm) return;
   nm.innerHTML=`<input value="${esc(s.name)}" style="font:inherit;width:100%;height:26px;padding:2px 6px">`; const i=nm.firstChild; i.onclick=e=>e.stopPropagation(); i.onpointerdown=e=>e.stopPropagation(); i.focus(); i.select();
   const done=()=>{ s.name=i.value.trim()||s.name; refresh(); }; i.onblur=done; i.onkeydown=e=>{ if(e.key==='Enter') i.blur(); if(e.key==='Escape'){ i.value=s.name; i.blur(); } }; }
@@ -1753,11 +1754,10 @@ function renderSetlist(){
     const s=songs.find(x=>x.id===id);
     // a song with 2+ versions is a stack of cards: the front card says which version this set plays (‹ › or the wheel flips it)
     const vs=versOf(s), ev=entryVer(s), many=vs.length>1, vi=vs.indexOf(ev), xtra=!ev.custom&&verParts(s,ev).some(p=>p.extra);
-    el.insertAdjacentHTML('beforeend',`<div class="song ${s.id===selId?'on':''} ${many?'stk':''}" data-id="${s.id}"><span class="n">${i+1}</span><span class="sbar" style="background:${s.col||'#5a5a62'}"></span><span class="t">${esc(s.name)}${many?`<span class="vn">${esc(ev.name)}${xtra?' ◆':''} · ${fmt(verLen(s,ev))}</span><span class="dots">${vs.map((_,j)=>`<i class="${j===vi?'on':''}"></i>`).join('')}</span>`:''}</span>${many?`<span class="var"><button class="vprev" title="Previous version">‹</button><button class="vnext" title="Next version">›</button></span>`:`<span class="d">${fmt(verLen(s,ev))}</span>`}<button class="rmx" data-id="${s.id}" title="Remove from this setlist">×</button></div>`);
+    el.insertAdjacentHTML('beforeend',`<div class="song ${s.id===selId?'on':''} ${many?'stk':''}" data-id="${s.id}"><span class="n">${i+1}</span><span class="sbar" style="background:${s.col||'#5a5a62'}"></span><span class="t"><span class="nm11">${esc(s.name)}</span>${many?`<span class="vrow11"><button class="vn vsw11" data-id="${s.id}" title="Version this setlist plays (click to choose)  ⌥[ ⌥]">${esc(ev.name)}${xtra?' ◆':''} ▾</button><span class="vlen11">${fmt(verLen(s,ev))}</span><span class="dots" aria-label="${vs.length} versions">${vs.map((_,j)=>`<i class="${j===vi?'on':''}"></i>`).join('')}</span></span>`:''}</span>${many?'':`<span class="d">${fmt(verLen(s,ev))}</span>`}</div>`);
     const al=afterLabel(afterOf(s)); if(al&&i<setOrder.length-1) el.insertAdjacentHTML('beforeend',`<div class="tr ${afterOf(s).mode}" data-id="${s.id}" title="After this song (right-click the song to change)">${al}</div>`);
   });
   el.querySelectorAll('.song.stk').forEach(row=>{ const s=songs.find(x=>x.id===row.dataset.id); const flip=d=>{ flipVer(s,d); row.classList.remove('fl','fr'); };
-    row.querySelector('.vprev').onclick=e=>{ e.stopPropagation(); flipVer(s,-1); }; row.querySelector('.vnext').onclick=e=>{ e.stopPropagation(); flipVer(s,1); };
     row.onwheel=e=>{ e.preventDefault(); const now=performance.now(); if(now-(row._w||0)<220) return; row._w=now; flipVer(s,e.deltaY>0||e.deltaX>0?1:-1); }; });
   if(!setOrder.length) el.innerHTML='<div class="blank sm" style="padding:28px 10px"><div class="bs">'+(songs.length?'Drag songs here from below to build the set.':'Songs you add will show up below. Drag them here to build the set.')+'</div></div>';
   $('setLen').textContent=fmt(setOrder.reduce((a,id)=>{ const s=songs.find(x=>x.id===id); return a+verLen(s,entryVer(s)); },0));
@@ -2048,8 +2048,9 @@ function guessType(name){ const n=name.toLowerCase(); return SEC_TYPES.find(k=>n
 function freeRange(s,bar,skip){ const others=s.secs.filter(x=>x!==skip); const pv=others.filter(x=>x.start<=bar).sort((a,b)=>b.start-a.start)[0]; if(pv&&bar<pv.start+pv.bars) return null; const nx=others.filter(x=>x.start>bar).sort((a,b)=>a.start-b.start)[0]; return [pv?pv.start+pv.bars:1, nx?nx.start:s.total+1]; }
 function addSecAt(s,bar,bars){ const r=freeRange(s,bar); if(!r){ toast('There’s already a section there'); return; } snap(); const n=Math.max(1,Math.min(bars||8,r[1]-bar));
   const sec={id:sid++,name:'Section '+(s.secs.length+1),type:'verse',start:bar,bars:n,end:'continue',say:'',notes:{},tile:true}; s.secs.push(sec); buildBars(s); selSec={song:s.id,id:sec.id}; selId=s.id; refresh(); renameSec(s,sec.id); }
-function renameSec(s,id){ const el=document.querySelector(`.secs .lane[data-song="${s.id}"] .sec[data-sid="${id}"]`), so=secObj(s,id); if(!el||!so) return; const r=el.getBoundingClientRect();
-  floatInput(r.left,r.top,Math.max(140,r.width),r.height,so.name,v=>{ if(!v||v===so.name) return; snap(); so.name=v; const g=guessType(v); if(g) so.type=g; buildBars(s); refresh(); }); }
+function renameSec(s,id){ const el=document.querySelector(`.secs .lane[data-song="${s.id}"] .sec[data-sid="${id}"]`), so=secObj(s,id); if(!el||!so) return;
+  renameAt(el.querySelector('.snm11')||el.querySelector('.sn')||el,so.name,v=>{ if(!v||v===so.name) return; snap(); so.name=v; const g=guessType(v); if(g) so.type=g; buildBars(s); refresh(); },{row:'.sec'}); }
+function renameAt(el,val,done,o){ if(window.SL10a&&SL10a.editInline){ SL10a.editInline(el,val,done,o||{}); return; } const r=el.getBoundingClientRect?el.getBoundingClientRect():el; floatInput(r.left,r.top,Math.max(140,r.width),r.height||24,val,v=>{ if(v&&v!==val) done(v); }); }
 function floatInput(x,y,w,h,val,done){ const i=document.createElement('input'); i.className='finput'; i.value=val; Object.assign(i.style,{left:x+'px',top:y+'px',width:w+'px',height:h+'px'}); document.body.appendChild(i); i.focus(); i.select();
   let ok=true; const end=()=>{ if(!i.isConnected) return; const v=i.value.trim(); i.remove(); if(ok) done(v); }; i.onblur=end; i.onkeydown=e=>{ e.stopPropagation(); if(e.key==='Enter') i.blur(); if(e.key==='Escape'){ ok=false; i.blur(); } }; }
 function secMenu(e,s,id){ const so=secObj(s,id), nx=s.secs.find(x=>x.start>so.start), room=(nx?nx.start:s.total+1)-(so.start+so.bars);
@@ -2090,7 +2091,7 @@ function verStrip(s,v,max){ let parts, bars=0;
 function verBars(s,v){ return v.custom?((v.state&&v.state.secs)||[]).reduce((a,x)=>a+(x.bars||0),0):verParts(s,v).reduce((a,p)=>a+p.bars,0); }
 function verStripHTML(s){ const vs=versOf(s), max=Math.max(1,...vs.map(v=>verBars(s,v)));
   return `<div class="vstrip" data-song="${s.id}"><div class="vh"><span>Versions</span><button class="vadd" data-song="${s.id}" title="A copy of the version shown">＋ Version</button></div>${vs.map(v=>{ const x=!v.custom&&verParts(s,v).some(p=>p.extra);
-    return `<div class="vr ${v.id===s.ver?'on':''}" data-song="${s.id}" data-v="${v.id}"><span class="vnm" title="Double-click to rename">${esc(v.name)}${x?' <b class="vdia">◆</b>':''}${v.own?' <em>own timeline</em>':v.custom?' <em>custom</em>':''}${v.def&&vs.length>1?' <em>default</em>':''}</span><div class="st">${verStrip(s,v,max)}</div><small>${fmt(verLen(s,v))}</small></div>`; }).join('')}</div>`; }
+    return `<div class="vr ${v.id===s.ver?'on':''}" data-song="${s.id}" data-v="${v.id}"><span class="vnm" title="Double-click to rename"><span class="vnm11">${esc(v.name)}</span>${x?' <b class="vdia">◆</b>':''}${v.own?' <em>own timeline</em>':v.custom?' <em>custom</em>':''}${v.def&&vs.length>1?' <em>default</em>':''}</span><div class="st">${verStrip(s,v,max)}</div><small>${fmt(verLen(s,v))}</small></div>`; }).join('')}</div>`; }
 // sections the version shown leaves out (dimmed on the timeline); a reordered version numbers its sections
 const secOff=(s,id)=>{ const v=curVer(s); if(v.custom) return false; normVer(s,v); const o=v.order.find(q=>q.k==='sec'&&q.id===id); return !!o&&!o.on; };
 function secOrd(s,id){ const v=curVer(s); if(v.custom||isFullVer(s,v)) return 0; const on=v.order.filter(o=>o.on), i=on.findIndex(o=>o.k==='sec'&&o.id===id); if(i<0) return 0;
@@ -2154,7 +2155,7 @@ function renderFolders(listIn,into){
     const pts=s.tmap.map((e,i)=>e.bpm?`<div class="tp ${tsel&&tsel.song===id&&tsel.i===i?'sel':''} ${i===0?'first':''} ${yy(e.bpm)<22?'dn':''}" data-i="${i}" style="left:${x(e.bar)}px;top:${yy(e.bpm)}px" data-tip="Drag up/down for tempo, sideways to move. Alt = fine. Double-click to type."><b>${e.ramp?'↗ ':''}${fmtBpm(e.bpm)}</b></div>`:'').join('');
     h+=`<div class="row tempo"><div class="lh" data-tip="Drag points to change tempo · double-click the lane to add one">Tempo<span class="lhv">${fmtBpm(bpmAt(s,1))}</span></div><div class="lane" data-song="${id}" style="width:${W}px;height:${TL}px;${LP}"><svg width="${W}" height="${TL}" style="position:absolute;inset:0;pointer-events:none"><defs><linearGradient id="tg-${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--cyan)" stop-opacity=".22"/><stop offset="1" stop-color="var(--cyan)" stop-opacity="0"/></linearGradient></defs><path d="${area}" fill="url(#tg-${id})"/><path d="${path}" fill="none" stroke="var(--cyan)" stroke-width="1.5"/></svg>${pts}</div></div>`;
     const EB={loop:'⟲',hold:'⏸',stop:'■'};
-    h+=`<div class="row secs"><div class="lh" data-tip="Drag across empty space to add a section · drag to move · edges resize · double-click to rename · right-click for options">Sections<button class="lhadd" data-song="${id}" title="Add a section at the playhead">＋</button></div><div class="lane" data-song="${id}" style="width:${W}px;${LP}">${s.secPos.length?'':'<span class="lanehint" style="left:${(window.TL9?TL9.hx:0)+10}px">Drag across this lane to add a section</span>'}${s.secPos.map(p=>`<div class="sec ${selSec&&selSec.song===id&&selSec.id===p.id?'sel':''} ${secOff(s,p.id)?'voff':''}" data-sid="${p.id}" ${secOff(s,p.id)?`title="Not in “${esc(curVer(s).name)}”"`:''} style="left:${x(p.start)+1}px;width:${x(p.start+p.bars)-x(p.start)-2}px;background:${SEC_C[p.type]}"><i class="se l"></i>${EB[p.end]?`<span class="eb">${EB[p.end]}</span>`:''}<span class="sn">${secOrd(s,p.id)?`<b class="vord">${secOrd(s,p.id)}</b>`:''}${esc(p.name)}</span><i class="se r"></i></div>`).join('')}</div></div></div>`; // 9e: end of the pinned rows
+    h+=`<div class="row secs"><div class="lh" data-tip="Drag across empty space to add a section · drag to move · edges resize · double-click to rename · right-click for options">Sections<button class="lhadd" data-song="${id}" title="Add a section at the playhead">＋</button></div><div class="lane" data-song="${id}" style="width:${W}px;${LP}">${s.secPos.length?'':'<span class="lanehint" style="left:${(window.TL9?TL9.hx:0)+10}px">Drag across this lane to add a section</span>'}${s.secPos.map(p=>`<div class="sec ${selSec&&selSec.song===id&&selSec.id===p.id?'sel':''} ${secOff(s,p.id)?'voff':''}" data-sid="${p.id}" ${secOff(s,p.id)?`title="Not in “${esc(curVer(s).name)}”"`:''} style="left:${x(p.start)+1}px;width:${x(p.start+p.bars)-x(p.start)-2}px;background:${SEC_C[p.type]}"><i class="se l"></i>${EB[p.end]?`<span class="eb">${EB[p.end]}</span>`:''}<span class="sn">${secOrd(s,p.id)?`<b class="vord">${secOrd(s,p.id)}</b>`:''}<span class="snm11">${esc(p.name)}</span></span><i class="se r"></i></div>`).join('')}</div></div></div>`; // 9e: end of the pinned rows
     // Track headers (6d): colour tab, type icon, name, output chip, fader, M / S, meter (MIDI: port · channel, M only)
     s.tracks.forEach((t,ti)=>{
       if(!trackInVer(s,t,curVer(s))) return; // another version's own audio
@@ -2163,14 +2164,14 @@ function renderFolders(listIn,into){
       const th=trackH(s,t); // 9e: per song / per track (8c: a modeler lane defaults taller)
       h+=`<div class="row trk ${mid?'midi':''} ${off?'muted':''} ${sizeClass(th)}" ${th!==TH?`style="--th:${th}px"`:''}><div class="lh" data-song="${id}" data-track="${dt}"><i class="rsz9" title="Drag to resize · ⌥-drag: every track · double-click: back to the default"></i>
         <span class="ctab" style="background:${c}" title="Track colour"></span>${mid&&window.MODUI&&MODUI.dev(s,t)?MODUI.badge(s,t):`<span class="tico" style="color:${c}">${TICON[kind]}</span>`}
-        <span class="tn" title="${dt}${['Click','Cues'].includes(t)?'':' · double-click to rename'}">${dt}${mid&&window.MODUI&&MODUI.dev(s,t)?`<small class="modst">${esc(MODUI.devLine(s,t))}<br><em>${esc(MODUI.status(s,t))}</em></small>`:''}</span>
+        <span class="tn" title="${esc(window.SL11?SL11.fullName(s,t):t)} · double-click to rename"><span class="tnm11">${dt}</span>${mid&&window.MODUI&&MODUI.dev(s,t)?`<small class="modst">${esc(MODUI.devLine(s,t))}<br><em>${esc(MODUI.status(s,t))}</em></small>`:''}</span>
         <button class="ochip ${mid||routeOf(s,t)?'':'no'}" data-song="${id}" data-track="${dt}" title="${mid?'MIDI port and channel':'Output'}">${chip} ▾</button>
         ${mid?'':`<span class="hf" data-song="${id}" data-track="${dt}" style="--p:${fadP(v)}" title="${dbTxt(v)} dB · double-click: 0 dB · Alt-drag: fine"><i></i><u></u></span>`}
         <span class="ms"><button class="mb ${(s.mute||{})[t]?'on':''}" data-song="${id}" data-track="${dt}" title="Mute">M</button>${mid?'':`<button class="sb ${solo?'on':''}" data-song="${id}" data-track="${dt}" title="Solo (Alt-click: solo only this)">S</button>`}</span>
         ${mid?'':`<span class="hm"><b data-m="${id}|${dt}"></b></span>`}</div>
         <div class="lane" style="width:${W}px;${LP}"><canvas data-song="${id}" data-t="${ti}" data-w="${W}" width="1" height="${th}" style="width:1px;height:${th}px"></canvas></div></div>`;
     });
-    h+=`<div class="add"><button class="btn addT" data-k="audio" data-song="${id}">＋ Audio track</button><button class="btn addT" data-k="click" data-song="${id}">＋ Click track</button><button class="btn addT" data-k="midi" data-song="${id}">＋ MIDI track</button>${s.tracks.includes('Cues')?'':`<button class="btn addT" data-k="cues" data-song="${id}">＋ Cues track</button>`}</div>`;
+    h+=`<div class="add"><button class="btn addT" data-k="audio" data-song="${id}">＋ Audio track</button><button class="btn addT" data-k="click" data-song="${id}">＋ Click track</button><button class="btn addT" data-k="midi" data-song="${id}">＋ MIDI track</button>${s.tracks.some(x=>ROLE[x]==='cues')?'':`<button class="btn addT" data-k="cues" data-song="${id}">＋ Cues track</button>`}</div>`;
     h+=`</div><div class="ph"></div></div>`;
     sc.insertAdjacentHTML('beforeend',h);
   });
@@ -2215,7 +2216,7 @@ function renderFolders(listIn,into){
         {label:'Add marker…',icon:'cue',act:()=>floatInput(e.clientX,e.clientY-2,180,24,'',n=>{ if(!n||!n.trim()) return; snap(); (s.marks||(s.marks=[])).push({name:n.trim().slice(0,40),bar:b.bar,beat:1}); s.marks.sort((a,c)=>a.bar-c.bar||a.beat-c.beat); renderFolders(); })}]); };
     l.querySelectorAll('.msig').forEach(m=>{ m.onpointerdown=e=>{ e.stopPropagation(); }; m.onclick=e=>{ e.stopPropagation(); openMpop(s,+m.dataset.bar,e); }; });
     l.querySelectorAll('.mkr').forEach(m=>{ m.onpointerdown=e=>e.stopPropagation(); m.oncontextmenu=e=>{ e.preventDefault(); e.stopPropagation(); const i=+m.dataset.i, mk=s.marks[i];
-      ctxMenu(e,[{cap:mk.name},{label:'Rename marker…',icon:'edit',act:()=>{ const r=m.getBoundingClientRect(); floatInput(r.left,r.top,180,24,mk.name,n=>{ if(!n||!n.trim()) return; snap(); mk.name=n.trim().slice(0,40); renderFolders(); }); }},{label:'Delete marker',icon:'del',danger:true,act:()=>{ snap(); s.marks.splice(i,1); renderFolders(); }}]); };
+      ctxMenu(e,[{cap:mk.name},{label:'Rename marker…',icon:'edit',act:()=>{ renameAt(m.querySelector('u')||m,mk.name,n=>{ if(!n||!n.trim()) return; snap(); mk.name=n.trim().slice(0,40); renderFolders(); },{row:'.mkr',maxRight:innerWidth-8}); }},{label:'Delete marker',icon:'del',danger:true,act:()=>{ snap(); s.marks.splice(i,1); renderFolders(); }}]); };
       m.onclick=e=>{ e.stopPropagation(); locate(s,evTime(s,s.marks[+m.dataset.i])); }; }); });
   sc.querySelectorAll('.trk canvas').forEach(c=>{ if(wireRegLane(c)) return; if(wireClipLane(c)) return; c.onclick=e=>{ const s=songs.find(x=>x.id===c.dataset.song); locate(s,snapT(s,lx(c,e)/PXS,e.altKey)); }; });
   sc.querySelectorAll('.freg').forEach(f=>f.onclick=e=>{ const s=songs.find(x=>x.id===f.dataset.song); locate(s,(e.clientX-f.getBoundingClientRect().left)/PXS); });
@@ -2246,6 +2247,9 @@ function redrawView(force){ const sc=$('scroller'), r=sc.getBoundingClientRect()
   sc.querySelectorAll('canvas[data-t],canvas.rcv,canvas.fgrid').forEach(cv=>{ const full=+cv.dataset.w||1, want=Math.max(0,Math.min(full-Math.min(full,vm.w),vm.sl));
     if(!force&&+cv.dataset.vx===want) return; const b=cv.getBoundingClientRect(); if(b.bottom<r.top-40||b.top>r.bottom+40){ cv.dataset.vx=-1; return; } todo.push(cv); });
   todo.forEach(cv=>(cv.classList.contains('rcv')?drawRuler:cv.classList.contains('fgrid')?drawGrid:drawLane)(cv)); } // all reads first, then draw
+const PEAK11=new WeakMap();
+function clipPeak(real,cl){ let m=PEAK11.get(real.data); if(!m){ m=new Map(); PEAK11.set(real.data,m); } const k=cl.off+'|'+(cl.end-cl.start); if(m.has(k)) return m.get(k);
+  const d=real.data, ps=real.perSec, a=Math.max(0,Math.floor(cl.off*ps)), b=Math.min(d.length,Math.ceil((cl.off+cl.end-cl.start)*ps)); let mx=0; for(let i=a;i<b;i++) if(d[i]>mx) mx=d[i]; const v=Math.max(1,mx)/255; m.set(k,v); return v; }
 function drawLane(cv){
   const s=songs.find(x=>x.id===cv.dataset.song), t=s.tracks[+cv.dataset.t], role=isMidiTrack(s,t)?'midi':ROLE[t];
   const {g,vx,vw}=laneView(cv), H=cv.height, W=+cv.dataset.w; g.clearRect(vx,0,vw,H);
@@ -2297,14 +2301,15 @@ function drawLane(cv){
       // In the app, a stem's real peaks (window.SLW: null while they load); the simulation is for the browser.
       const real=window.SLW&&(s.files||{})[t]?SLW.get(s,t,PXS):undefined;
       const X0=Math.max(Math.ceil(x0)+2,Math.floor(vx)-1), X1=Math.min(Math.floor(x1)-2,Math.ceil(vx+vw)+1); if(X1>X0&&real!==undefined){
-        const pk=[]; if(real){ const d=real.data, ps=real.perSec, amp0=Math.min(1.6,base*linOf(cl.gain));
+        const pk=[]; let boost=1; if(real){ const d=real.data, ps=real.perSec, nk=clipPeak(real,cl), norm=Math.min(256,1/Math.max(1e-4,nk*nk)), amp0=norm*Math.min(1.6,base*linOf(cl.gain)); boost=norm; // the file fits the lane at 0 dB; clip gain and the fader still show // 11: scaled to fit the lane (display only: the sound is unchanged)
           for(let X=X0;X<=X1;X++){ const tt=X/PXS, src=tt-cl.start+cl.off; let i=Math.floor(src*ps), j=Math.max(i+1,Math.ceil((src+1/PXS)*ps)), m=0;
             if(i<0) i=0; if(j>d.length) j=d.length; for(;i<j;i++) if(d[i]>m) m=d[i];
-            const v=(m/255)*(m/255)*amp0*clipEnv(cl,tt); pk.push(j<=0||src>=d.length/ps?0:Math.min(half,Math.max(.6,v*half*.98))); } }
+            const v=(m/255)*(m/255)*amp0*.92*clipEnv(cl,tt); pk.push(j<=0||src>=d.length/ps?0:Math.min(half,Math.max(.6,v*half*.98))); } }
         g.save(); g.beginPath(); g.rect(x0,y0,cw,y1-y0); g.clip();
         if(pk.length){ g.fillStyle=dim?'rgba(255,255,255,.2)':mixW(c,.22,.9); g.beginPath(); g.moveTo(X0,mid); pk.forEach((h,i)=>g.lineTo(X0+i,mid-h)); for(let i=pk.length-1;i>=0;i--) g.lineTo(X0+i,mid+pk[i]); g.closePath(); g.fill(); }
         g.fillStyle=dim?'rgba(255,255,255,.12)':hexA(c,.35); g.fillRect(x0+1,mid-.25,cw-2,.5);
-        g.restore(); }
+        g.restore();
+        if(boost>4&&cw>60){ const txt='×'+(boost>=10?Math.round(boost):boost.toFixed(1)); g.font='600 9.5px Inter, sans-serif'; const tw=g.measureText(txt).width+8, bx=Math.min(x1-tw-4,Math.max(x0+4,vx+vw-tw-6)); g.fillStyle='rgba(0,0,0,.45)'; g.beginPath(); g.roundRect(bx,y0+2,tw,13,4); g.fill(); g.fillStyle='rgba(255,255,255,.8)'; g.fillText(txt,bx+4,y0+12); cv._boost11=(cv._boost11||{}); cv._boost11[cl.id]=boost; } }
       else if(X1>X0){
         const beats=s.bars.flatMap(bb=>bb.beatT); let bi=0; const seed=t.length*7919+ci*131;
         const perc=role==='drums'?1:role==='bass'?.55:(role==='keys'||role==='guitars')?.3:.12;
@@ -2489,7 +2494,7 @@ function wireRegLane(cv){ const s=songs.find(x=>x.id===cv.dataset.song), t=s.tra
       setPick({kind:'cue',song:s.id,track:t,id:c.id}); const sx=e.clientX, ot=cueT(s,c), pre=ser(); let mv=false;
       cv.setPointerCapture(e.pointerId); cv.onpointermove=m=>{ if(Math.abs(m.clientX-sx)<3&&!mv) return; mv=true; const p=cueAt(s,snapT(s,ot+(m.clientX-sx)/PXS,m.altKey)); c.bar=p.bar; c.beat=p.beat; drawLane(cv); showTip(`“${c.text}” at ${cuePos(c)}${m.altKey?' · free':''}`,m); };
       cv.onpointerup=()=>{ cv.onpointermove=null; hideTip(); if(mv){ undoS.push(pre); redoS=[]; } }; };
-    cv.ondblclick=e=>{ const c=hit(lx(cv,e)), r=cv.getBoundingClientRect(); if(c){ floatInput(r.left-(+cv.dataset.vx||0)+cueT(s,c)*PXS,r.top+r.height/2-12,160,24,c.text,v=>{ if(v){ snap(); c.text=v; drawLane(cv); } }); return; }
+    cv.ondblclick=e=>{ const c=hit(lx(cv,e)), r=cv.getBoundingClientRect(); if(c){ const L=(cv._cues||[]).find(o=>o.t===c.text&&Math.abs(o.x0+2-cueT(s,c)*PXS)<1), X=r.left-(+cv.dataset.vx||0)+cueT(s,c)*PXS; renameAt(L&&L.w?{left:X,top:r.top+L.y,width:L.w,height:L.h}:{left:X,top:r.top+r.height/2-10,width:120,height:20},c.text,v=>{ if(v){ snap(); c.text=v; drawLane(cv); } },{font:'600 10.5px Inter, sans-serif',pad:7,maxRight:innerWidth-8}); return; }
       const p=cueAt(s,snapT(s,lx(cv,e)/PXS,e.altKey)); cuePicker(s,t,p,e.clientX,e.clientY+6); }; // the phrase picker (6d)
     cv.oncontextmenu=e=>{ e.preventDefault(); const c=hit(lx(cv,e)), xx=lx(cv,e), into=Math.max(2,nearestBoundary(s,xx/PXS));
       if(!c){ ctxMenu(e,[{label:'Add cue here…',icon:'“',act:()=>cuePicker(s,t,cueAt(s,snapT(s,xx/PXS,false)),e.clientX,e.clientY)},{label:'Add count-in…',icon:'①',act:()=>countInBox(s,into)}]); return; }
@@ -2602,13 +2607,13 @@ function addTrack(s,k){ if(!s) return;
   if(k==='audio'){ if(NATIVE&&window.SLE) SLE.addStems(s); else toast('In the app this opens a file picker; the files land on new audio tracks'); return; }
   snap();
   if(k==='midi'){ newMidiTrack(s.id); return; }
-  if(k==='cues'){ if(s.tracks.includes('Cues')) return; s.tracks.splice(s.tracks.includes('Click')?1:0,0,'Cues'); s.cues=s.cues||[]; buildBars(s); refresh(); toast('Cues track added. Double-click it to place a cue.'); return; }
+  if(k==='cues'){ if(s.tracks.some(x=>ROLE[x]==='cues')){ undoS.pop(); toast('This song has a cue track already'); return; } s.tracks.splice(s.tracks.includes('Click')?1:0,0,'Cues'); s.cues=s.cues||[]; buildBars(s); refresh(); toast('Cues track added. Double-click it to place a cue.'); return; }
   if(!s.tracks.includes('Click')){ s.tracks.unshift('Click'); s.ck=s.ck||[]; buildBars(s); refresh(); toast('Click track added. Double-click it to add a click clip.'); return; }
   let n=2, name='Click ('+n+')'; while(s.tracks.includes(name)) name='Click ('+(++n)+')'; const last=Math.max(...clickTracks(s).map(x=>s.tracks.indexOf(x)));
   s.tracks.splice(last+1,0,name); if(window.SL10a) SL10a.aboveMidi(s,name); (s.troles||(s.troles={}))[name]='Click'; regRoles(s); ckOf(s,name); buildBars(s); refresh();
   toast(`“${name}” added with its own clips, sound, level and output. Double-click its name to rename it (e.g. Click (drums)).`); }
-function renameTrackBox(s,t,el){ if(['Click','Cues'].includes(t)){ toast(`“${t}” keeps its name (it decides the track type)`); return; } const r=el.getBoundingClientRect();
-  floatInput(r.left,r.top-2,Math.max(140,r.width),24,t,v=>{ if(!v||v===t) return; if(s.tracks.includes(v)){ toast(`“${v}” is already a track in ${s.name}`); return; } snap(); renameTrack(s,t,v); if(trackOpen&&trackOpen.song===s.id&&trackOpen.track===t) trackOpen.track=v; refresh(); }); }
+function renameTrackBox(s,t,el){ if(el&&el.querySelector&&el.querySelector('.tnm11')) el=el.querySelector('.tnm11');
+  renameAt(el,t,v=>{ if(!v||v===t) return; if(window.SL11?!SL11.okName(s,t,v):s.tracks.includes(v)){ if(!window.SL11) toast(`“${v}” is already a track in ${s.name}`); return; } snap(); renameTrack(s,t,v); if(trackOpen&&trackOpen.song===s.id&&trackOpen.track===t) trackOpen.track=v; refresh(); toast(`Renamed “${t}” to “${v}”`,undo); },{row:'.lh'}); }
 // The header fader: drag (Alt: fine), double-click 0 dB. Same model as before: s.gain[track] in dB, -60 = off.
 function wireHeadFaders(root){ root.querySelectorAll('.hf[data-song]').forEach(f=>{ const s=songs.find(x=>x.id===f.dataset.song), t=f.dataset.track;
   const put=v=>{ (s.gain||(s.gain={}))[t]=Math.max(-60,Math.min(6,Math.round(v*10)/10)); syncVol(s,t); };
@@ -2884,9 +2889,9 @@ function drawRuler(cv){ const s=songs.find(x=>x.id===cv.dataset.song), H=cv.heig
 // ---------- tempo editing on the timeline ----------
 // ---------- undo / redo ----------
 let undoS=[], redoS=[];
-function ser(){ return JSON.stringify({songs,setlists,curSet},function(k,v){ return this&&this.tmap&&(k==='bars'||k==='secPos'||k==='_yy')?undefined:v; }); }
+function ser(){ return JSON.stringify({songs,setlists,curSet,p11:presets.filter(p=>!p.built),w11:CUEWORDS,m11:window.MODP||null},function(k,v){ return this&&this.tmap&&(k==='bars'||k==='secPos'||k==='_yy')?undefined:v; }); }
 function snap(){ undoS.push(ser()); if(undoS.length>80) undoS.shift(); redoS=[]; if(window.SLE&&SLE.edited) SLE.edited(); }
-function restore(str){ const o=JSON.parse(str); songs.length=0; o.songs.forEach(x=>songs.push(x)); setlists=o.setlists;
+function restore(str){ const o=JSON.parse(str); if(Array.isArray(o.p11)) presets=[...presets.filter(p=>p.built),...o.p11]; if(Array.isArray(o.w11)) CUEWORDS.splice(0,CUEWORDS.length,...o.w11); if(o.m11&&typeof o.m11==="object") window.MODP=o.m11; songs.length=0; o.songs.forEach(x=>songs.push(x)); setlists=o.setlists;
   // a setlist never points at a song that isn't there (a damaged song file, an older backup)
   const have=new Set(songs.map(x=>x.id)); setlists.forEach(l=>{ l.order=(l.order||[]).filter(id=>have.has(id)); }); if(!setlists.some(l=>l.id===o.curSet)) o.curSet=setlists[0]&&setlists[0].id; curSet=o.curSet; setOrder=curSetObj().order;
   songs.forEach(x=>{ Object.keys(x.malts||{}).forEach(t=>{ const a=x.malts[t].find(y=>y.id===x.muse[t])||x.malts[t][0]; x.midi[t]=a.events; }); buildBars(x); });
@@ -4083,7 +4088,7 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
   setPos(t){ pos=t; }, setPlayId(id){ playId=id; document.querySelectorAll('.folder').forEach(f=>f.classList.toggle('playing',f.dataset.id===playId)); }, setPlaying(b){ playing=b; $('playBtn').classList.toggle('on',b); last=performance.now(); requestAnimationFrame(tick); },
   redraw(){ lcd(); },
   // Everything a .setline session holds.
-  sessionData(){ const o=JSON.parse(ser()); o.presets=presets.filter(p=>!p.built); o.click=CLICK; if(Object.keys(CLICKT).length) o.clickT=CLICKT; o.cueVoice=CUEV; if(Object.keys(PRON).length) o.pron=PRON; if(Object.keys(VNUDGE).length) o.voiceNudge=VNUDGE; if(CUEWORDS.length) o.cueWords=CUEWORDS;
+  sessionData(){ const o=JSON.parse(ser()); delete o.p11; delete o.w11; delete o.m11; o.presets=presets.filter(p=>!p.built); o.click=CLICK; if(Object.keys(CLICKT).length) o.clickT=CLICKT; o.cueVoice=CUEV; if(Object.keys(PRON).length) o.pron=PRON; if(Object.keys(VNUDGE).length) o.voiceNudge=VNUDGE; if(CUEWORDS.length) o.cueWords=CUEWORDS;
     if(LIBMODE){ if(PHRASES) o.phrases=PHRASES.list; if(USER_LISTS.length) o.patchLists=USER_LISTS; } if(FIELDS.length) o.fields=FIELDS; if(window.MODP&&(Object.keys(MODP.qc||{}).length||Object.keys(MODP.axe||{}).length)) o.modelerPresets=MODP; if(BAND.screens.length||BAND.network||BAND.pin) o.dashboards=BAND; return o; },
   loadSession(o){ ROUTE_LOG=[]; migrateRouting(o); migrateMidi(o); migrateVersions(o);
     window.MODP=o.modelerPresets&&typeof o.modelerPresets==='object'?{qc:o.modelerPresets.qc||{},axe:o.modelerPresets.axe||{}}:{qc:{},axe:{}}; // 8c
@@ -4705,5 +4710,6 @@ try{ const q=new URLSearchParams(location.search).get('settings'); if(q) setTime
 <script src="vers10.js"></script>
 <script src="click10.js"></script>
 <script src="secs10.js"></script>
+<script src="fix11.js"></script>
 </body>
 </html>

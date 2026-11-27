@@ -125,9 +125,9 @@
   const thumb = hb.firstChild;
   function bar() {
     const g = measure(), m = maxHX();
-    if (!m || !sc.querySelector("canvas.rcv")) { hb.hidden = true; return; }
-    hb.hidden = false;
-    hb.style.left = g.left - g.pl + "px"; hb.style.width = g.w + "px"; hb.style.bottom = g.pb + 2 + "px";
+    if (!m || !sc.querySelector("canvas.rcv")) { hb.hidden = true; if (sc.classList.contains("hb11")) sc.classList.remove("hb11"); return; }
+    hb.hidden = false; if (!sc.classList.contains("hb11")) { sc.classList.add("hb11"); box = null; geo = null; } // 11: its own strip under the lanes
+    hb.style.left = g.left - g.pl + "px"; hb.style.width = g.w + "px"; hb.style.bottom = Math.max(1, g.pb - 9) + "px";
     const tw = Math.max(28, g.w * g.w / g.cw);
     thumb.style.width = tw + "px"; thumb.style.transform = `translateX(${HX / m * (g.w - tw)}px)`;
   }
@@ -184,7 +184,7 @@
     const keep = sc.scrollTop; sc.scrollTop = 0;
     const top = first ? first.getBoundingClientRect().top - sc.getBoundingClientRect().top : 150;
     const pad = parseFloat(getComputedStyle(first || sc).paddingBottom) || 0; // the rows' gap (Studio look)
-    const h = Math.floor((sc.clientHeight - top - 14) / n - pad);
+    const h = Math.floor((sc.clientHeight - top - 4) / n - pad); // 11: the sideways scrollbar has its own strip now (it needed 14 px here)
     sc.scrollTop = quiet ? 0 : keep;
     if (quiet) { if (h) s.trkH = Math.round(Math.max(THMIN, Math.min(THMAX, h))); delete s.trkHs; refresh(); sc.scrollTop = 0; return; }
     setAll(s, h); sc.scrollTop = 0;

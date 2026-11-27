@@ -460,7 +460,7 @@ const SLE = {
   fileMenu: (at: { clientX: number; clientY: number }) => fileMenu(at),
   // 9c: the module's commands for the menus in the window chrome (ui/public/menus9.js)
   mod: { exportSetlist: () => exportSetlist(), exportSong: (id: string) => exportSetlist(undefined, undefined, id), importAudioSong: () => importAudioSong().catch((e) => page().toast(String(e))), about: () => showAbout(), importPackage: () => importPackage(), importAbleton: () => importAbleton().catch((e) => page().toast(String(e))), cleanUpAudio: () => cleanUpAudio(), openBackup: () => openBackup(),
-    switchLibrary: (n: string) => switchLibrary(n), newLibrary: () => newLibrary(), renameLibrary: () => renameLibrary(), reveal: () => SL.call("libraryReveal"), quit: () => quitApp(),
+    switchLibrary: (n: string) => switchLibrary(n), newLibrary: () => newLibrary(), renameLibrary: (to?: string) => renameLibrary(to), deleteLibrary: (n: string) => deleteLibrary(n), reveal: () => SL.call("libraryReveal"), quit: () => quitApp(),
     libraries: () => SL.call<{ name: string; current: boolean; songs: number }[]>("libraryList").catch(() => []), currentLibrary: () => (lib ? lib.name : "") },
   // ---- step 2: stems ----
   pickStems: () => pickStems(),
@@ -1270,15 +1270,30 @@ async function newLibrary() {
   if (r.error) { page().toast(r.error); return; }
   await switchLibrary(r.name!);
 }
-async function renameLibrary() {
+async function renameLibrary(to?: string) {
   if (!lib) return;
-  const pick = await new Promise<{ name?: string } | null>((res) => page().nameBox({ title: "Rename library", value: lib!.name, where: "" }, res));
+  // 11: renamed in place (the name in the window) when the page passes the new name; else the box
+  const pick = to ? { name: to } : await new Promise<{ name?: string } | null>((res) => page().nameBox({ title: "Rename library", value: lib!.name, where: "" }, res));
   if (!pick || !pick.name || pick.name === lib.name) return;
   await libSave();
   const r = await SL.call<{ name?: string; root?: string; error?: string }>("libraryRename", { name: pick.name });
   if (r.error) { page().toast(r.error); return; }
   lib = { name: r.name!, root: r.root! }; doc.name = lib.name;
   page().setSessionName(lib.name); await libSave(true); remember();
+}
+
+// 11: delete a library that isn't open (it goes to the Trash / Recycle Bin, where it can be put back)
+async function deleteLibrary(name: string) {
+  if (page().playing) { page().toast("Stop playback first"); return; }
+  if (lib && name === lib.name) { page().toast("That library is open: switch to another one first"); return; }
+  const list = await SL.call<{ name: string; songs: number }[]>("libraryList").catch(() => []);
+  const l = list.find((x) => x.name === name); if (!l) { page().toast(`There's no library called “${name}”`); return; }
+  const trash = navigator.platform.startsWith("Mac") ? "the Trash" : "the Recycle Bin";
+  const n = l.songs || 0;
+  page().confirm(`Delete the library “${name}”?`, `Its ${n} song${n === 1 ? "" : "s"}, setlists and audio go to ${trash}. Undo can’t bring it back, but you can restore the folder from ${trash}.`, "Delete library", async () => {
+    const r = await SL.call<{ ok?: boolean; error?: string }>("libraryDelete", { name });
+    page().toast(r.error ? r.error : `Moved the library “${name}” to ${trash}`);
+  });
 }
 
 // After opening: find the session's audio. Files found in the session's Audio folder under their name are

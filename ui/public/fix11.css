@@ -1,0 +1,81 @@
+/* set.Line 11: the polish pass (fix11.js) */
+
+/* 7. sections sit on one line: 10b's ".ix10 { position: relative }" (for the hover ⋯) came after ".sec { position:
+   absolute }" and turned each section block into an inline box, so they wrapped onto a second line over the Click
+   track. Section blocks stay absolute; the Sections row never grows. */
+.secs .sec, .secs .sec.ix10 { position: absolute; }
+.row.secs > .lane { overflow: hidden; }
+.sec .snm11 { overflow: hidden; text-overflow: ellipsis; }
+
+/* 3. setlist rows: the version switcher ("Album ▾") instead of ‹ ›; the ⋯ button has its own space at the right */
+#songs > .song { padding-right: 34px; }
+#songs > .song .more10 { right: 5px; }
+#songs > .song:is(:hover, :focus-within) .d { visibility: visible; }
+#songs > .song .t { min-width: 0; }
+#songs > .song .nm11 { display: inline; }
+#songs > .song .vrow11 { display: flex; align-items: center; gap: 6px; margin-top: 2px; min-width: 0; }
+#songs > .song .vsw11 { display: inline-block; min-width: 0; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 0; padding: 1px 5px; margin-left: -5px;
+  border-radius: 5px; background: transparent; color: #7fe0cf; font: inherit; font-size: 11px; font-weight: 500; cursor: pointer; text-align: left; }
+#songs > .song .vsw11:hover, #songs > .song .vsw11:focus-visible { background: rgba(34, 195, 166, .14); outline: none; }
+#songs > .song .vlen11 { color: #7fe0cf; font-size: 11px; opacity: .8; white-space: nowrap; }
+#songs > .song .vrow11 .dots { margin: 0; flex: none; }
+
+/* 5. no coloured box around songs with versions (the switcher and the dots already say so); the real indicators */
+#songs > .song.stk, #songs > .song.stk.on { outline: none; box-shadow: none; margin: 0 0 1px 0; }
+#songs > .song.stk:not(.on) { background: transparent; }
+#songs > .song.stk.on { background: rgba(255, 255, 255, .1); }
+#songs > .song:focus-visible, #songs > .brk9:focus-visible { outline: 1px solid rgba(255, 255, 255, .32); outline-offset: -1px; }
+#songs > .song.pl11 .n { color: #30d158; }
+#songs > .song.pl11 .n::after { content: "▶"; font-size: 8px; margin-left: 2px; vertical-align: 1px; }
+
+/* 2. ⋯ on a version row */
+.vstrip .vr { position: relative; }
+.vstrip .vr .more11 { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); opacity: 0; border: 0; background: rgba(255, 255, 255, .08); color: #d8dae0; border-radius: 6px; height: 20px; min-width: 22px; padding: 0 5px; font-size: 13px; line-height: 1; cursor: pointer; }
+.vstrip .vr:is(:hover, :focus-within) .more11 { opacity: 1; }
+.vstrip .vr:is(:hover, :focus-within) small { visibility: hidden; }
+
+/* 11. M / S: filled when on, an outline when off, on every theme and without hovering */
+.row.trk .ms .mb, .row.trk .ms .sb { background: transparent !important; color: var(--muted, #9aa0aa) !important; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .22) !important; opacity: 1; }
+.row.trk .ms .mb:hover, .row.trk .ms .sb:hover { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .45) !important; color: var(--text, #fff) !important; }
+.row.trk .ms .mb.on { background: var(--accent, #ff9f0a) !important; color: #2b1600 !important; box-shadow: none !important; }
+.row.trk .ms .sb.on { background: #ffd60a !important; color: #2b2200 !important; box-shadow: none !important; }
+
+/* 11. a narrow header shortens the name first; the output picker keeps "Out 1" */
+.row.trk > .lh .tn { flex: 1 1 auto; min-width: 24px; }
+.row.trk > .lh .ochip { flex: 0 0 auto; min-width: 0; max-width: 112px; }
+.row.trk > .lh .tnm11 { overflow: hidden; text-overflow: ellipsis; }
+
+/* 11. a song without a click track: "＋ Add click track" stands out */
+.add .addT.sug11 { border-color: rgba(245, 197, 24, .6); color: #f5c518; }
+.add:has(.sug11) { opacity: 1; }
+
+/* 11. the sideways scrollbar has its own strip under the lanes (it sat over the last track's labels) */
+#scroller.hb11 { margin-bottom: 10px; }
+.hb9 { height: 8px; }
+.hb9 i { top: 1px; }
+
+/* 11. the click clip editor's top edge: a visible handle to drag */
+#clk10 .crz10 { top: -4px; height: 8px; }
+#clk10 .crz10::after { content: ""; position: absolute; left: 50%; top: 3px; width: 36px; height: 3px; margin-left: -18px; border-radius: 2px; background: rgba(255, 255, 255, .22); }
+#clk10 .crz10:hover::after { background: rgba(255, 255, 255, .5); }
+
+/* 6. suggested sections: their colours, faint and dashed, "Suggested" on the first; the buttons in a bar above */
+.gsec11 { position: absolute; top: 4px; bottom: 4px; box-sizing: border-box; border: 1.5px dashed var(--sc); border-radius: 5px; background: color-mix(in srgb, var(--sc) 18%, transparent); pointer-events: none; overflow: hidden; display: flex; align-items: center; gap: 5px; padding: 0 6px; }
+@supports not (background: color-mix(in srgb, red 50%, blue)) { .gsec11 { background: rgba(255, 255, 255, .05); } }
+.gsec11 span { font-size: 11px; font-weight: 600; color: var(--sc); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: .95; }
+.gsec11 .gtag11 { flex: none; font-style: normal; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 1px 4px; border-radius: 3px; background: rgba(255, 255, 255, .12); color: #e6e8ee; }
+.sug11 { display: flex; align-items: center; gap: 4px; height: 24px; box-sizing: border-box; padding: 0 8px 0 12px; background: rgba(255, 180, 40, .07); border-top: 1px solid rgba(255, 180, 40, .18); font-size: 11.5px; color: #ffcf6b; position: sticky; left: 0; white-space: nowrap; }
+.sug11 .sgt11 { margin-right: 6px; }
+.sug11 .sgb11 { border: 0; background: rgba(255, 255, 255, .07); color: #e9eaee; border-radius: 5px; height: 19px; padding: 0 8px; font: inherit; font-size: 11px; cursor: pointer; }
+.sug11 .sgb11:hover { background: rgba(255, 255, 255, .15); }
+.sug11 .sgb11.pri { background: #ff9f0a; color: #1b1200; font-weight: 600; }
+
+/* 8. the click editor's left column: the two thin top rows */
+#clk10 .crl10 { display: flex; flex-direction: column; justify-content: flex-start; font-size: 10px; color: #6d727c; line-height: 1; }
+#clk10 .crl10 span { height: 14px; display: flex; align-items: center; }
+
+/* 3 (overlap audit): the track header's ⋯ gets its own space at the right edge (in WebKit it sat 2 px over S), and
+   the hover trash button that sat under ⋯ is gone (⋯ › Delete track, or ⌫) */
+.scroller .row.trk > .lh { padding-right: 30px; }
+.row.trk > .lh .more10 { top: 50% !important; transform: translateY(-50%); right: 4px; }
+.row.trk > .lh .tdel9 { display: none !important; }

@@ -492,16 +492,16 @@
   }, true);
   document.addEventListener("click", (e) => {
     const b = e.target.closest && e.target.closest(".tdel9"); if (!b) return; e.stopPropagation();
-    const lh = b.closest(".lh"), s = songs.find((x) => x.id === lh.dataset.song); if (s) deleteTrack(s, lh.dataset.track, !!(s.files && s.files[lh.dataset.track] && s.files[lh.dataset.track].rec));
+    const lh = b.closest(".lh"), s = songs.find((x) => x.id === lh.dataset.song); if (s) SL9.deleteTrack(s, lh.dataset.track, !!(s.files && s.files[lh.dataset.track] && s.files[lh.dataset.track].rec));
   }, true);
   // ⌘D on a track (when one is open in the panel)
   document.addEventListener("keydown", (e) => {
     if (!(e.key === "d" || e.key === "D") || !(e.metaKey || e.ctrlKey) || e.shiftKey) return;
     const t = e.target; if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
-    if (typeof trackOpen !== "undefined" && trackOpen && trackOpen.song) { const s = songs.find((x) => x.id === trackOpen.song); if (s && !["Click", "Cues"].includes(trackOpen.track)) { e.preventDefault(); e.stopImmediatePropagation(); dupTrack(s, trackOpen.track); } }
+    if (typeof trackOpen !== "undefined" && trackOpen && trackOpen.song) { const s = songs.find((x) => x.id === trackOpen.song); if (s && !(typeof ROLE !== "undefined" && ROLE[trackOpen.track] === "cues")) { e.preventDefault(); e.stopImmediatePropagation(); SL9.dupTrack(s, trackOpen.track); } }
   }, true);
   // the trash button appears in every track header the page draws
-  new MutationObserver(() => { document.querySelectorAll(".trk .lh:not(.t9)").forEach((lh) => { lh.classList.add("t9"); if (["Click", "Cues"].includes(lh.dataset.track)) return; lh.insertAdjacentHTML("beforeend", `<button class="tdel9" title="Delete track" aria-label="Delete track">${iconOf("del")}</button>`); }); })
+  new MutationObserver(() => { document.querySelectorAll(".trk .lh:not(.t9)").forEach((lh) => { lh.classList.add("t9"); lh.insertAdjacentHTML("beforeend", `<button class="tdel9" title="Delete track" aria-label="Delete track">${iconOf("del")}</button>`); }); })
     .observe($("scroller"), { childList: true, subtree: true });
 
   // ---------------------------------------------------------------- the sidebar footer (+ Song) and the select icon

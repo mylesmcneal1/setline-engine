@@ -503,6 +503,7 @@ Bridge::Options Bridge::addTo(Options o)
     o = add(o, "libraryList", [this](const juce::var&) { return lib.list(); });
     o = add(o, "libraryCreate", [this](const juce::var& a) { return lib.create(a["name"].toString()); });
     o = add(o, "libraryRename", [this](const juce::var& a) { return libraryOpened(lib.rename(a["name"].toString())); });
+    o = add(o, "libraryDelete", [this](const juce::var& a) { return lib.remove(a["name"].toString()); });
     o = add(o, "libraryWrite", [this](const juce::var& a) { return lib.write(a["files"], a["remove"]); });
     o = add(o, "libraryBackup", [this](const juce::var& a) { return lib.backup(a["text"].toString(), a["reason"].toString()); });
     o = add(o, "libraryBackups", [this](const juce::var&) { return lib.backups(); });

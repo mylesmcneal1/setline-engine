@@ -16,9 +16,12 @@ body.drag10, body.drag10 * { cursor: grabbing !important; -webkit-user-select: n
   background: #ff9f0a; box-shadow: 0 0 0 1px rgba(0, 0, 0, .35), 0 0 8px rgba(255, 159, 10, .55);
 }
 .line10.blue { background: #0a84ff; box-shadow: 0 0 0 1px rgba(0, 0, 0, .35), 0 0 8px rgba(10, 132, 255, .55); }
+/* 11: the field sits exactly on the name (its box, font and padding); the ring is drawn outside the box */
 .ren10 {
-  position: fixed; z-index: 10001; padding: 0 8px; border-radius: 6px; border: 1.5px solid var(--acc, #0a84ff);
-  background: #16181d; color: #fff; outline: none; box-shadow: 0 6px 20px rgba(0, 0, 0, .5);
+  position: fixed; z-index: 10001; margin: 0; border: 0; box-sizing: border-box; outline: none; min-width: 0;
+  box-shadow: 0 0 0 1.5px var(--accent, #0a84ff), 0 0 0 4px rgba(10, 132, 255, .18); -webkit-appearance: none; appearance: none;
 }
+.ren10::selection { background: rgba(10, 132, 255, .45); }
 /* the name can be edited: ✎ on hover */
 #hero .htitle h2:hover::after, .card9 .c9h b:hover::after, .row9 .r9n:hover::after { content: " ✎"; font-size: .7em; font-weight: 400; opacity: .5; }
+body.ren11on :is(#hero .htitle h2, .card9 .c9h b, .row9 .r9n):hover::after { content: none; }

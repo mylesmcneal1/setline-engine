@@ -132,7 +132,7 @@
   function barSpec() {
     if (showing() || (typeof songSel !== "undefined" && songSel.size > 1)) return null;
     const T = typeof trackOpen !== "undefined" && trackOpen && songOf(trackOpen.song) && window.SLDrag && SLDrag.area() === "track" ? trackOpen : null;
-    if (T) { const s = songOf(T.song), t = T.track, fx = ["Click", "Cues"].includes(t);
+    if (T) { const s = songOf(T.song), t = T.track, fx = typeof ROLE !== "undefined" && ROLE[t] === "cues"; // 11: click tracks delete like any other
       return { kind: "Track", name: t, items: [["Rename", () => SLMenus.run("m:renameTrack"), fx], ["Colour", (b) => { const r = b.getBoundingClientRect(); swatchPop({ left: r.left, right: r.left, top: r.bottom, bottom: r.bottom }, trackCol(s, t), (c) => { snap(); (s.tcol || (s.tcol = {}))[t] = c; refresh(); }); }],
         ["Height ▾", (b) => { const r = b.getBoundingClientRect(); ctxMenu({ clientX: r.left, clientY: r.bottom + 4 }, SLMenus.toCtx(SLMenus.objItems("track", s, t).find((x) => x.label === "Height").sub, { clientX: r.left, clientY: r.bottom + 4 })); }],
         ["Delete", () => SL9.deleteTrack(s, t), fx || (typeof playing !== "undefined" && playing)]] }; }
@@ -183,6 +183,7 @@
     const acts = SLMenus.flat().filter((x) => !x.dis && !/^(lib|set|scol|tcol|th_|ths|acc_|pair_|size_|tp_|ver|trackSize|sort_|th\d|zoom_)/.test(x.id) || (q && !x.dis && /^(th_|acc_|pair_|size_|tp_|trackSize|zoom_|sort_)/.test(x.id)));
     const songCtx = /^(renameSong|dupSong|deleteSong|newVersion|addSection|addMeter|addTempo|secsFromCues|addToSet|sortMidi|exportSong|addAudio|addClick|addMidi|editClick)$/;
     for (const a of acts) { const label = (a.path.length > 1 ? a.path.slice(1).join(" › ") + " › " : "") + a.label; const sc = score(q, label + " · " + (a.help || "")) || (q.length > 2 && a.path[0].toLowerCase().startsWith(q.toLowerCase()) ? 40 : 0); if (sc) out.push({ g: "Actions", label, key: a.keyText, ctx: songCtx.test(a.id) && s ? "this song" : "", sc: sc + (used()[a.id] || 0) * (q ? 2 : 10), run: () => { noteAct(a.id); SLMenus.run("m:" + a.id); } }); }
+    if (window.SL11 && q) for (const x of SL11.palette(q, score)) out.push(x); // 11: every object by name, with its actions
     for (const x of songs) { const sc = score(q, x.name); if (q && sc) out.push({ g: "Songs", label: x.name, key: "", ctx: setOrder.includes(x.id) ? "#" + (setOrder.indexOf(x.id) + 1) : "", sc, run: () => openSong(x.id) }); }
     for (const l of setlists) { const sc = score(q, l.name + " setlist"); if (q && sc) out.push({ g: "Setlists", label: l.name, key: "", ctx: (l.order || []).length + " songs", sc, run: () => { if (useSet(l.id) !== false) refresh(); } }); }
     for (const [l, k] of SETTINGS()) { const sc = score(q, l + " settings"); if (q && sc) out.push({ g: "Settings", label: l, key: "", ctx: "", sc, run: () => openSettings(k) }); }
@@ -192,7 +193,7 @@
       const A = out.filter((x) => x.g === "Actions").sort((a, b) => b.sc - a.sc).slice(0, 7).map((x) => ({ ...x, g: "Actions" }));
       return [...R, ...A];
     }
-    const order = { Actions: 0, Songs: 1, Setlists: 2, Settings: 3, Help: 4 };
+    const order = { Actions: 0, Edit: 1, Songs: 2, Setlists: 3, Settings: 4, Help: 5 };
     out.sort((a, b) => b.sc - a.sc);
     const top = out.slice(0, 40);
     top.sort((a, b) => order[a.g] - order[b.g] || b.sc - a.sc);
@@ -228,7 +229,7 @@
   }
 
   // ================================================================ the ⌘/ shortcut sheet (from the menus' own keys)
-  const PAGE_KEYS = [["Playback", "Play / Stop", "Space"], ["Playback", "Next song", "N"], ["Playback", "Previous song", "P"], ["Playback", "Next version", "V"], ["Playback", "Go to start", "↩"],
+  const PAGE_KEYS = [["Playback", "Play / Stop", "Space"], ["Playback", "Next song", "N"], ["Playback", "Previous song", "P"], ["Playback", "Next version", "V"], ["Setlist", "The selected song’s previous / next version", "⌥[ ⌥]"], ["Playback", "Go to start", "↩"],
     ["Playback", "Loop the section", "C"], ["Playback", "Click on / off", "K"], ["Playback", "Leave the loop", "L"],
     ["Editing", "Rename", "↩"], ["Editing", "Delete", "⌫"], ["Editing", "Move up / down", "⌥↑ ⌥↓"], ["Editing", "Copy while dragging", "⌥ drag"], ["Editing", "Cancel", "Esc"],
     ["View", "Zoom at the pointer", "⌥ scroll"], ["View", "Zoom in / out", "= −"], ["View", "Pinch to zoom", "trackpad"], ["View", "Setlist sidebar", "["], ["View", "Side panel", "]"], ["View", "Back to all songs", "Esc"]];

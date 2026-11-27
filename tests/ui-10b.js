@@ -21,7 +21,7 @@ async function check10b() {
     ["Edit", "Duplicate"], ["Edit", "Rename…"], ["Edit", "Select songs"], ["Library", "New library…"], ["Library", "Merge as versions…"], ["Library", "Unmerge version"], ["Library", "Sort by › Name"],
     ["Song", "Rename song…"], ["Song", "Duplicate song"], ["Song", "Delete song…"], ["Song", "New version"], ["Song", "Make sections from cues…"], ["Song", "Add to setlist"], ["Song", "Sort tracks: MIDI to the bottom"],
     ["Track", "Add audio track"], ["Track", "Add click track"], ["Track", "Add MIDI track"], ["Track", "Rename track…"], ["Track", "Move up"], ["Track", "Edit click (MIDI clip)"],
-    ["Setlist", "Add song…"], ["Setlist", "Add break"], ["Setlist", "Remove from setlist"], ["Setlist", "Rename setlist…"], ["Setlist", "Delete setlist…"],
+    ["Setlist", "Add song…"], ["Setlist", "Add break"], ["Setlist", "Remove from setlist"], ["Setlist", "Rename setlist…"], ["Setlist", "Delete setlist"],
     ["View", "Cards"], ["View", "Folders"], ["View", "Fit all"], ["View", "Setlist sidebar"], ["View", "Side panel"], ["View", "Zoom › Zoom in"], ["View", "Track height › Mini"],
     ["Help", "Quick start"], ["Help", "Keyboard shortcuts"], ["Help", "Report a problem…"]]) ok(has(m, l), `${m} › ${l}`);
   ok(!labels("Customize").some((l) => /Density/.test(l)), "Customize: no Density (View › Track height has the sizes)");

@@ -20,7 +20,9 @@
   const song = () => songOf(focusId || selId);
   const area = () => (window.SLDrag && SLDrag.area ? SLDrag.area() : "set");
   const trk = () => (typeof trackOpen !== "undefined" && trackOpen && songOf(trackOpen.song) ? { s: songOf(trackOpen.song), t: trackOpen.track } : null);
-  const fixedT = (t) => ["Click", "Cues"].includes(t);
+  const fixedT = (t) => typeof ROLE !== "undefined" && ROLE[t] === "cues"; // 11: one cue track per song (no copy)
+  const noMove = (t) => typeof ROLE !== "undefined" && (ROLE[t] === "cues" || ROLE[t] === "click");
+  const O11 = (what) => !!(window.SL11 && SL11.run(what)); // 11: what was clicked last (a marker, a version, a tempo change…)
   const sel = () => (typeof songSel !== "undefined" && songSel.size > 1 ? [...songSel] : []);
   const breaks = () => window.SLBreaks || null;
   const tab = (t) => { const a = document.querySelector(`.tabs a[data-tab="${t}"]`); if (a) a.click(); };
@@ -33,17 +35,19 @@
   const sub = (label, items, dis) => ({ label, sub: items, dis: !!dis });
 
   // ================================================================ the actions behind more than one menu
-  const renameAny = () => { const T = trk(); if (area() === "track" && T && !fixedT(T.t)) { renameTrack(T.s, T.t); return; }
+  const renameAny = () => { if (O11("rename")) return; const T = trk(); if (area() === "track" && T) { renameTrack(T.s, T.t); return; }
     if (typeof selSec !== "undefined" && selSec && songOf(selSec.song)) { renameSec(songOf(selSec.song), selSec.id); return; }
     const s = song(); if (s) renameSong(s.id); };
   const renameTrack = (s, t) => { const el = document.querySelector(`.row.trk > .lh[data-song="${s.id}"][data-track="${CSS.escape(t)}"] .tn`); renameTrackBox(s, t, el || document.body); };
   const dupAny = () => { const T = trk(); if (area() === "track" && T && !fixedT(T.t)) { SL9.dupTrack(T.s, T.t); return; }
     if ((typeof multiOn === "function" && multiOn()) || (typeof curItem === "function" && curItem())) { doDup(); return; }
     const s = song(); if (s && !stage()) dupSong(s.id); };
-  const delAny = () => { const T = trk(); if (area() === "track" && T && !fixedT(T.t)) { SL9.deleteTrack(T.s, T.t); return; }
+  const delAny = () => { if (O11("delete")) return; const T = trk(); if (area() === "track" && T) { SL9.deleteTrack(T.s, T.t); return; }
+    const bk = document.querySelector("#songs .brk9.on"); if (bk && breaks() && area() !== "track") { breaks().del(bk.dataset.b); return; }
     if ((typeof multiOn === "function" && multiOn()) || (typeof curItem === "function" && curItem())) { doDelete(); return; }
     const ids = sel(); if (ids.length) { deleteSongs(ids, typeof songSelFrom !== "undefined" ? songSelFrom : "menu"); return; }
     const s = song(); if (s) deleteSong(s.id); };
+  const editAny = () => { if (O11("edit")) return; const T = trk(); if (T) { openTrack(T.s, T.t); return; } if (typeof selSec !== "undefined" && selSec && songOf(selSec.song)) { renderInsp(); if (!isOpen("R")) setPanel("R", true, true); return; } const s = song(); if (s) openSong(s.id); };
   const colourSong = (s, at) => swatchPop({ left: at.clientX, right: at.clientX, top: at.clientY, bottom: at.clientY }, s.col, (c) => { snap(); s.col = c; refresh(); toast(`Changed the colour of “${s.name}”`, undo); });
   const colourTrack = (s, t, at) => swatchPop({ left: at.clientX, right: at.clientX, top: at.clientY, bottom: at.clientY }, trackCol(s, t), (c) => { snap(); (s.tcol || (s.tcol = {}))[t] = c; refresh(); toast(`Changed the colour of “${t}”`, undo); });
   const PAL_NAMES = () => (typeof PAL !== "undefined" ? PAL : []);
@@ -86,7 +90,8 @@
       it("undo", "Undo", () => undo(), { key: "cmd+z" }), it("redo", "Redo", () => redo(), { key: "cmd+shift+z" }), sep(),
       it("cut", "Cut", () => doCut(), { key: "cmd+x" }), it("copy", "Copy", () => doCopy(), { key: "cmd+c" }), it("paste", "Paste", () => doPaste(), { key: "cmd+v" }),
       it("duplicate", "Duplicate", dupAny, { key: "cmd+d" }), it("delete", "Delete", delAny, { key: "backspace", dis: st }), sep(),
-      it("rename", "Rename…", renameAny, { key: "return", dis: !s && !T }),
+      it("rename", "Rename…", renameAny, { key: "return", dis: !s && !T && !(window.SL11 && SL11.current()) }),
+      it("editObj", "Edit…", editAny, { dis: !s && !T && !(window.SL11 && SL11.current()), help: "Edit what’s selected" }),
       it("selectAll", "Select all", () => { const x = song(); if (x && typeof selectAllIn === "function") selectAllIn(x); }, { key: "cmd+a", dis: !s }),
       it("selectMode", "Select songs", () => window.SL9 && SL9.select(!SL9.state.sel), { key: "cmd+shift+s", check: !!(window.SL9 && SL9.state.sel) }),
       sep(), it("palette", "Search or do anything…", () => window.SLix && SLix.palette(), { key: "cmd+k" }),
@@ -97,7 +102,8 @@
       sub("Switch library", libs.map((l, i) => it("lib" + i, l.name + (l.songs !== undefined ? `  (${l.songs})` : ""), () => mod().switchLibrary(l.name), { check: l.current, dis: p || l.current })), !libs.length),
       sep(),
       it("newLibrary", "New library…", () => mod().newLibrary(), { dis: p }),
-      it("renameLibrary", "Rename library…", () => mod().renameLibrary(), { dis: !curLib && native() }),
+      it("renameLibrary", "Rename library…", () => (window.SL11 && curLib ? SL11.items("library", curLib.name).find((x) => x.id === "y11ren").act() : mod().renameLibrary()), { dis: !curLib && native() }),
+      sub("Delete library", libs.filter((l) => !l.current).map((l, i) => it("libDel" + i, l.name + "…", () => mod().deleteLibrary && mod().deleteLibrary(l.name), { danger: true, dis: p })), !libs.some((l) => !l.current) || !mod().deleteLibrary),
       it("revealLibrary", reveal, () => mod().reveal()),
       sep(),
       it("mergeVersions", "Merge as versions…", () => window.SL10c && SL10c.mergeBox(many.length ? many : s ? [s.id] : []), { dis: !window.SL10c || st }),
@@ -112,6 +118,10 @@
       it("deleteSong", "Delete song…", () => deleteSong(s.id), { dis: !s || st, danger: true }),
       sep(),
       sub("Versions", verItems(s, "ver"), !s),
+      ...(window.SL11 && s ? [sub("Edit version", versOf(s).map((v, i) => sub(v.name, objOf("version", s, v.id, "ev" + i))), false),
+        sub("Markers", (s.marks || []).map((m, i) => sub(m.name || "Marker", objOf("marker", s, i, "mk" + i))), !(s.marks || []).length),
+        sub("Tempo changes", s.tmap.filter((e) => e.bpm).map((e, i) => sub(`Bar ${e.bar} · ${fmtBpm(e.bpm)} BPM`, objOf("tempo", s, e.bar, "tp" + i)))),
+        sub("Time signatures", s.tmap.filter((e) => e.sig).map((e, i) => sub(`Bar ${e.bar} · ${e.sig.join("/")}`, objOf("meter", s, e.bar, "ms" + i))))] : []),
       it("newVersion", "New version", () => { snap(); const v = newVer(s); refresh(); toast(`Added the version “${v.name}”`, undo); }, { dis: !s }),
       sep(),
       it("addSection", "Add section", () => { const x = song(); if (x) addSecAt(x, playId === x.id ? barAtTime(x, pos) : 1); }, { key: "cmd+alt+s", dis: !s }),
@@ -128,10 +138,10 @@
       it("addClick", "Add click track", () => addTrack(ts, "click"), { dis: !ts || st }),
       it("addMidi", "Add MIDI track", () => addTrack(ts, "midi"), { dis: !ts || st }),
       sep(),
-      it("renameTrack", "Rename track…", () => renameTrack(T.s, T.t), { dis: !T || fixedT(T.t) }),
+      it("renameTrack", "Rename track…", () => renameTrack(T.s, T.t), { dis: !T }),
       sub("Colour", T ? colourItems(trackCol(T.s, T.t), (c) => { snap(); (T.s.tcol || (T.s.tcol = {}))[T.t] = c; refresh(); }, "tcol") : [], !T),
       it("dupTrack", "Duplicate track", () => SL9.dupTrack(T.s, T.t), { dis: !T || fixedT(T.t) || st }),
-      it("deleteTrack", "Delete track", () => SL9.deleteTrack(T.s, T.t), { dis: !T || fixedT(T.t) || st, danger: true }),
+      it("deleteTrack", "Delete track", () => SL9.deleteTrack(T.s, T.t), { dis: !T || st, danger: true }),
       sep(),
       it("trackUp", "Move up", () => moveTrack(-1), { key: "alt+up", dis: !T }),
       it("trackDown", "Move down", () => moveTrack(1), { key: "alt+down", dis: !T }),
@@ -152,7 +162,7 @@
       sep(),
       it("renameSet", "Rename setlist…", () => setlistCmd("ren")),
       it("dupSet", "Duplicate setlist", () => setlistCmd("dup"), { dis: p }),
-      it("deleteSet", "Delete setlist…", () => setlistCmd("del"), { dis: st || setlists.length < 2, danger: true }),
+      it("deleteSet", "Delete setlist", () => (window.SL11 ? SL11.delSetlist(curSet) : setlistCmd("del")), { dis: st, danger: true }),
     ];
     const v = window.SL9 ? SL9.mode() : "cards";
     const view = [
@@ -224,6 +234,8 @@
     while (out.length && out[out.length - 1] === "-") out.pop();
     return out;
   }
+  // 11: fix11.js's items as menu items (ids prefixed so two objects in one menu bar don't clash)
+  function objOf(kind, a, b, pre, keys) { const L = (window.SL11 && SL11.items(kind, a, b)) || []; return L.map((x, i) => (x.sep ? sep() : it(pre + "_" + x.id, x.label, x.act, keys ? x : { ...x, key: "" }))); } // keys only in the object's own menu (the menu bar keeps one ↩)
   // the items for one object (they share ACT with the menu bar)
   function objItems(kind, a, b) {
     spec(); // fills ACT for the shared ids
@@ -254,6 +266,7 @@
     if (kind === "break") {
       const B = breaks(); const bk = B && B.list().find((x) => x.id === a); if (!bk) return [];
       return [
+        it("bRename", "Rename…", () => window.SL11 && SL11.renameBreak(a), { key: "return" }),
         it("bEdit", "Edit break…", () => { B.select(a); if (typeof setPanel === "function" && !isOpen("R")) setPanel("R", true, true); }),
         sub("Label", B.LABELS.map((l, i) => it("bLab" + i, l, () => { snap(); bk.label = l; bk.len = B.DEFLEN[l] || bk.len; refresh(); }, { check: bk.label === l }))),
         sep(),
@@ -266,17 +279,17 @@
     if (kind === "track") {
       const s = a, t = b, fx = fixedT(t), i = s.tracks.indexOf(t);
       return [
-        it("tRename", "Rename…", () => renameTrack(s, t), { dis: fx, key: "return" }),
+        it("tRename", "Rename…", () => renameTrack(s, t), { key: "return" }),
         sub("Colour", colourItems(trackCol(s, t), (c) => { snap(); (s.tcol || (s.tcol = {}))[t] = c; refresh(); toast(`Changed the colour of “${t}”`, undo); }, "otc")),
         it("tDup", "Duplicate", () => SL9.dupTrack(s, t), { dis: fx || st }),
         sep(),
         it("tUp", "Move up", () => SLDrag.stepTrack(s, t, -1), { key: "alt+up", dis: i === 0 }),
         it("tDown", "Move down", () => SLDrag.stepTrack(s, t, 1), { key: "alt+down", dis: i === s.tracks.length - 1 }),
-        it("tMove", "Move to another song…", () => SL9.trackMenu && SL9.moveTrackMenu ? SL9.moveTrackMenu(at0(), s, t) : null, { dis: fx || songs.length < 2 || !SL9.moveTrackMenu }),
+        it("tMove", "Move to another song…", () => SL9.trackMenu && SL9.moveTrackMenu ? SL9.moveTrackMenu(at0(), s, t) : null, { dis: noMove(t) || songs.length < 2 || !SL9.moveTrackMenu }),
         sub("Height", heights(s, "oth")),
-        ...(/^Click/.test(t) && window.SL10c ? [it("tClip", "Edit click (MIDI clip)", () => SL10c.openClip(s, t))] : []),
+        ...(typeof ROLE !== "undefined" && ROLE[t] === "click" && window.SL10c ? [it("tClip", "Edit click (MIDI clip)", () => SL10c.openClip(s, t))] : []),
         sep(),
-        it("tDel", "Delete track", () => SL9.deleteTrack(s, t), { dis: fx || st, danger: true }),
+        it("tDel", "Delete track", () => SL9.deleteTrack(s, t), { dis: st, danger: true }),
       ];
     }
     if (kind === "section") {
@@ -294,6 +307,8 @@
         it("sDel", "Delete", () => deleteSec(s, b), { danger: true }),
       ];
     }
+    // 11: versions, markers, tempo and time signature changes, setlists, libraries, presets, cue words, scenes
+    if (window.SL11) { const L = SL11.items(kind, a, b); if (L) return objOf(kind, a, b, "o11", true); }
     return [];
   }
   // open an object's menu at a point (right-click) or under a button (⋯)

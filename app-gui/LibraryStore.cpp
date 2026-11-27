@@ -142,6 +142,19 @@ juce::var LibraryStore::rename(const juce::String& wanted)
     return obj({ { "name", name }, { "root", dir.getFullPathName() }, { "index", index().getFullPathName() } });
 }
 
+juce::var LibraryStore::remove(const juce::String& wanted)
+{
+    const auto name = Media::portableName(wanted.trim());
+    if (name.isEmpty()) return err("Which library?");
+    const auto dir = root().getChildFile(name);
+    if (! dir.getChildFile("library.json").existsAsFile()) return err("There's no library called “" + name + "”.");
+    if (dir == current) return err("That library is open: switch to another one first.");
+    if (! dir.moveToTrash()) return err("Couldn't move the library to the Trash (is a file in it open elsewhere?).");
+    if (settings.getValue("lastLibrary") == name) settings.removeValue("lastLibrary");
+    applog::line("Library: moved to the Trash: " + dir.getFullPathName());
+    return obj({ { "ok", true }, { "name", name } });
+}
+
 juce::var LibraryStore::write(const juce::var& files, const juce::var& remove)
 {
     if (current == juce::File()) return err("No library is open.");

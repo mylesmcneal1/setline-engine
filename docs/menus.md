@@ -24,17 +24,17 @@ menu test (every item chosen through the native menu path arrives once), `set.Li
   for updates in Help.
 - **File:** New song… ⌘N · New setlist ⇧⌘N · Import: Ableton project… ⌘I, Audio as a new song…, set.Line package
   (.setline)… · Export: This song… ⌘E, This setlist… ⇧⌘E · Print setlist… ⌘P · Backups… · Clean up unused audio…
-- **Edit:** Undo ⌘Z · Redo ⇧⌘Z · Cut ⌘X · Copy ⌘C · Paste ⌘V · Duplicate ⌘D · Delete ⌫ · Rename… ↩ · Select all ⌘A ·
+- **Edit:** Undo ⌘Z · Redo ⇧⌘Z · Cut ⌘X · Copy ⌘C · Paste ⌘V · Duplicate ⌘D · Delete ⌫ · Rename… ↩ · Edit… · Select all ⌘A ·
   Select songs ⇧⌘S · Search or do anything… ⌘K
-- **Library:** Switch library › · New library… · Rename library… · Show in Finder / Explorer · Merge as versions… ·
+- **Library:** Switch library › · New library… · Rename library… · Delete library › (11: any library but the open one) · Show in Finder / Explorer · Merge as versions… ·
   Unmerge version · Sort by › (Name, Recently added, Length)
-- **Song:** Rename song… · Colour › · Duplicate song · Delete song… · Versions › · New version · Add section ⌥⌘S ·
+- **Song:** Rename song… · Colour › · Duplicate song · Delete song… · Versions › · Edit version › · Markers › · Tempo changes › · Time signatures › (11: each with its own Rename / Edit / Delete) · New version · Add section ⌥⌘S ·
   Add time signature… ⌥⌘M · Add tempo change… ⌥⌘T · Make sections from cues… · Add to setlist ⇧⌘A · Sort tracks:
   MIDI to the bottom
 - **Track:** Add audio track ⌘T · Add click track · Add MIDI track · Rename track… · Colour › · Duplicate track ·
   Delete track · Move up ⌥↑ · Move down ⌥↓ · Height › · Edit click (MIDI clip)
 - **Setlist:** Switch setlist › · Add song… · Add break ⌘B · Move up ⌥↑ · Move down ⌥↓ · Remove from setlist · Rename
-  setlist… · Duplicate setlist · Delete setlist…
+  setlist… · Duplicate setlist · Delete setlist (11: undo instead of a question; the last one too)
 - **View:** Show ⌘1 · Perform ⌘2 · Band ⌘3 · Cards ⌥⌘1 · Folders ⌥⌘2 · Collapse all ⌥⌘← · Zoom › (Zoom in ⌘=,
   Zoom out ⌘−, Whole song, 32 bars, 8 bars, Section) · Track height › (Mini … Huge, Shrink tracks ⌥⌘−, Grow tracks
   ⌥⌘=, Fit tracks to window ⇧⌥⌘F, Compact top rows) · Fit all ⌥⌘F · Setlist sidebar ⌥⌘L · Side panel ⌥⌘R
@@ -57,6 +57,9 @@ Copy etc. with a text field focused does the text edit (on the Mac: the standard
 - **Track header:** Rename… · Colour › · Duplicate · Move up / down · Move to another song… · Height › · Delete track
 - **Section:** Rename… · Colour › (its type) · Loop until released (vamp) · At its end › · Duplicate · Split at
   playhead · Delete
+- **11: everything else** (see docs/edit-anything.md): a version (its row, or the setlist row's “Album ▾”), a marker,
+  a tempo point, a time signature, the setlist name, a preset, a cue word: right-click, ⋯ where it has a row, Edit ›
+  Rename… / Edit… / Delete on the one clicked last, and ⌘K by name (“delete click”, “rename verse”).
 
 ## The eight visible behaviours
 1. **⌘K: search or do anything.** The search pill in the top bar or ⌘K: songs, setlists, every menu action with its

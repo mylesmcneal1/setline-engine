@@ -49,7 +49,7 @@ async function check10c() {
   { const s = S(Q); openSong(s.id); await wait(250); SL9.zoomNow(160 / (s.bars[1].t - s.bars[0].t)); await frames(2); document.getElementById("scroller").scrollLeft = 0; // 160 px a bar: an 8th is 20 px
     C.open(s, "Click"); await frames(3); C.setMode("draw"); C.setGrid(1); await frames(2);
     const G = C.geo(), cv = G.cv, r = cv.getBoundingClientRect(), X = (tk) => r.left + C.tkTime(S(Q), tk) * PXS - G.hx + 3;
-    const yA = r.top + 20 + 23, yC = r.top + 20 + 46 + 23, yV = r.top + 20 + 92 + 6;
+    const T0 = C.TOP || 20, yA = r.top + T0 + 23, yC = r.top + T0 + 46 + 23, yV = r.top + T0 + 92 + 6; // 11: the top rows (bar numbers, time signatures)
     const pe = (t, x, y, o = {}) => cv.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, buttons: t === "pointerup" ? 0 : 1, pointerId: 5, ...o }));
     const notes = () => C.clipOf(S(Q), "Click").notes, at = (tk, a) => notes().filter((n) => n.tk === tk && n.a === a);
     const t1 = C.barTk(s, 2) + PPQ / 2; // the "and" of beat 1 in bar 2 (an 8th, not drawn by the fill)
@@ -130,9 +130,9 @@ async function check10c() {
   // ================================================================ sections from cues
   { const s = S("paper"); const keep = JSON.stringify(s.secs); snap(); s.secs = []; s.cues = [{ id: "c1", bar: 1, beat: 1, text: "One" }, { id: "c2", bar: 1, beat: 2, text: "Two" }, { id: "c3", bar: 3, beat: 1, text: "Verse" }, { id: "c4", bar: 11, beat: 1, text: "Chorus" }, { id: "c5", bar: 19, beat: 1, text: "Go" }, { id: "c6", bar: 19, beat: 1, text: "Bridge" }];
     normSecs(s); buildBars(s); refresh(); openSong(s.id); await wait(250);
-    const ghosts = [...document.querySelectorAll(`.row.secs > .lane[data-song="${s.id}"] .ghost10`)].map((g) => g.textContent);
+    const ghosts = [...document.querySelectorAll(`.row.secs > .lane[data-song="${s.id}"] .gsec11 span`)].map((g) => g.textContent); // 11: the suggested sections
     ok(ghosts.join() === "Intro,Verse,Chorus,Bridge", "ghost sections in the empty Sections lane (count words skipped): " + ghosts.join());
-    const go = document.querySelector(`[data-gs="${s.id}"]`); ok(go && /Make these 4 sections/.test(go.textContent), "“Make these 4 sections” in the lane");
+    const go = document.querySelector(`.sug11 [data-gs="${s.id}"]`), bar = document.querySelector(`.sug11[data-song="${s.id}"]`); ok(go && /Use them/.test(go.textContent) && bar && /4 sections suggested/.test(bar.textContent), "11: “4 sections suggested from your cues · Use them” in a bar above the row");
     ok(!!document.querySelector(`.lhcues10[data-song="${s.id}"]`), "“From cues” in the Sections header");
     go.click(); await frames(2); ok(S("paper").secs.map((x) => `${x.name}@${x.start}+${x.bars}`).join() === `Intro@1+2,Verse@3+8,Chorus@11+8,Bridge@19+${S("paper").total - 18}`, "made: " + S("paper").secs.map((x) => `${x.name}@${x.start}+${x.bars}`).join());
     undo(); await frames(2); ok(!S("paper").secs.length, "undo takes them away");

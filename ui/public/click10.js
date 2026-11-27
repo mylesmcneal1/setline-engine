@@ -195,7 +195,7 @@
   // ================================================================ the clip editor (a panel under the timeline)
   let ED = null; // {s, t, mode, grid, sel:Set of notes, h}
   const GRIDS = [["1/4", PPQ], ["1/8", PPQ / 2], ["1/16", PPQ / 4], ["Triplet", PPQ / 3]];
-  const ROWH = 46, RULER = 20, VELH = 54;
+  const ROWH = 46, BARS = 15, METER = 13, RULER = BARS + METER, VELH = 54; // 11: bar numbers, then a time-signature row
   const store = { get: (k, d) => { try { const v = localStorage.getItem("setline." + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }, set: (k, v) => { try { localStorage.setItem("setline." + k, JSON.stringify(v)); } catch (e) {} } };
   function open(s, t) {
     t = t || clickTracksOf(s)[0];
@@ -216,7 +216,7 @@
       <button class="btn line cfill10" title="Accent on beat 1 (each group in odd meters), click on the other beats">Fill from time signature</button>
       <button class="btn line cpat10">Pattern ▾</button><button class="ibtn cmore10" title="More" aria-label="More">⋯</button><button class="ibtn cx10" title="Close  Esc" aria-label="Close">✕</button></div>
       <div class="chint10" hidden>Time signature changed: <b>Refill click?</b><button class="btn line" data-a="refill">Refill</button><button class="btn line" data-a="keep">Keep as drawn</button></div>
-      <div class="cb10"><div class="cl10"><div class="crl10" style="height:${RULER}px"></div><div class="crow10" style="height:${ROWH}px"><i style="background:#f2f3f6"></i><b>Accent</b><em>C3</em></div><div class="crow10" style="height:${ROWH}px"><i style="background:#f5c518"></i><b>Click</b><em>C#3</em></div><div class="cvl10">Velocity</div></div><canvas class="cc10"></canvas></div>`;
+      <div class="cb10"><div class="cl10"><div class="crl10" style="height:${RULER}px"><span>Bar</span><span>Time sig.</span></div><div class="crow10" style="height:${ROWH}px"><i style="background:#f2f3f6"></i><b>Accent</b><em>C3</em></div><div class="crow10" style="height:${ROWH}px"><i style="background:#f5c518"></i><b>Click</b><em>C#3</em></div><div class="cvl10">Velocity</div></div><canvas class="cc10"></canvas></div>`;
     const seg = (k, v) => p.querySelectorAll(`.seg10[data-k="${k}"] button`).forEach((b) => b.classList.toggle("on", b.dataset.v === String(v)));
     seg("mode", ED.mode); seg("grid", ED.grid);
     p.querySelectorAll(".seg10 button").forEach((b) => b.onclick = () => { const k = b.parentElement.dataset.k; if (k === "mode") { ED.mode = b.dataset.v; store.set("clkMode", ED.mode); } else { ED.grid = +b.dataset.v; store.set("clkGrid", ED.grid); } seg(k, ED[k]); draw(); });
@@ -260,32 +260,68 @@
     if (cv.width !== Math.round(G.w * dpr) || cv.height !== Math.round(G.h * dpr)) { cv.width = Math.round(G.w * dpr); cv.height = Math.round(G.h * dpr); }
     const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, G.w, G.h);
     const tA = G.hx / PXS, tB = (G.hx + G.w) / PXS, b0 = barOf(s, timeTk(s, Math.max(0, tA))).bar, b1 = Math.min(s.total, barOf(s, timeTk(s, Math.min(s.len, tB))).bar);
-    const p = $("clk10"); p.querySelector(".cbars10").textContent = `bars ${b0}–${b1} of ${s.total}`;
+    const p = $("clk10"); p.querySelector(".cbars10").textContent = `Bars ${b0}–${b1} on screen (of ${s.total})`;
     const hint = p.querySelector(".chint10"); hint.hidden = !(C.notes.length && C.sig !== sigKey(s));
     const yA = RULER, yC = RULER + ROWH, yV = RULER + 2 * ROWH + 6, hV = Math.max(20, G.h - yV - 4);
     // rows
     g.fillStyle = "rgba(255,255,255,.025)"; g.fillRect(0, yA, G.w, ROWH); g.fillStyle = "rgba(255,255,255,.04)"; g.fillRect(0, yC, G.w, ROWH);
-    // grid: bar lines (bar numbers, meter changes), grid lines
+    // grid: bar lines, grid lines (only when they're far enough apart to read)
     const st = step(); g.font = "10.5px Inter, sans-serif";
-    let prevSig = "";
+    const barW = (bar) => xOfTk(G, barTk(s, bar + 1)) - xOfTk(G, barTk(s, bar));
+    let minBar = 1e9; for (let bar = Math.max(1, b0); bar <= Math.min(s.total, b1); bar++) minBar = Math.min(minBar, barW(bar));
+    // 11: bar numbers thin out with the zoom (every bar, 2, 4, 8 or 16), never running into each other
+    const numW = g.measureText(String(s.total)).width + 8, every = [1, 2, 4, 8, 16, 32, 64].find((k) => k * minBar >= numW) || 64;
+    const gridOn = st * (minBar / (barTk(s, 2) - barTk(s, 1) || 1)) >= 4; // grid lines at least 4 px apart
     for (let bar = Math.max(1, b0 - 1); bar <= Math.min(s.total + 1, b1 + 1); bar++) {
       const bt = barTk(s, bar), x = xOfTk(G, bt); const nb = barTk(s, bar + 1);
-      if (bar <= s.total) for (let tk = bt + st; tk < nb - 1; tk += st) { const xx = xOfTk(G, Math.round(tk)); if (xx < -2 || xx > G.w + 2) continue; const onBeat = (Math.round(tk - bt)) % (PPQ * 4 / s.bars[bar - 1].sig[1]) === 0; g.fillStyle = onBeat ? "rgba(255,255,255,.09)" : "rgba(255,255,255,.04)"; g.fillRect(Math.round(xx), yA, 1, yV - 6 - yA); }
+      if (bar <= s.total && gridOn) for (let tk = bt + st; tk < nb - 1; tk += st) { const xx = xOfTk(G, Math.round(tk)); if (xx < -2 || xx > G.w + 2) continue; const onBeat = (Math.round(tk - bt)) % (PPQ * 4 / s.bars[bar - 1].sig[1]) === 0; g.fillStyle = onBeat ? "rgba(255,255,255,.09)" : "rgba(255,255,255,.04)"; g.fillRect(Math.round(xx), yA, 1, yV - 6 - yA); }
       if (x < -40 || x > G.w + 2) continue;
-      g.fillStyle = "rgba(255,255,255,.22)"; g.fillRect(Math.round(x), 0, 1, yV - 6);
-      if (bar <= s.total) { g.fillStyle = "#9aa0ab"; g.fillText(String(bar), x + 3, 13); const sig = s.bars[bar - 1].sig.join("/"); if (sig !== prevSig && (bar === b0 || meterChanges(s).some((c) => c.bar === bar))) { g.fillStyle = "#64d2ff"; g.fillText("· " + sig, x + 3 + g.measureText(String(bar)).width + 3, 13); } prevSig = sig; }
+      const lab = bar <= s.total && (bar - 1) % every === 0;
+      g.fillStyle = lab || every <= 2 ? "rgba(255,255,255,.22)" : "rgba(255,255,255,.08)"; g.fillRect(Math.round(x), lab ? 0 : BARS, 1, yV - 6 - (lab ? 0 : BARS));
+      if (lab) { g.fillStyle = "#9aa0ab"; g.fillText(String(bar), x + 3, 11); }
     }
+    // 11: the time signatures in their own row (the first one at the left edge, then each change)
+    g.fillStyle = "rgba(255,255,255,.03)"; g.fillRect(0, BARS, G.w, METER);
+    g.font = "600 9.5px Inter, sans-serif";
+    const chs = [{ bar: 1, sig: s.bars[0].sig }, ...meterChanges(s).filter((c) => c.bar > 1)];
+    let mEnd = -1e9;
+    chs.forEach((c, i) => { const x = Math.max(0, xOfTk(G, barTk(s, c.bar))), nx = chs[i + 1] ? xOfTk(G, barTk(s, chs[i + 1].bar)) : G.w + 1e6; if (nx < 0 || x > G.w) return;
+      const txt = c.sig.join("/"), tw = g.measureText(txt).width + 6; if (x < mEnd) return; const at = Math.max(x, Math.min(0, nx - tw));
+      g.fillStyle = "#64d2ff"; g.fillText(txt, at + 3, BARS + 10); mEnd = at + tw + 2; });
     // playhead
     if (typeof playId !== "undefined" && playId === s.id && typeof pos === "number") { const x = pos * PXS - G.hx; if (x >= 0 && x <= G.w) { g.fillStyle = "rgba(255,255,255,.7)"; g.fillRect(Math.round(x), 0, 1, G.h); } }
-    // notes and velocities
+    // notes and velocities: blocks when there's room, thin ticks under ~4 px, a density strip when zoomed far out
     const a0 = timeTk(s, Math.max(0, tA)) - PPQ, a1 = timeTk(s, Math.min(s.len, tB)) + PPQ;
-    for (const n of C.notes) {
-      if (n.tk < a0 || n.tk > a1) continue;
-      const x = xOfTk(G, n.tk), x2 = xOfTk(G, n.tk + (n.len || 120)), w = Math.max(4, Math.min(18, x2 - x)), sel = ED.sel.has(n), y = n.a ? yA : yC;
-      g.fillStyle = n.a ? "#f2f3f6" : "#f5c518"; g.globalAlpha = 0.55 + 0.45 * (n.v || 127) / 127;
-      g.beginPath(); g.roundRect(x, y + 6, w, ROWH - 12, 3); g.fill(); g.globalAlpha = 1;
-      if (sel) { g.strokeStyle = "#fff"; g.lineWidth = 2; g.beginPath(); g.roundRect(x - 1, y + 5, w + 2, ROWH - 10, 4); g.stroke(); g.strokeStyle = "#2f6df6"; g.lineWidth = 1; g.stroke(); }
-      const vh = hV * (n.v || 127) / 127; g.fillStyle = n.a ? "#f2f3f6" : "#f5c518"; g.fillRect(x, yV + hV - vh, Math.max(2, Math.min(5, w)), vh);
+    const vis = C.notes.filter((n) => n.tk >= a0 && n.tk <= a1);
+    const span = Math.max(1, G.w), perPx = vis.length / span; // notes per pixel
+    const noteW = (n) => xOfTk(G, n.tk + (n.len || 120)) - xOfTk(G, n.tk);
+    const mode = perPx > 0.45 ? "density" : vis.some((n) => noteW(n) < 4) ? "ticks" : "blocks";
+    ED.drawMode = mode;
+    const colA = "#f2f3f6", colC = "#f5c518";
+    if (mode === "density") {
+      const cols = Math.ceil(G.w), dA = new Float32Array(cols), dC = new Float32Array(cols);
+      for (const n of vis) { const x = Math.floor(xOfTk(G, n.tk)); if (x < 0 || x >= cols) continue; (n.a ? dA : dC)[x] += (n.v || 127) / 127; }
+      const strip = (d, y, col) => { let mx = 0; for (let i = 0; i < cols; i++) mx = Math.max(mx, d[i]); if (!mx) return; g.fillStyle = col;
+        for (let i = 0; i < cols; i++) if (d[i]) { g.globalAlpha = 0.25 + 0.75 * Math.min(1, d[i] / mx); g.fillRect(i, y + 10, 1, ROWH - 20); } g.globalAlpha = 1; };
+      strip(dA, yA, colA); strip(dC, yC, colC);
+    } else {
+      for (const n of vis) {
+        const x = xOfTk(G, n.tk), sel = ED.sel.has(n), y = n.a ? yA : yC;
+        g.fillStyle = n.a ? colA : colC; g.globalAlpha = 0.55 + 0.45 * (n.v || 127) / 127;
+        if (mode === "ticks") { g.fillRect(Math.round(x), y + 8, 1.5, ROWH - 16); g.globalAlpha = 1; if (sel) { g.fillStyle = "#5a8cff"; g.fillRect(Math.round(x) - 1, y + 4, 3.5, 3); } continue; }
+        const w = Math.max(4, Math.min(18, noteW(n)));
+        g.beginPath(); g.roundRect(x, y + 6, w, ROWH - 12, 3); g.fill(); g.globalAlpha = 1;
+        if (sel) { g.strokeStyle = "#fff"; g.lineWidth = 2; g.beginPath(); g.roundRect(x - 1, y + 5, w + 2, ROWH - 10, 4); g.stroke(); g.strokeStyle = "#2f6df6"; g.lineWidth = 1; g.stroke(); }
+      }
+    }
+    // velocity: a bar per note when they're apart, else the average per pixel column as a line (accents, clicks)
+    if (mode === "blocks") for (const n of vis) { const x = xOfTk(G, n.tk), w = Math.max(4, Math.min(18, noteW(n))), vh = hV * (n.v || 127) / 127; g.fillStyle = n.a ? colA : colC; g.fillRect(x, yV + hV - vh, Math.max(2, Math.min(5, w)), vh); }
+    else {
+      const cols = Math.ceil(G.w), sum = [new Float32Array(cols), new Float32Array(cols)], cnt = [new Uint16Array(cols), new Uint16Array(cols)];
+      for (const n of vis) { const x = Math.floor(xOfTk(G, n.tk)); if (x < 0 || x >= cols) continue; const k = n.a ? 1 : 0; sum[k][x] += n.v || 127; cnt[k][x]++; }
+      [[0, colC], [1, colA]].forEach(([k, col]) => { g.strokeStyle = col; g.lineWidth = 1.5; g.beginPath(); let on = false, lastX = -9;
+        for (let i = 0; i < cols; i++) { if (!cnt[k][i]) continue; const y = yV + hV - hV * (sum[k][i] / cnt[k][i]) / 127; if (!on || i - lastX > 24) { g.moveTo(i, y); on = true; } else g.lineTo(i, y); lastX = i; }
+        g.stroke(); });
     }
     g.fillStyle = "rgba(255,255,255,.08)"; g.fillRect(0, yV - 3, G.w, 1);
     if (BOX) { g.strokeStyle = "#5a8cff"; g.fillStyle = "rgba(90,140,255,.15)"; g.lineWidth = 1; const x = Math.min(BOX.x0, BOX.x1), y = Math.min(BOX.y0, BOX.y1); g.fillRect(x, y, Math.abs(BOX.x1 - BOX.x0), Math.abs(BOX.y1 - BOX.y0)); g.strokeRect(x + .5, y + .5, Math.abs(BOX.x1 - BOX.x0), Math.abs(BOX.y1 - BOX.y0)); }
@@ -365,6 +401,6 @@
   setInterval(() => { if (ED && (!songs.includes(ED.s) || !ED.s.tracks.includes(ED.t))) { const s = songOf(ED.s.id); if (s && s.tracks.includes(ED.t)) { ED.s = s; ED.sel.clear(); draw(); } else close(); } }, 500);
 
   // the Track menu's "Edit click (MIDI clip)", the selection bar's "No click" suggestion
-  window.SLClick = { PPQ, qMap, barTk, endTk, barOf, tkTime, timeTk, clipOf, migrate, fill, pattern, PATTERNS, regionsOf, hitsOf, sigKey, view, keep, open, close, editing: () => (ED ? { song: ED.s.id, track: ED.t, mode: ED.mode, grid: ED.grid, sel: [...ED.sel] } : null),
+  window.SLClick = { TOP: RULER, ROWH, BARS, METER, drawMode: () => (ED ? ED.drawMode : ""), PPQ, qMap, barTk, endTk, barOf, tkTime, timeTk, clipOf, migrate, fill, pattern, PATTERNS, regionsOf, hitsOf, sigKey, view, keep, open, close, editing: () => (ED ? { song: ED.s.id, track: ED.t, mode: ED.mode, grid: ED.grid, sel: [...ED.sel] } : null),
     setMode, setGrid: (i) => { if (ED) { ED.grid = i; store.set("clkGrid", i); segs(); draw(); } }, select: (L) => { if (ED) { ED.sel = new Set(L); draw(); } }, draw, geo: () => geo() };
 })();
