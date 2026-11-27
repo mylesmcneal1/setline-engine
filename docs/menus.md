@@ -108,3 +108,13 @@ page's single keys (Space, N, P, V, C, K, L, [, ], = −, ⌥ scroll, ↩, ⌫, 
 - **Cues:** Voice › · Announce › · Count-in › · Output › · Level… · Cue words… · Record missing words….
 - **View:** Show ⌘1 · Perform ⌘2 · Remote ⌘3 (no Side panel).
 - **Keys:** ⇧Space plays from the insert line, ⌥Space restarts from bar 1.
+
+## Phase 14
+- **Song:** Add marker… (new; at the insert marker or the playhead, its name ready to type). Add section, Add time
+  signature… and Add tempo change… work at the insert marker or the playhead too (no longer bar 1), and select what
+  they add; Add section splits the section it lands in.
+- **Track:** Add click / MIDI / audio track act on the open song and select the new track.
+- **Setlist:** Add break ⌘B and Edit break… open the break popup (also: + Break, double-click a break, its right-click ›
+  Edit…, ⌘K).
+- **Sync MIDI** (top bar, a pedal, a remote screen): the setlist's first song's bar-1 MIDI and the clock; hover for
+  the preview, ⌥-click for the selected song. Settings › MIDI no longer has a sync point.

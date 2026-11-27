@@ -133,9 +133,10 @@
         sub("Time signatures", s.tmap.filter((e) => e.sig).map((e, i) => sub(`Bar ${e.bar} · ${e.sig.join("/")}`, objOf("meter", s, e.bar, "ms" + i))))] : []),
       it("newVersion", "New version", () => { snap(); const v = newVer(s); refresh(); toast(`Added the version “${v.name}”`, undo); }, { dis: !s }),
       sep(),
-      it("addSection", "Add section", () => { const x = song(); if (x) addSecAt(x, playId === x.id ? barAtTime(x, pos) : 1); }, { key: "cmd+alt+s", dis: !s }),
-      it("addMeter", "Add time signature…", () => { const x = song(); if (x && window.SLMeter) SLMeter.open(x, playId === x.id ? barAtTime(x, pos) : 1, null); }, { key: "cmd+alt+m", dis: !s }),
-      it("addTempo", "Add tempo change…", () => { const x = song(); if (!x) return; const bar = Math.max(2, playId === x.id ? barAtTime(x, pos) : 2); addPoint(x, { bar, bpm: +bpmAt(x, bar).toFixed(3) }); tsel = { song: x.id, i: x.tmap.findIndex((e) => e.bar === bar) }; setTimeout(() => openTpop(true), 30); }, { key: "cmd+alt+t", dis: !s }),
+      it("addSection", "Add section", () => { const x = song(); if (x) SL14A.addSection(x); }, { key: "cmd+alt+s", dis: !s }),
+      it("addMeter", "Add time signature…", () => { const x = song(); if (x) SL14A.addMeter(x); }, { key: "cmd+alt+m", dis: !s }),
+      it("addTempo", "Add tempo change…", () => { const x = song(); if (x) SL14A.addTempo(x); }, { key: "cmd+alt+t", dis: !s }),
+      it("addMarker", "Add marker…", () => { const x = song(); if (x) SL14A.addMarker(x); }, { dis: !s }),
       it("secsFromCues", "Make sections from cues…", () => secsFromCuesAct(many), { dis: !s && !many.length }),
       sep(),
       sub("Song fields", s ? [...(typeof FIELDS !== "undefined" ? FIELDS : []).map((f, i) => it("sfield" + i, f.name + "…", () => D13 && D13.songInfo(s.id, "fields"))), ...((typeof FIELDS !== "undefined" && FIELDS.length) ? [sep()] : []),
@@ -148,7 +149,7 @@
       it("dupSong", "Duplicate song", () => dupSong(s.id), { dis: !s || st }),
       it("sortMidi", "Sort tracks: MIDI to the bottom", () => window.SL10a && SL10a.sortMidi(many.length ? many : s ? [s.id] : []), { dis: !s && !many.length }),
     ];
-    const ts = T ? T.s : s;
+    const ts = T && (!s || T.s === s) ? T.s : s; // 14 §4: the open song (a track still selected in another song isn't it)
     const TT = window.SL13M ? SL13M.track(T) : null, CL = window.SL13M ? SL13M.clip() : null;
     const trackM = [
       ...(T ? [head("Selected track · " + T.t)] : []),
@@ -189,7 +190,7 @@
       it("setUp", "Move up", () => moveSet(-1), { key: "alt+up", dis: !setOrder.length }),
       it("setDown", "Move down", () => moveSet(1), { key: "alt+down", dis: !setOrder.length }),
       sub("After this song", s && setOrder.includes(s.id) ? [["stop", "Stop"], ["segue", "Segue"], ["auto", "Auto-next"]].map(([k, n]) => it("after_" + k, n, () => setAfter(s, k, afterOf(s).sec), { check: afterOf(s).mode === k })) : [], !(s && setOrder.includes(s.id))),
-      it("editBreak", "Edit break…", () => { const b = document.querySelector("#songs .brk9.on"); if (b && window.SL13D) SL13D.editBreak(b.dataset.b, b); }, { dis: !document.querySelector("#songs .brk9.on") }),
+      it("editBreak", "Edit break…", () => { const id = breaks() && breaks().selected(); if (id && window.SL14B) SL14B.edit(id); }, { dis: !(breaks() && breaks().selected && breaks().selected()) }),
       it("setRemove", "Remove from setlist", () => { const b = document.querySelector("#songs .brk9.on"); if (b && breaks()) { breaks().del(b.dataset.b); return; } remFromSet(many.length ? many : s ? [s.id] : []); }, { dis: !(s && setOrder.includes(s.id)) && !many.length && !document.querySelector("#songs .brk9.on") }),
       sep(),
       it("renameSet", "Rename setlist…", () => setlistCmd("ren")),
@@ -300,7 +301,7 @@
       const B = breaks(); const bk = B && B.list().find((x) => x.id === a); if (!bk) return [];
       return [
         it("bRename", "Rename…", () => window.SL11 && SL11.renameBreak(a), { key: "return" }),
-        it("bEdit", "Edit break…", () => { B.select(a); if (typeof setPanel === "function" && !isOpen("R")) setPanel("R", true, true); }),
+        it("bEdit", "Edit…", () => { B.select(a); if (window.SL14B) SL14B.edit(a); }),
         sub("Label", B.LABELS.map((l, i) => it("bLab" + i, l, () => { snap(); bk.label = l; bk.len = B.DEFLEN[l] || bk.len; refresh(); }, { check: bk.label === l }))),
         sep(),
         it("bUp", "Move up", () => { B.select(a); SLDrag.stepSet(-1); }, { key: "alt+up" }), it("bDown", "Move down", () => { B.select(a); SLDrag.stepSet(1); }, { key: "alt+down" }),
@@ -371,7 +372,7 @@
     const id = String(cmd).replace(/^m:/, "");
     if (DRY) { DRY.push(id); return; }
     if (TEXT[id] && inText()) { try { document.execCommand(TEXT[id]); } catch (e) {} return; }
-    if (!ACT[id]) spec();
+    spec(); // 14 §4: the actions as of now (a spec built up to a second ago acted on the song focused then)
     const f = ACT[id]; if (f) try { f(); } catch (e) { console.error(e); }
     update();
   }

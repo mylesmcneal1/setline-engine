@@ -172,6 +172,11 @@ async function ensureLoaded(s: Song): Promise<boolean> {
   const body = payload(s, v);
   const key = loadKey(body);
   if (key === loadedKey && loadedSongId === s.id) return true;
+  // 14 §3: only its clicks, cues or MIDI changed: swapped into the loaded song (its stems stay primed); no reload
+  if (loadedSongId === s.id && loadedKey) {
+    const what = liveDiff(loadedKey, key);
+    if (what) { try { const u = await SL.call<{ ok?: boolean }>("updateLive", { ...body, ...what }); if (u && u.ok) { loadedKey = key; return true; } } catch {} }
+  }
   const r = await SL.call<LoadResult>("loadSong", body);
   if (r.error) { page().toast(r.error); loadedKey = null; return false; }
   loadedKey = key; loadedSongId = s.id; loopKey = ""; curMap = mapOf(s, v); curVerId = v ? v.id : "";
@@ -189,19 +194,43 @@ async function ensureLoaded(s: Song): Promise<boolean> {
 // A click clip added or extended while its song plays is heard when the playhead gets there: when only the click
 // clips (song.ck / song.cks) changed since the load, the engine swaps in the new hits (updateClicks) without stopping.
 // Any other edit still waits for the next Play, as before.
-const withoutClicks = (key: string) => { try { const o = JSON.parse(key); delete o.song.ck; delete o.song.cks; return JSON.stringify(o); } catch { return ""; } };
-let clickBusy = false;
+// 14 §3: the same for cues and MIDI, playing or stopped: right after an edit the loaded song gets the new clicks / cues /
+// MIDI in place (Engine::updateLive), so Play finds it ready. Cue words not rendered yet join when they are. Any other
+// edit to the loaded song while stopped reloads it in the background a moment later, so Play doesn't wait for that.
+const LIVE: Record<"clicks" | "cues" | "midi", string[]> = { clicks: ["ck", "cks"], cues: ["cues"], midi: ["midi"] };
+function liveDiff(a: string, b: string): { clicks: boolean; cues: boolean; midi: boolean } | null {
+  try {
+    const A = JSON.parse(a), B = JSON.parse(b), out = { clicks: false, cues: false, midi: false };
+    for (const [k, fields] of Object.entries(LIVE)) { (out as any)[k] = fields.some((f) => JSON.stringify(A.song[f]) !== JSON.stringify(B.song[f])); for (const f of fields) { delete A.song[f]; delete B.song[f]; } }
+    return JSON.stringify(A) === JSON.stringify(B) && (out.clicks || out.cues || out.midi) ? out : null;
+  } catch { return null; }
+}
+let clickBusy = false, preTimer = 0;
 async function liveClicks() {
   const p = page();
-  if (clickBusy || busy || !p.playing || !loadedKey || p.playId !== loadedSongId) return;
+  if (clickBusy || busy || !loadedKey || !loadedSongId) return;
+  if (p.playing && p.playId !== loadedSongId) return;
   const s = p.songs.find((x) => x.id === loadedSongId); if (!s) return;
   const body = payload(s), key = loadKey(body);
-  if (key === loadedKey || withoutClicks(key) !== withoutClicks(loadedKey)) return;
+  if (key === loadedKey) return;
+  const what = liveDiff(loadedKey, key);
+  if (!what) { if (!p.playing) preloadSoon(); return; }
   clickBusy = true;
   try {
-    const r = await SL.call<{ ok?: boolean; error?: string }>("updateClicks", body);
+    const r = await SL.call<{ ok?: boolean; error?: string }>("updateLive", { ...body, ...what });
     if (r && r.ok) loadedKey = key;
-  } catch (e) { console.warn("set.Line: live click", e); } finally { clickBusy = false; }
+  } catch (e) { console.warn("set.Line: live edit", e); } finally { clickBusy = false; }
+}
+// stopped, the loaded song edited (a clip, a track, the tempo...): load it again in the background
+function preloadSoon() {
+  clearTimeout(preTimer);
+  preTimer = window.setTimeout(async () => {
+    const p = page(); if (busy || p.playing) return;
+    const s = p.songs.find((x) => x.id === loadedSongId); if (!s) return;
+    busy = true;
+    try { await ensureLoaded(s); } catch (e) { console.warn("set.Line: preload", e); }
+    finally { busy = false; if (pending) { const q = pending; pending = null; if (page().playing) run(q.s, q.t); } }
+  }, 250);
 }
 
 // ---------------------------------------------------------------- 7d: backup rig (RigLink.h)
@@ -368,7 +397,7 @@ function pedalArmNow() {
   const p = page() as any, s = p.songs.find((x: Song) => x.id === loadedSongId), sel = p.playId || p.selId;
   const brk = (window as any).SLBreaks && (window as any).SLBreaks.holdsPedals(); // 9d: around a break the page decides
   const arm: any = { songId: loadedSongId || "", ready: !!s && sel === loadedSongId && !busy && !pending && !brk, when: p.jumpWhen ? p.jumpWhen() : "bar",
-    nextId: nextMeta && nextMeta.ready ? nextMeta.songId : "", looping: p.looping ? !!p.looping() : false, vamp: p.vampOn ? !!p.vampOn() : false, sync: p.syncMsgs ? p.syncMsgs() : [] };
+    nextId: nextMeta && nextMeta.ready ? nextMeta.songId : "", looping: p.looping ? !!p.looping() : false, vamp: p.vampOn ? !!p.vampOn() : false, sync: p.syncMsgs ? p.syncMsgs() : [], syncBpm: p.syncBpm ? p.syncBpm() : 0 };
   if (s) {
     if (!p.playing) { const at = toBarBeat(s, p.pos); arm.bar = at.bar; arm.beat = at.beat; }
     arm.secs = curMap ? curMap.filter((q: any) => !q.extra).map((q: any) => [q.vb, q.vb + q.bars, q.secId]) : (s.secs || []).map((x: any) => [x.start, x.start + x.bars, x.id]);
@@ -606,11 +635,14 @@ function cueList() {
   const pron = page().pron();
   for (const s of page().songs) {
     if (!cuesTrack(s)) continue;
-    const c = page().cueCfg(s);
-    for (const q of (s.cues || []) as { text?: string; voice?: CueVoice }[]) {
+    // 14 §3: exactly the cues Play will send (13 §17: the Cues menu's voice for every song, and the announcements and
+    // count-ins it adds), so every word is rendered before Play
+    const p = page() as any, c = p.cueVoiceAll ? p.cueVoiceAll() : p.cueCfg(s), w13 = (window as any).SL13E;
+    const qs = (w13 && w13.cuesFor ? w13.cuesFor(s, s.cues || []) : s.cues || []) as { text?: string; voice?: CueVoice; norec?: boolean }[];
+    for (const q of qs) {
       if (!q.text || !q.text.trim()) continue;
-      const v = q.voice || c; // a cue's own voice (count-in), else the song's / set's
-      list.push({ text: q.text.trim(), voice: v.voice || "", name: v.name || "", speed: v.speed || c.speed || 1, pron, rec: page().recFor(s, q.text) });
+      const v = q.voice || c; // a cue's own voice (count-in), else the set's
+      list.push({ text: q.text.trim(), voice: v.voice || "", name: v.name || "", speed: v.speed || c.speed || 1, pron, rec: q.norec ? "" : page().recFor(s, q.text) });
     }
   }
   return list;
@@ -1605,6 +1637,8 @@ async function main() {
   window.SLC = SLC;
   await SL.ready;
   SL.on("transport", onTransport);
+  // 14 §3: cue words that weren't ready at Play are rendered now: the loaded song gets its cues as they are now
+  SL.on("cuesReady", (m: { songId?: string }) => { const s = page().songs.find((x) => x.id === loadedSongId); if (!s || m.songId !== loadedSongId) return; SL.call("updateLive", { ...payload(s), clicks: false, cues: true, midi: false }).catch(() => {}); });
   SL.on("meters", (m: { peaks: number[]; tracks?: Record<string, number> }) => { peaks = m.peaks || []; trackPeaks = m.tracks || {}; });
   // 12: the trackpad pinch, caught natively on macOS (MacDrop.mm)
   SL.on("pinch", (m: any) => { const w = window as any; if (w.SL12 && w.SL12.pinch) w.SL12.pinch(m); });

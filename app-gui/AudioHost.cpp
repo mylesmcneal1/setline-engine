@@ -544,6 +544,21 @@ juce::var AudioHost::sendMidiNow(const juce::String& port, const juce::var& msgs
     auto* o = new juce::DynamicObject(); o->setProperty("sent", sent); return juce::var(o);
 }
 
+juce::var AudioHost::syncClock(double bpm)
+{
+    refreshClock();
+    const auto off = nameList(settings, "midiClockOff"), on = nameList(settings, "midiClockOn"), tr = nameList(settings, "midiTransport");
+    int nc = 0, ns = 0;
+    const int n = midiOuts.count.load();
+    for (int i = 0; i < n && i < 32; ++i) {
+        const auto& nm = midiOuts.names[(size_t) i];
+        if ((clockByDefault(nm) && ! off.contains(nm)) || on.contains(nm)) ++nc;
+        if (tr.contains(nm)) { const uint8_t b[3] = { 0xF2, 0, 0 }; midiOuts.sendNow(i, b, 3); ++ns; } // Song Position 0 = bar 1
+    }
+    if (! eng.isPlaying()) eng.setIdleTempo(bpm);
+    auto* o = new juce::DynamicObject(); o->setProperty("clockPorts", nc); o->setProperty("sppPorts", ns); o->setProperty("bpm", bpm); return juce::var(o);
+}
+
 int AudioHost::MidiOuts::resolve(const juce::String& want, std::vector<std::string>& warnings)
 {
     const int n = count.load();
@@ -644,6 +659,21 @@ juce::var AudioHost::updateClicks(const juce::var& payload)
     if (! eng.updateClicks(mapped.def)) return errorObj("The click tracks changed.", "reload");
     applog::line("Click of \"" + loadedName + "\" updated while playing");
     auto* o = new juce::DynamicObject(); o->setProperty("ok", true); o->setProperty("clickHits", (int) (mapped.def.clickHits ? mapped.def.clickHits->size() : 0));
+    return juce::var(o);
+}
+
+juce::var AudioHost::updateLive(const juce::var& payload, bool clicks, bool cues, bool midi)
+{
+    if (dm.getCurrentAudioDevice() == nullptr || ! loaded || loadedEpoch != deviceEpoch || payload["song"]["id"].toString() != loadedId)
+        return errorObj("Not the song loaded.", "reload");
+    const double t0 = juce::Time::getMillisecondCounterHiRes();
+    Engine::Config cfg;
+    auto mapped = mapForEngine(payload, cfg);
+    std::vector<std::string> w;
+    if (! eng.updateLive(mapped.def, clicks, cues, midi, w)) return errorObj("The click tracks changed.", "reload");
+    const double ms = juce::Time::getMillisecondCounterHiRes() - t0;
+    applog::line("Updated \"" + loadedName + "\" in place (" + juce::String(clicks ? "click " : "") + (cues ? "cues " : "") + (midi ? "MIDI " : "") + "in " + juce::String(ms, 1) + " ms)");
+    auto* o = new juce::DynamicObject(); o->setProperty("ok", true); o->setProperty("ms", ms);
     return juce::var(o);
 }
 

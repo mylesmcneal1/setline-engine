@@ -117,7 +117,7 @@
   document.addEventListener("keydown", (e) => { const cmd = MAC ? e.metaKey : e.ctrlKey; if (cmd && e.altKey && !e.shiftKey && (e.code === "KeyI" || e.key.toLowerCase() === "i")) { const a = document.activeElement; if (a && (a.isContentEditable || /^(INPUT|TEXTAREA)$/.test(a.tagName))) return; e.preventDefault(); e.stopImmediatePropagation(); songInfo(); } }, true);
 
   // ================================================================ breaks: a popover from their setlist row
-  function editBreak(id, anchor) { if (!window.SLBreaks) return; SLBreaks.select(id); openDetails(anchor || document.querySelector(`#songs .brk9[data-b="${id}"]`)); }
+  function editBreak(id, anchor) { if (window.SL14B) return SL14B.edit(id); /* 14 §1: the break popup */ if (!window.SLBreaks) return; SLBreaks.select(id); openDetails(anchor || document.querySelector(`#songs .brk9[data-b="${id}"]`)); }
   document.addEventListener("dblclick", (e) => { const b = e.target.closest && e.target.closest("#songs .brk9[data-b]"); if (!b || e.target.closest("input, [contenteditable]")) return; e.preventDefault(); e.stopPropagation(); editBreak(b.dataset.b, b); }, true);
 
   // ================================================================ the Track menu's parts (menus9.js asks for them)

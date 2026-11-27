@@ -546,5 +546,5 @@
     window[f] = function () { if (window.SL10a && SL10a.editing && SL10a.editing()) { held = true; return; } return F.apply(this, arguments); };
   }
   if (window.SL10a && SL10a.onEnd) SL10a.onEnd(() => { if (held) { held = false; setTimeout(() => { if (!SL10a.editing()) refresh(); }, 0); } later(); });
-  window.SL11 = { fitHeader, renameBreak, items, current, run, palette, objects, fullName: tfull, straighten, overlaps, fixSong, repair, last: () => LAST, cleanNames, shortName, delVersion, pickVersion, delTempo, delMeter, delSetlist, delPreset, delCueWord, renameSetlist, okName, libs: () => LIBS, pullLibs, countNum, pause: (on) => { PAUSE = !!on; }, forget: () => { seen = new Set(); store.set("fix11", []); } };
+  window.SL11 = { setCur: (o) => { CUR = o; }, fitHeader, renameBreak, items, current, run, palette, objects, fullName: tfull, straighten, overlaps, fixSong, repair, last: () => LAST, cleanNames, shortName, delVersion, pickVersion, delTempo, delMeter, delSetlist, delPreset, delCueWord, renameSetlist, okName, libs: () => LIBS, pullLibs, countNum, pause: (on) => { PAUSE = !!on; }, forget: () => { seen = new Set(); store.set("fix11", []); } };
 })();

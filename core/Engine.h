@@ -77,6 +77,10 @@ public:
     void setMidiClock(uint32_t clockPorts, uint32_t transportPorts, int numPorts)
     { clockMask.store(clockPorts, std::memory_order_relaxed); transportMask.store(transportPorts, std::memory_order_relaxed); clockPortCount.store(std::min(numPorts, 32), std::memory_order_relaxed); }
     const std::vector<int64_t>& clockTicks() const { return cur().clockTicks; }
+    // 14 §2 (Sync MIDI): while stopped, run the clock at this tempo instead of the song's (0 = the song's). Cleared
+    // when a song is loaded or starts.
+    void setIdleTempo(double bpm) { idleBpm.store(bpm > 0 ? bpm : 0, std::memory_order_relaxed); }
+    double idleTempo() const { return idleBpm.load(std::memory_order_relaxed); }
 
     // Transport (non-audio threads).
     // Starts playing from any sample: seeks every stem, skips click and MIDI events before that point,
@@ -125,6 +129,9 @@ public:
     // start of its next block, without allocating there, so a new hit ahead of the playhead plays when it's reached.
     // False when the song's click tracks differ from the loaded ones (then it needs a reload).
     bool updateClicks(const SongDef& song);
+    // 14 §3: the loaded song edited: new click hits, cues and / or MIDI events swapped in (playing or stopped), the
+    // stems untouched (still primed). False when it can't (the click tracks changed: load instead).
+    bool updateLive(const SongDef& song, bool clicks, bool cues, bool midi, std::vector<std::string>& warnings);
     // Frees what the audio thread handed back (old click hits); call now and then from the control thread.
     void collect();
     int numStems() const { return (int) cur().stems.size(); }
@@ -166,7 +173,12 @@ private:
     // Click tracks: [0] the main click, then SongDef::moreClicks. Built in load, never resized while playing;
     // next / voice are audio-thread state.
     struct ClickLane { std::vector<ClickHit> hits; std::vector<int> outs; float gain = 0.5f; size_t next = 0; Voice voice; };
-    struct ClickSwap { const void* target = nullptr; uint64_t gen = 0; std::vector<std::vector<ClickHit>> lanes; };
+    // 7a / 14 §3: what an edit changes, swapped into the song playing (or loaded) without reloading it: the click
+    // tracks' hits, the cues, the MIDI events (each only when has*)
+    struct ClickSwap { const void* target = nullptr; uint64_t gen = 0; std::vector<std::vector<ClickHit>> lanes; bool hasClicks = true;
+                       bool hasCues = false; std::vector<CueAt> cues; int64_t longest = 0; bool hasMidi = false; std::vector<MidiAt> midi; };
+    static void cuesFor(const TempoMap& tmap, int64_t songLen, const SongDef& song, std::vector<CueAt>& out, int64_t& longest, std::vector<std::string>& warnings);
+    static void midiFor(const TempoMap& tmap, double sampleRate, const SongDef& song, std::vector<MidiAt>& out, std::vector<std::string>& warnings);
     std::atomic<ClickSwap*> clickIn { nullptr }, clickOut { nullptr }; // control -> audio, audio -> control (one each)
     std::atomic<uint64_t> loadGen { 0 };
     void takeClicks(ClickSwap* u); // audio thread (or control, with no callback running)
@@ -221,6 +233,7 @@ private:
     double idleAcc = 0; int64_t idleSample = 0; bool clockWasPlaying = false; int64_t startedFrom = 0;
     std::atomic<uint32_t> clockMask { 0xffffffffu }, transportMask { 0 };
     std::atomic<int> clockPortCount { 0 };
+    std::atomic<double> idleBpm { 0 };
     void sendAt(int port, uint8_t a, uint8_t b, uint8_t c, int len, int64_t logSample, int blockOffset, Clock::time_point t0, bool sys);
     void clockIdle(int n, Clock::time_point t0);
     void clockTransport(uint8_t status, int64_t logSample, int blockOffset, Clock::time_point t0);

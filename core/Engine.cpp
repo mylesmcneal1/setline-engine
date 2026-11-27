@@ -118,25 +118,10 @@ std::string Engine::build(Program& P, const SongDef& song, std::vector<std::stri
     P.cueOuts = song.cueOuts;
     P.cueGain = LiveGain::dbToGain(song.cueGainDb);
     for (int o : P.cueOuts) P.maxOut = std::max(P.maxOut, o);
-    P.longestCue = 0;
-    for (auto& c : song.cues) {
-        if (! c.audio || c.audio->empty() || c.bar < 1) continue;
-        const int64_t s = P.tmap.sampleAt(c.bar, std::max(1.0, c.beat));
-        if (s >= P.songLen) { warnings.push_back("Cue \"" + c.text + "\" at bar " + std::to_string(c.bar) + " is after the end of the song."); continue; }
-        P.cues.push_back({ s - c.lead, c.audio }); // 7a: the word's onset on the beat
-        P.longestCue = std::max(P.longestCue, (int64_t) c.audio->size());
-    }
-    std::stable_sort(P.cues.begin(), P.cues.end(), [](auto& a, auto& b) { return a.sample < b.sample; });
+    cuesFor(P.tmap, P.songLen, song, P.cues, P.longestCue, warnings);
 
     // --- MIDI ---
-    for (auto& m : song.midi) {
-        if (m.port < 0) { warnings.push_back("MIDI event \"" + m.label + "\" at bar " + std::to_string(m.bar) + " has no output port; skipped."); continue; }
-        MidiAt e; e.port = m.port; e.len = m.len; e.track = m.track;
-        e.sample = std::max<int64_t>(0, P.tmap.sampleAt(m.bar, m.beat) - (int64_t) std::llround(m.earlySeconds * cfg.sampleRate));
-        std::copy(m.bytes, m.bytes + 3, e.d);
-        P.midiEvents.push_back(e);
-    }
-    std::stable_sort(P.midiEvents.begin(), P.midiEvents.end(), [](auto& a, auto& b) { return a.sample < b.sample; });
+    midiFor(P.tmap, cfg.sampleRate, song, P.midiEvents, warnings);
     // --- MIDI clock: 24 ticks per quarter note through every bar (7/8 = 84 ticks), up to the end of the song ---
     P.clockTicks.clear();
     for (int b = 1; b <= P.tmap.numBars(); ++b) {
@@ -170,6 +155,56 @@ std::vector<Engine::ClickHit> Engine::hitsFor(const TempoMap& tmap, int64_t song
     return unique;
 }
 
+void Engine::cuesFor(const TempoMap& tmap, int64_t songLen, const SongDef& song, std::vector<CueAt>& out, int64_t& longest, std::vector<std::string>& warnings)
+{
+    out.clear(); longest = 0;
+    for (auto& c : song.cues) {
+        if (! c.audio || c.audio->empty() || c.bar < 1) continue;
+        const int64_t s = tmap.sampleAt(c.bar, std::max(1.0, c.beat));
+        if (s >= songLen) { warnings.push_back("Cue \"" + c.text + "\" at bar " + std::to_string(c.bar) + " is after the end of the song."); continue; }
+        out.push_back({ s - c.lead, c.audio }); // 7a: the word's onset on the beat
+        longest = std::max(longest, (int64_t) c.audio->size());
+    }
+    std::stable_sort(out.begin(), out.end(), [](auto& a, auto& b) { return a.sample < b.sample; });
+}
+
+void Engine::midiFor(const TempoMap& tmap, double sampleRate, const SongDef& song, std::vector<MidiAt>& out, std::vector<std::string>& warnings)
+{
+    out.clear();
+    for (auto& m : song.midi) {
+        if (m.port < 0) { warnings.push_back("MIDI event \"" + m.label + "\" at bar " + std::to_string(m.bar) + " has no output port; skipped."); continue; }
+        MidiAt e; e.port = m.port; e.len = m.len; e.track = m.track;
+        e.sample = std::max<int64_t>(0, tmap.sampleAt(m.bar, m.beat) - (int64_t) std::llround(m.earlySeconds * sampleRate));
+        std::copy(m.bytes, m.bytes + 3, e.d);
+        out.push_back(e);
+    }
+    std::stable_sort(out.begin(), out.end(), [](auto& a, auto& b) { return a.sample < b.sample; });
+}
+
+bool Engine::updateLive(const SongDef& song, bool clicks, bool cues, bool midiToo, std::vector<std::string>& warnings)
+{
+    std::lock_guard<std::mutex> lk(control);
+    collect();
+    const Program& P = cur();
+    if (clicks && (P.clickLanes.size() != 1 + song.moreClicks.size() || ! song.clickHits)) return false;
+    auto u = std::make_unique<ClickSwap>();
+    u->target = &P; u->gen = loadGen.load(std::memory_order_acquire);
+    u->hasClicks = clicks;
+    if (clicks) {
+        u->lanes.resize(P.clickLanes.size());
+        if (! P.clickLanes[0].outs.empty()) u->lanes[0] = hitsFor(P.tmap, P.songLen, *song.clickHits);
+        for (size_t k = 0; k < song.moreClicks.size(); ++k)
+            if (! P.clickLanes[k + 1].outs.empty()) u->lanes[k + 1] = hitsFor(P.tmap, P.songLen, song.moreClicks[k].hits);
+    }
+    if (cues) { u->hasCues = true; cuesFor(P.tmap, P.songLen, song, u->cues, u->longest, warnings); }
+    if (midiToo) { u->hasMidi = true; midiFor(P.tmap, cfg.sampleRate, song, u->midi, warnings); }
+    delete clickIn.exchange(u.release(), std::memory_order_acq_rel);
+    if (! deviceRunning.load() || cfg.offline) {
+        if (auto* x = clickIn.exchange(nullptr, std::memory_order_acq_rel)) { takeClicks(x); delete clickOut.exchange(nullptr); }
+    }
+    return true;
+}
+
 bool Engine::updateClicks(const SongDef& song)
 {
     std::lock_guard<std::mutex> lk(control);
@@ -192,8 +227,13 @@ bool Engine::updateClicks(const SongDef& song)
 void Engine::takeClicks(ClickSwap* u)
 {
     Program& P = cur();
-    if (u->target == &P && u->gen == loadGen.load(std::memory_order_acquire) && u->lanes.size() == P.clickLanes.size()) {
-        const int64_t p = pos.load(std::memory_order_relaxed);
+    const int64_t p0 = pos.load(std::memory_order_relaxed);
+    if (u->target == &P && u->gen == loadGen.load(std::memory_order_acquire)) {
+        if (u->hasCues) { std::swap(P.cues, u->cues); std::swap(P.longestCue, u->longest); } // O(1); cues are found by position
+        if (u->hasMidi) { std::swap(P.midiEvents, u->midi); nextMidi = (size_t) (std::lower_bound(P.midiEvents.begin(), P.midiEvents.end(), p0, [](const MidiAt& m, int64_t x) { return m.sample < x; }) - P.midiEvents.begin()); }
+    }
+    if (u->hasClicks && u->target == &P && u->gen == loadGen.load(std::memory_order_acquire) && u->lanes.size() == P.clickLanes.size()) {
+        const int64_t p = p0;
         for (size_t k = 0; k < P.clickLanes.size(); ++k) {
             auto& c = P.clickLanes[k];
             if (c.outs.empty()) continue;
@@ -210,6 +250,7 @@ std::string Engine::load(const SongDef& song, const Config& c, std::vector<std::
 {
     std::lock_guard<std::mutex> lk(control);
     loadGen.fetch_add(1, std::memory_order_acq_rel);
+    idleBpm.store(0, std::memory_order_relaxed); // 14 §2: a song loaded: the stopped clock follows it again
     fadeOutAndStop(); // switching songs while playing: fade out first, never cut
     const bool reconfig = c.sampleRate != cfg.sampleRate || c.ringFrames != cfg.ringFrames || c.chunkFrames != cfg.chunkFrames || c.offline != cfg.offline;
     cfg = c;
@@ -424,6 +465,7 @@ bool Engine::start(int64_t fromSample, int timeoutMs)
     std::lock_guard<std::mutex> lk(control);
     fadeOutAndStop();
     midi.flush();
+    idleBpm.store(0, std::memory_order_relaxed);
     auto& P = cur();
     if (fromSample < 0) fromSample = 0;
     if (fromSample >= P.songLen) return false;
@@ -733,7 +775,8 @@ void Engine::clockIdle(int n, Clock::time_point t0)
     // the next song (waiting in the next slot) if there is one, else the loaded one
     const Program* nx = nextLoaded.load(std::memory_order_acquire) ? other() : nullptr;
     const auto& tm = (nx && nx->tmap.numBars() > 0 ? *nx : cur()).tmap;
-    const double bpm = tm.numBars() > 0 && tm.bar(1).bpm > 0 ? tm.bar(1).bpm : 120.0;
+    const double ov = idleBpm.load(std::memory_order_relaxed);
+    const double bpm = ov > 0 ? ov : tm.numBars() > 0 && tm.bar(1).bpm > 0 ? tm.bar(1).bpm : 120.0;
     const double tick = 60.0 / bpm * cfg.sampleRate / 24.0;
     if (idleAcc > tick) idleAcc = tick; // the tempo went up: never wait longer than one tick
     while (idleAcc < n) {

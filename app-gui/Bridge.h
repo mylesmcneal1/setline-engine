@@ -95,7 +95,12 @@ private:
     std::shared_ptr<std::atomic<bool>> exportCancel = std::make_shared<std::atomic<bool>>(false);
     juce::var libraryOpened(const juce::var& r);
     std::map<juce::String, juce::String> cueErrors; // from the last song load: cue text -> why it couldn't be spoken
-    void withCues(const juce::var& payload, std::function<void()> then);
+    // wait = false (loading a song for Play, 14 §3): never waits for speech; words not rendered yet are left out, render in
+    // the background and join the loaded song (updateLive) when ready, unless it was reloaded or edited since
+    void withCues(const juce::var& payload, std::function<void()> then, bool wait = true);
+    int liveSeq = 0;                  // 14 §3: bumped by every load and live update
+    juce::StringArray pendingCues;    // words a load went ahead without (no "couldn't be spoken" warning for them)
+    juce::String lateCueInfo;         // Diagnostics: the last cue that joined late or was skipped
     Cues::Choice choiceOf(const juce::var& v, juce::String* missingRecording = nullptr) const;
     void syncShow();
     juce::String diagnostics();

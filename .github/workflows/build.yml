@@ -191,6 +191,22 @@ jobs:
           cat kokoro-test/kokoro-test.txt || true
           grep -q "KOKORO OK" kokoro-test/kokoro-test.txt
 
+      # 14: Play right after editing cues / clips / the click / MIDI against a plain Play, and the pedal / footswitch
+      # playback (mappings per port, Next song, Play / Stop on the fast path with the page busy, Vamp, Jump, Sync MIDI).
+      # A runner without an audio device skips the Play timings (reported); everything else must pass.
+      - name: Play latency and pedals (in the app)
+        shell: bash
+        env:
+          SETLINE_MODELS_DIR: ${{ github.workspace }}/models
+        run: |
+          if [ -d "$APP/Contents/MacOS" ]; then EXE="$APP/Contents/MacOS/set.Line"; else EXE="$APP"; fi
+          "$BIN" --make-test lat-song --stems 8 --seconds 120 > /dev/null
+          mkdir -p lat-work
+          node -e "const fs=require('fs'),p=require('path');const d=p.resolve('lat-song');const src=fs.readdirSync(d).filter(f=>f.endsWith('.wav')).map(f=>p.join(d,f).split(p.sep).join('/'));fs.writeFileSync('lat-work/run.js',fs.readFileSync('tests/app-14.js','utf8').replace('/*CFG*/null',JSON.stringify({src})))"
+          perl -e 'alarm 400; exec @ARGV' "$EXE" --test-script lat-work/run.js lat-work/out.json > lat-work/app.log 2>&1 || true
+          if [ ! -f lat-work/out.json ]; then echo "no result"; tail -30 lat-work/app.log; exit 1; fi
+          node -e "const r=require('./lat-work/out.json');(r.checks||[]).forEach(x=>console.log(x));console.log('VOICE',r.voice,'DEVICE',r.device);console.log('PLAY MS '+JSON.stringify(r.times,null,1));console.log('CALLS '+JSON.stringify(r.calls,null,1));console.log('PEDAL',JSON.stringify(r.pedal));(r.errs||[]).forEach(e=>console.log('ERR',e));if(r.error)console.log('ERROR',r.error);process.exit(r.ok?0:1)"
+
       - uses: actions/upload-artifact@v7
         if: always()
         with:

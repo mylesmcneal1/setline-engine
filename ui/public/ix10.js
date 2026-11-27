@@ -181,7 +181,7 @@
   function entries(q) {
     const s = songOf(typeof focusId !== "undefined" && focusId || selId), out = [];
     const acts = SLMenus.flat().filter((x) => !x.dis && !/^(lib|set|scol|tcol|th_|ths|acc_|pair_|size_|tp_|ver|trackSize|sort_|th\d|zoom_)/.test(x.id) || (q && !x.dis && /^(th_|acc_|pair_|size_|tp_|trackSize|zoom_|sort_)/.test(x.id)));
-    const songCtx = /^(renameSong|dupSong|deleteSong|newVersion|addSection|addMeter|addTempo|secsFromCues|addToSet|sortMidi|exportSong|addAudio|addClick|addMidi|editClick)$/;
+    const songCtx = /^(renameSong|dupSong|deleteSong|newVersion|addSection|addMeter|addTempo|addMarker|secsFromCues|addToSet|sortMidi|exportSong|addAudio|addClick|addMidi|editClick)$/;
     for (const a of acts) { const label = (a.path.length > 1 ? a.path.slice(1).join(" › ") + " › " : "") + a.label; const sc = score(q, label + " · " + (a.help || "")) || (q.length > 2 && a.path[0].toLowerCase().startsWith(q.toLowerCase()) ? 40 : 0); if (sc) out.push({ g: "Actions", label, key: a.keyText, ctx: songCtx.test(a.id) && s ? "this song" : "", sc: sc + (used()[a.id] || 0) * (q ? 2 : 10), run: () => { noteAct(a.id); SLMenus.run("m:" + a.id); } }); }
     if (window.SL11 && q) for (const x of SL11.palette(q, score)) out.push(x); // 11: every object by name, with its actions
     for (const x of songs) { const sc = score(q, x.name); if (q && sc) out.push({ g: "Songs", label: x.name, key: "", ctx: setOrder.includes(x.id) ? "#" + (setOrder.indexOf(x.id) + 1) : "", sc, run: () => openSong(x.id) }); }

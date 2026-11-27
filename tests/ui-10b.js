@@ -59,7 +59,7 @@ async function check10b() {
   { const row = document.querySelector("#songs > .song"); ok(row && row.querySelector(".grip10") && row.querySelector(".more10"), "a setlist row has a grip and ⋯");
     row.focus(); await frames(1); ok(getComputedStyle(row.querySelector(".more10")).opacity === "1", "the setlist row's ⋯ shows on keyboard focus"); row.blur(); }
   { SLBreaks.add("Talk"); await frames(2); const b = document.querySelector("#songs > .brk9"); b.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 200, clientY: 300 })); await frames(1);
-    const L = ctxLabels(); closeCtx(); ok(["Edit break…", "Label ▸", "Move up", "Move down", "Duplicate", "Remove"].every((l) => L.includes(l)), "right-click a break: " + L.join(" · ")); }
+    const L = ctxLabels(); closeCtx(); ok(["Edit…", "Label ▸", "Move up", "Move down", "Duplicate", "Remove"].every((l) => L.includes(l)), "right-click a break: " + L.join(" · ")); }
   openSong("glass"); await wait(300);
   { const lh = document.querySelector('.row.trk > .lh[data-track="Drums"]'); ok(lh.querySelector(".grip10") && lh.querySelector(".more10"), "a track header has a grip and ⋯");
     lh.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 200, clientY: 300 })); await frames(1);

@@ -80,6 +80,7 @@ Bridge::Bridge(AudioHost& host, juce::PropertiesFile& settings) : audio(host), s
         juce::String err;
         bool fellBack = false;
         auto a = cues.cached(text, c, rate, fellBack); // rendered before the load (loadSong below)
+        if (! a && pendingCues.contains(text)) return a; // 14 §3: rendering in the background; it joins when ready
         if (! a) { auto it = cueErrors.find(text); err = it != cueErrors.end() && it->second.isNotEmpty() ? it->second : juce::String("not ready"); }
         const juce::String q = juce::String::fromUTF8("\xe2\x80\x9c"), qq = juce::String::fromUTF8("\xe2\x80\x9d");
         if (fellBack) {
@@ -147,7 +148,9 @@ juce::var Bridge::pedalFast(const juce::String& a, bool press, double t0)
     } else if (a == "exitLoop") {
         if (playing && (bool) arm["looping"]) r = audio.setLoop(juce::var());
     } else if (a == "syncMidi") {
-        if (auto* d = arm["sync"].getArray()) { int n = 0; for (auto& x : *d) n += ok(audio.sendMidiNow(x["port"].toString(), x["msgs"])) ? 1 : 0; if (n) r = obj({ { "sent", n } }); }
+        if (auto* d = arm["sync"].getArray()) { int n = 0; for (auto& x : *d) n += ok(audio.sendMidiNow(x["port"].toString(), x["msgs"])) ? 1 : 0;
+            const double bpm = (double) arm["syncBpm"]; if (bpm > 0) audio.syncClock(bpm); // 14 §2: the clock too
+            if (n || bpm > 0) r = obj({ { "sent", n } }); }
     }
     if (! ok(r)) return {};
     const double done = juce::Time::getMillisecondCounterHiRes() - t0, ms = actMs > 0 ? actMs : done;
@@ -190,6 +193,7 @@ juce::String Bridge::diagnostics()
     { const auto ri = rig.info(); t.add("Backup rig: " + ri["role"].toString() + (rig.paired() ? ", paired with " + ri["peer"].toString() + ", clock offset " + juce::String((double) ri["offsetMs"], 2) + " ms, worst drift " + juce::String((double) ri["driftWorstMs"], 2) + " ms" + ((bool) ri["failover"] ? ", BACKUP IS LIVE" : "") : juce::String(rig.role() == "off" ? "" : ", not paired"))); }
     t.add("MIDI in: " + (midiControl.inputs().isEmpty() ? juce::String("no inputs") : midiControl.inputs().joinIntoString(", ")) + ", " + juce::String(midiControl.mappings().size()) + " mappings" + (midiActCount ? ", " + juce::String(midiActCount) + " pedal actions, slowest " + juce::String(midiActMax, 1) + " ms" : juce::String()));
     t.add("Pedals (fast path): " + (fastCount ? juce::String(fastCount) + " actions straight to the engine, average " + juce::String(fastSum / fastCount, 2) + " ms, worst " + juce::String(fastMax, 2) + " ms (" + fastWorst + ")" : juce::String("none yet")));
+    t.add("Cue words at Play: " + (lateCueInfo.isEmpty() ? juce::String("every word was ready") : "the last one that wasn't ready: " + lateCueInfo)); // 14 §3
     t.add("Show timing (9b): " + (uiTiming.isNotEmpty() ? uiTiming : juce::String("nothing measured yet")));
     t.add("Kokoro voices: " + kokoro::stateName(kokoro::status().state) + "; voice picker: " + cues.voiceListInfo());
     t.add("");
@@ -383,6 +387,7 @@ Bridge::Options Bridge::addTo(Options o)
     o = add(o, "midiPorts", [this](const juce::var&) { return audio.midiPorts(); });
     o = add(o, "setMidiPort", [this](const juce::var& a) { audio.setMidiPort(a["name"].toString(), (bool) a["clock"], (bool) a["transport"]); return audio.midiPorts(); });
     o = add(o, "sendMidiNow", [this](const juce::var& a) { return audio.sendMidiNow(a["port"].toString(), a["msgs"]); });
+    o = add(o, "syncClock", [this](const juce::var& a) { return audio.syncClock((double) a["bpm"]); }); // 14 §2
     // Listen on this computer (AudioHost.h): the state, change it, the computer's output devices at a rate.
     // Diagnostics (About / Help): text only, no audio or show contents.
     // 9c: the look (Customize), per computer: kept with the app's preferences as well as in the page
@@ -914,7 +919,17 @@ Bridge::Options Bridge::addTo(Options o)
     o = add(o, "updateClicks", [this](const juce::var& a) { return audio.updateClicks(a); });
     o = addAsync(o, "loadSong", [this](const juce::var& a, auto done) {
         if (! a.isObject() || ! a["song"].isObject()) { done(errorVar("loadSong: expected {song, outs, roles, click}")); return; }
-        withCues(a, [this, a, done] { done(audio.loadSong(a)); });
+        ++liveSeq;
+        withCues(a, [this, a, done] { done(audio.loadSong(a)); }, false); // 14 §3: Play never waits for speech
+    });
+    // 14 §3: an edit to the loaded song (clicks / cues / MIDI) swapped in place; cue words not ready yet join later
+    o = add(o, "updateLive", [this](const juce::var& a) {
+        if (! a.isObject() || ! a["song"].isObject()) return errorVar("updateLive: expected a song payload");
+        const int seq = ++liveSeq;
+        juce::var r;
+        withCues(a, [this, a, &r] { r = audio.updateLive(a, (bool) a["clicks"], (bool) a["cues"], (bool) a["midi"]); }, false);
+        (void) seq;
+        return r.isVoid() ? errorVar("updateLive: no result") : r;
     });
     // The next song (6e): loaded into the engine's second slot in the background, its cues rendered first.
     o = addAsync(o, "queueNext", [this](const juce::var& a, auto done) {
@@ -932,7 +947,7 @@ Bridge::Options Bridge::addTo(Options o)
 
 // Before a song is mapped: stems resolve against the open session, and its cues are rendered (on the Cues
 // worker, usually already cached); then "then" runs on the message thread, which never waits for speech.
-void Bridge::withCues(const juce::var& a, std::function<void()> then)
+void Bridge::withCues(const juce::var& a, std::function<void()> then, bool wait)
 {
     if (! a.isObject()) { then(); return; }
     // Stems are stored relative to the session's folder.
@@ -945,9 +960,36 @@ void Bridge::withCues(const juce::var& a, std::function<void()> then)
         for (auto& q : *cs) if (auto t = q["text"].toString().trim(); t.isNotEmpty()) { juce::var qv = q["voice"].isObject() ? q["voice"] : v; if (q["rec"].toString().isNotEmpty()) { auto* o = qv.getDynamicObject() ? qv.getDynamicObject()->clone().release() : new juce::DynamicObject(); o->setProperty("rec", q["rec"]); qv = juce::var(o); } list.push_back({ t, choiceOf(qv) }); }
     const double rate = cueRate(); // no device (e.g. CI): the rate offline renders use
     if (list.empty() || rate <= 0) { then(); return; }
-    cues.ensure(std::move(list), rate, [this, then](std::map<juce::String, juce::String> errors) {
+    if (wait) {
+        cues.ensure(std::move(list), rate, [this, then](std::map<juce::String, juce::String> errors) {
+            cueErrors = std::move(errors);
+            then();
+        });
+        return;
+    }
+    // 14 §3: go now with what's rendered; the rest renders in the background and joins this song if it's still loaded
+    // and nothing newer was loaded or swapped in since
+    juce::StringArray missing;
+    for (auto& [t, ch] : list) { bool fb = false; if (! cues.cached(t, ch, rate, fb)) missing.addIfNotAlreadyThere(t); }
+    pendingCues = missing;
+    then();
+    pendingCues.clear();
+    if (missing.isEmpty()) return;
+    const int seq = liveSeq; const auto songId = a["song"]["id"].toString(); const double t0 = juce::Time::getMillisecondCounterHiRes();
+    applog::line("Play didn't wait for " + juce::String(missing.size()) + " cue word" + (missing.size() == 1 ? "" : "s") + " (" + missing.joinIntoString(", ").substring(0, 120) + "): rendering in the background");
+    cues.ensure(std::move(list), rate, [this, a, seq, songId, missing, t0](std::map<juce::String, juce::String> errors) {
         cueErrors = std::move(errors);
-        then();
+        const double ms = juce::Time::getMillisecondCounterHiRes() - t0;
+        if (audio.loadedSongId() != songId) { lateCueInfo = missing[0] + ": skipped once (another song was loaded while it rendered)"; applog::line("Cue words ready after " + juce::String((int) ms) + " ms; another song is loaded now, so they were skipped once"); return; }
+        if (seq == liveSeq) { // nothing newer: these cues join the song as it is
+            auto r = audio.updateLive(a, false, true, false);
+            lateCueInfo = missing[0] + ": joined after " + juce::String((int) ms) + " ms" + (r.hasProperty("error") ? " (couldn't: " + r["error"].toString() + ")" : "");
+            applog::line("Cue words joined \"" + songId + "\" after " + juce::String((int) ms) + " ms: " + missing.joinIntoString(", ").substring(0, 120));
+        } else { // edited since: the page sends its cues as they are now (the words are rendered now)
+            lateCueInfo = missing[0] + ": ready after " + juce::String((int) ms) + " ms (the page re-sends its cues)";
+            applog::line("Cue words ready after " + juce::String((int) ms) + " ms; the song was edited since, so the page sends its cues again");
+            auto* o = new juce::DynamicObject(); o->setProperty("songId", songId); emit("cuesReady", juce::var(o));
+        }
     });
 }
 

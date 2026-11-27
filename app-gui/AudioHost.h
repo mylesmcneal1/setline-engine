@@ -70,6 +70,9 @@ public:
     void setMidiPort(const juce::String& name, bool clock, bool transport);
     // Sends raw MIDI now (the setlist's sync point): msgs = [[status, d1, d2], ...]. -> {sent} | {error}
     juce::var sendMidiNow(const juce::String& port, const juce::var& msgs);
+    // 14 §2 Sync MIDI: the stopped clock at bpm, and Song Position = bar 1 to the ports with Start / Stop / Song
+    // Position on. -> {clockPorts, sppPorts}
+    juce::var syncClock(double bpm);
     // A MIDI output that came back (unplugged and plugged in again): names, reported to the page.
     std::function<void(const juce::StringArray&)> onMidiReconnected;
     void setEchoGuard(EchoGuard* e) { midiOuts.echo.store(e); } // 7c
@@ -98,6 +101,10 @@ public:
     // (the song playing isn't touched). -> {ok, warnings} or {error}.
     juce::var queueNext(const juce::var& payload);
     juce::var updateClicks(const juce::var& payload); // 7a: click edits while playing
+    // 14 §3: the loaded song edited (playing or stopped): its clicks / cues / MIDI swapped in, the stems untouched.
+    // {ok} or {error, code: "reload"} (another song, the click tracks changed).
+    juce::var updateLive(const juce::var& payload, bool clicks, bool cues, bool midi);
+    juce::String loadedSongId() const { return loaded ? loadedId : juce::String(); }
     // {loaded, ready, songId, name, segue}
     juce::var nextState();
     // A queued jump (Perform: tap a section while playing): {toBar, toBeat, when: "bar" | "section" | "beat", atBar}

@@ -34,13 +34,17 @@
     return { id: newId(), after: at === undefined ? "" : at, label: lab, len: DEFLEN[lab] || 60, note: "", runout: "wait", during: "silence", send: false };
   }
   // a new break goes after the selected setlist item, or at the end
-  function add(label, custom) {
-    if (typeof playing !== "undefined" && playing && !BRK) { /* adding while playing is fine: it only changes the setlist */ }
-    snap(); syncSet();
+  // 14 §1: where a new break goes: after the selected break (its song), the selected song, or the last song
+  function placeNew() {
     let after = setOrder.length ? setOrder[setOrder.length - 1] : "";
     if (SELB) { const s = list().find((b) => b.id === SELB); if (s) after = s.after; }
     else if (selId && setOrder.includes(selId)) after = selId;
-    const b = make(label, after); if (custom) { b.label = String(custom).slice(0, 24); b.len = 60; }
+    return { after };
+  }
+  function add(label, custom, vals) {
+    snap(); syncSet();
+    const { after } = placeNew();
+    const b = make(label, after); if (custom) { b.label = String(custom).slice(0, 24); b.len = 60; } if (vals) Object.assign(b, vals);
     // after the selected break: right after it in the list
     const arr = list(), i = SELB ? arr.findIndex((x) => x.id === SELB) : -1;
     if (i >= 0) arr.splice(i + 1, 0, b); else arr.push(b);
@@ -283,12 +287,12 @@
 
   // ---------------------------------------------------------------- the sidebar's ＋ Break
   function wireButtons() {
-    const b = $("addBreak9"); if (b && !b._w) { b._w = true; b.hidden = false; b.onclick = (e) => { const r = b.getBoundingClientRect(); addMenu({ clientX: r.left, clientY: r.top - 190 }); }; }
+    const b = $("addBreak9"); if (b && !b._w) { b._w = true; b.hidden = false; b.onclick = () => { if (window.SL14B) SL14B.add(); else { const r = b.getBoundingClientRect(); addMenu({ clientX: r.left, clientY: r.top - 190 }); } }; }
   }
   wireButtons();
-  window.SLBreaks = { add: (label) => { if (label) return add(label); const b = $("addBreak9"), r = b ? b.getBoundingClientRect() : { left: 200, top: 400 }; addMenu({ clientX: r.left, clientY: r.top - 190 }); },
+  window.SLBreaks = { add: (label, custom, vals) => { if (label) return add(label, custom, vals); if (window.SL14B) return SL14B.add(); const b = $("addBreak9"), r = b ? b.getBoundingClientRect() : { left: 200, top: 400 }; addMenu({ clientX: r.left, clientY: r.top - 190 }); },
     count: () => list().length, length: () => totalLen(), after: (id) => afterOf(id).length > 0, songEnded, start, finish, skip, back, pause, items, list,
     current: () => (BRK ? { ...BRK, left: left() } : null), select: (id) => { SELB = id; renderSetlist(); renderInsp(); }, adoptPending,
-    holdsPedals: () => !!BRK || !!((playId || selId) && afterOf(playId || selId).length), LABELS, DEFLEN, del, dup, moveTo };
+    holdsPedals: () => !!BRK || !!((playId || selId) && afterOf(playId || selId).length), LABELS, DEFLEN, del, dup, moveTo, placeNew, selected: () => SELB };
   try { refresh(); } catch (e) {}
 })();

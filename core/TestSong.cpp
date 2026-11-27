@@ -1128,6 +1128,38 @@ bool runSelfTest(bool verbose)
         check(! r.e.updateClicks(u), "click edits while playing: a new click track asks for a reload instead");
         r.e.stop();
     }
+    // ---- Phase 14 §3: cues and MIDI edited in the loaded song, swapped in without a reload ----
+    std::printf("Phase 14 live cue and MIDI edits\n");
+    {
+        SongDef s; s.name = "Live edits"; s.tempo = { { 1, 120, 4, 4 } }; s.cueOuts = { 1 };
+        s.stems.push_back(rampStem(4 * 96000, 0.0f, 0));
+        auto word = std::make_shared<const std::vector<float>>(std::vector<float>(2000, 0.5f));
+        CueDef c1; c1.bar = 1; c1.audio = word; c1.text = "one"; s.cues.push_back(c1);
+        MidiEventDef m1; m1.port = 0; m1.bar = 1; m1.bytes[0] = 0xB0; m1.bytes[1] = 7; m1.bytes[2] = 10; m1.len = 3; s.midi.push_back(m1);
+        OfflineRun r; r.load(s, sr, 2, 128);
+        r.e.setDeviceRunning(true);
+        r.e.midiLog.clear(); r.start(0);
+        while (r.e.position() < 96000 + 24000) r.step(); // into bar 2
+        SongDef t = s; t.cues.clear(); t.midi.clear();
+        CueDef c3 = c1; c3.bar = 3; c3.text = "three"; t.cues.push_back(c3);
+        MidiEventDef m3 = m1; m3.bar = 3; m3.bytes[2] = 99; t.midi.push_back(m3);
+        MidiEventDef m0 = m1; m0.bar = 1; m0.bytes[2] = 55; t.midi.push_back(m0); // behind the playhead: never sent late
+        std::vector<std::string> w;
+        const bool took = r.e.updateLive(t, false, true, true, w);
+        r.runToEnd(); r.e.collect();
+        const auto& tm = r.e.tempoMap();
+        const int64_t at3 = tm.sampleAt(3, 1) - r.firstSample;
+        const bool cueHeard = firstAbove(r.out[1], at3 - 50, at3 + 50, 0.1f) == at3;
+        int ccNew = 0, ccLate = 0; int64_t ccAt = -1;
+        for (auto& m : r.e.midiLog) { if (m.d[0] == 0xB0 && m.d[2] == 99) { ++ccNew; ccAt = m.sample; } if (m.d[0] == 0xB0 && m.d[2] == 55) ++ccLate; }
+        bool smooth = true;
+        for (size_t i = 1; i < r.out[0].size() && i < (size_t) (4 * 96000 - 1000); ++i)
+            if (std::fabs(r.out[0][i] - r.out[0][i - 1]) > 0.01f) { smooth = false; break; }
+        check(took && cueHeard && r.e.cueList().size() == 1, "live edits: a cue moved while playing is heard at its new bar, on the sample (no reload)");
+        check(ccNew == 1 && ccAt == tm.sampleAt(3, 1) && ccLate == 0, "live edits: a MIDI event added while playing goes out on its sample; one behind the playhead isn't sent late");
+        check(smooth && r.e.stats.underruns.load() == 0, "live edits: the audio carries on without a glitch");
+        r.e.stop();
+    }
     // ---- Phase 7c: footswitch / controller mappings ----
     std::printf("Phase 7c MIDI mappings\n");
     {

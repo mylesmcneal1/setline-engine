@@ -125,4 +125,9 @@
 - **Key Commands remaps the menu commands** (those with ⌘ / Ctrl). Single keys that act on what's selected (Space, ⌫, ↩, B, Z, arrows) are listed but fixed.
 - **A song's count-in is spoken counts in the bars before its first section** (set.Line has no pre-roll before bar 1): a song whose first section starts at bar 1 keeps the setting without counts until it gets a bar before it.
 
+- **A break is edited in one popup** (Phase 14) with Save / Cancel, not in place: it has four fields. Clicking away
+  cancels, like Esc, so a stray click never changes a break.
+- **Add section on a bar inside a section splits it** (Phase 14), as adding a locator splits an arrangement section;
+  on a section's first bar it splits that section in half, since sections never overlap.
+
 (Add to this list, with a reason, whenever set.Line deliberately departs from a convention.)

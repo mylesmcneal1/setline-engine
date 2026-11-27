@@ -1158,6 +1158,7 @@
 <link rel="stylesheet" href="fix11.css">
 <link rel="stylesheet" href="fix12.css">
 <link rel="stylesheet" href="fix13.css">
+<link rel="stylesheet" href="p14.css">
 </head>
 <body>
 
@@ -2204,7 +2205,7 @@ function renderFolders(listIn,into){
   sc.querySelectorAll('.trk canvas').forEach(c=>{ if(wireRegLane(c)) return; if(wireClipLane(c)) return; c.onclick=e=>{ const s=songs.find(x=>x.id===c.dataset.song); laneClick(s,snapT(s,lx(c,e)/PXS,freeKey(e))); }; });
   sc.querySelectorAll('.freg').forEach(f=>f.onclick=e=>{ const s=songs.find(x=>x.id===f.dataset.song); locate(s,TX.timeAt(e,f)); });
   sc.querySelectorAll('.secs .lane').forEach(wireSecLane);
-  sc.querySelectorAll('.lhadd').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const s=songs.find(x=>x.id===b.dataset.song); addSecAt(s,playId===s.id?barAtTime(s,pos):1); });
+  sc.querySelectorAll('.lhadd').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const s=songs.find(x=>x.id===b.dataset.song); if(window.SL14A) SL14A.addSection(s); else addSecAt(s,playId===s.id?barAtTime(s,pos):1); });
   updateGridSel(); lcd();
   if(window.TL9) TL9.after(sc); // 9e: the shared sideways position, the scrollbar, the pinned meter
 }
@@ -3850,22 +3851,9 @@ function syncLines(text,ch){ const c=Math.max(0,Math.min(15,(+ch||1)-1)), out=[]
     else bad.push(line); });
   return {msgs:out,bad}; }
 let SYNC_NATIVE=0; // 8d: a pedal sent the sync point natively just now
-async function syncMidi(){ const onlyPorts=null, sy=syncOf(), devs=sy.devices.map((d,i)=>[d,i]); const already=Date.now()-SYNC_NATIVE<1500; SYNC_NATIVE=0;
-  if(!devs.length){ if(!onlyPorts) toast('No MIDI sync point for “'+curSetObj().name+'”: set one in Settings › MIDI'); return {sent:0}; }
-  let ok=0; const fails=[];
-  for(const [d,i] of devs){ const {msgs}=syncLines(d.text,d.ch); const r=already?{ok:true}:await ncall('sendMidiNow',{port:d.port,msgs}); if(r&&!r.error){ ok++; SYNC_SENT[i]=Date.now(); } else if(NATIVE) fails.push(d.port+(r&&r.error?': '+r.error:'')); else { ok++; SYNC_SENT[i]=Date.now(); } }
-  SYNCED={set:curSet,list:devs.map(([d,i])=>({label:d.port+' · Ch '+d.ch,ok:!!SYNC_SENT[i]}))};
-  if(fails.length) toast(`MIDI sync: ${ok} sent, ${fails.length} failed (${fails.join('; ')})`);
-  else if(!onlyPorts){ const b=$('syncBtn'), r=b&&!b.hidden?b.getBoundingClientRect():null; if(r) ctxMenu({clientX:r.left,clientY:r.bottom+6},[{cap:'Sent to all devices at once'},...SYNCED.list.map(x=>({label:x.label,icon:x.ok?'✓':'✕',act:()=>{}})),{cap:'Songs take over from here.'}]); else toast(`MIDI synced: ${ok} device${ok===1?'':'s'} ✓`); }
-  if(settingsOpen()&&SET_TAB==='midi') renderSettings(); renderSetHead(); return {sent:ok,failed:fails}; }
-// "Fill from first song": the first events on each MIDI track at the start of the setlist's first song.
-function fillSyncFromFirst(){ const L=curSetObj(), s=songs.find(x=>x.id===L.order[0]); if(!s){ toast('The setlist is empty'); return 0; } const sy=syncOf(L); let n=0; snap();
-  s.tracks.filter(t=>isMidiTrack(s,t)).forEach(t=>{ const cfg=s.midiCfg[t]||{}, evs=(s.midi[t]||[]).map(e=>({e,t:evTime(s,e)})).sort((a,b)=>a.t-b.t); if(!evs.length) return;
-    const t0=evs[0].t; if(t0>(s.bars[1]?s.bars[1].t:2)+1e-6) return; // nothing at the start of the song
-    const lines=evs.filter(x=>x.t<=t0+1e-6).map(({e})=>e.kind==='pc'?`PC ${e.msb!==undefined||e.lsb!==undefined?`${+e.msb||0}:${+e.lsb||0}:`:''}${+e.pc||0}`:e.kind==='cc'?`CC ${+e.cc||0} ${+e.val||0}`:'').filter(Boolean);
-    if(!lines.length) return; const port=cfg.port||PORTS[0]||'', ch=+cfg.ch||1;
-    let d=sy.devices.find(x=>x.port===port&&+x.ch===ch); if(!d){ d={port,ch,text:''}; sy.devices.push(d); } d.text=lines.join('\n'); n++; });
-  toast(n?`Sync point filled from “${s.name}” (${n} device${n>1?'s':''})`:`“${s.name}” sends no MIDI at its start`); refresh(); return n; }
+// 14 §2: Sync MIDI sends the first song’s bar-1 MIDI (sync14.js); the per-setlist sync point is gone
+async function syncMidi(o){ return window.SL14S?SL14S.send(o):{sent:0,failed:[]}; }
+function fillSyncFromFirst(){ return 0; }
 
 // ---- Soundcheck: a library song / version as a loop, outside the setlist (the set position is kept) ----
 let SOUNDCHECK=null; // {songId, verId, back: {sel, play, pos}}
@@ -4155,7 +4143,7 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
     view:on=>setBand(on), addWidget:(sc,type,x,y)=>addWidget(sc,type,x,y), select:(id,ori)=>{ BSEL=id; if(ori) BORI=ori; renderBand(); }, fields:()=>FIELDS, setFields:f=>{ FIELDS=f; refresh(); }, fieldVal:(s,f,v)=>fieldVal(s,f,v), setFieldVal:(s,f,val,v)=>setFieldVal(s,f,val,v), newField:n=>newField(n), table:()=>fieldsTable(), finishBy:v=>{ const L=curSetObj(); if(v) L.finishBy=v; else delete L.finishBy; } },
   midiReconnected(names){ /* 7a: Sync MIDI is one button only; nothing goes out by itself */ },
   selectSong:id=>{ select(id,false); refresh(); },
-  jumpWhen:()=>JUMP_WHEN, looping:()=>looping(), vampOn:()=>!!VAMP, pedalOrder:s=>{ const x=perfPartsNow(); return x&&x.s&&x.s.id===s.id?x.src.map(p=>p.secId):(s.secs||[]).map(p=>p.id); }, syncMsgs:()=>syncOf().devices.map(d=>({port:d.port,msgs:syncLines(d.text,d.ch).msgs})), rigLost:m=>rigLost(m), rigBack:()=>rigBack(), rigPaired:m=>rigPaired(m), rigLibrary:l=>rigLibrary(l), rigProgress:m=>rigProgress(m), rigInfo:ri=>rigInfoIn(ri), rigFollowing:()=>rigFollowing(), midiAction:m=>onMidiAction(m), midiIn:m=>onMidiIn(m), midiLearned:m=>{ if(window.SLLearn) SLLearn(m); }, setMidiMap:(l,ins)=>{ MIDI_MAP=Array.isArray(l)?l:[]; MIDI_INS=ins||[]; if(settingsOpen()&&SET_TAB==='controls') renderSettings(); }, midiMap:()=>MIDI_MAP,
+  jumpWhen:()=>JUMP_WHEN, looping:()=>looping(), vampOn:()=>!!VAMP, pedalOrder:s=>{ const x=perfPartsNow(); return x&&x.s&&x.s.id===s.id?x.src.map(p=>p.secId):(s.secs||[]).map(p=>p.id); }, syncMsgs:()=>window.SL14S?SL14S.armMsgs():[], syncBpm:()=>window.SL14S?SL14S.armBpm():0, rigLost:m=>rigLost(m), rigBack:()=>rigBack(), rigPaired:m=>rigPaired(m), rigLibrary:l=>rigLibrary(l), rigProgress:m=>rigProgress(m), rigInfo:ri=>rigInfoIn(ri), rigFollowing:()=>rigFollowing(), midiAction:m=>onMidiAction(m), midiIn:m=>onMidiIn(m), midiLearned:m=>{ if(window.SLLearn) SLLearn(m); }, setMidiMap:(l,ins)=>{ MIDI_MAP=Array.isArray(l)?l:[]; MIDI_INS=ins||[]; if(settingsOpen()&&SET_TAB==='controls') renderSettings(); }, midiMap:()=>MIDI_MAP,
   setlistOpened(){},
   // 6f: the Library
   setlistCmd:cmd=>setlistCmd(cmd), curSetId:()=>curSet,
@@ -4323,7 +4311,7 @@ window.SLActions={ list:()=>ACTIONS.map(({id,name,key})=>({id,name,key})), run:(
 // ---- 7c: a mapped pedal / controller message (MidiControl.h): run the action, light the MIDI-in dot, say it on Perform
 let MIDI_MAP=[], MIDI_INS=[], MIDI_LAST='';
 function onMidiAction(m){ const a=ACTIONS.find(x=>x.id===m.action); if(!a) return; if(m.press===false&&!a.momentary) return;
-  if(m.fast&&window.SLE&&SLE.nativeDid){ SLE.nativeDid(m.action,m.fastResult); if(m.action==='syncMidi') SYNC_NATIVE=Date.now(); // 8d: already done in the engine; the page catches up
+  if(m.fast&&window.SLE&&SLE.nativeDid){ SLE.nativeDid(m.action,m.fastResult); if(m.action==='syncMidi'){ SYNC_NATIVE=Date.now(); if(window.SL14S) SL14S.nativeDid(); } // 8d: already done in the engine; the page catches up
     if(/^(playStop|play|stop)$/.test(m.action)){ const want=!!(m.fastResult&&m.fastResult.playing); if(want!==playing) toggle(); midiLight(true); perfFlash((a.ico||'')+' '+(want?'Play':'Stop')+' (pedal)'); setTimeout(midiFeedback,30); return; } }
   a.run(undefined,m.press!==false); midiLight(true);
   if(m.press!==false) perfFlash(`${a.ico||''} ${a.name.replace(/ \(.*\)$/,'')} (pedal)`.trim());
@@ -4522,10 +4510,7 @@ async function settingsHTML(tab){
       ${sgrp(all.length?all.map(p=>sf(esc(p)+(outs.includes(p)?'':' <span style="color:var(--amber)">(not connected)</span>'),`<span style="color:var(--muted);font-size:12px">${used[p]?used[p].size+' track'+(used[p].size>1?'s':''):'not used'}</span>`)):[sf('No MIDI outputs found','')])}
       <h3 style="margin-top:6px">MIDI clock</h3><p class="d">24 ppqn on every MIDI output, following each song’s tempo map; while stopped it keeps running at the next song’s tempo. Start/Stop/Continue + Song Position is off by default (some loopers and drum machines start by themselves).</p>
       ${sgrp(((await ncall('midiPorts'))||[]).map(p=>sf(esc(p.name)+(p.connected?'':' <span style="color:var(--amber)">(not connected)</span>'),`<span class="clkrow"><span class="faint" style="font-size:11px">Clock</span>${tog('clk_'+btoa(unescape(encodeURIComponent(p.name))).replace(/=/g,''),p.clock)}<span class="faint" style="font-size:11px;margin-left:8px">Start/Stop + SPP</span>${tog('trn_'+btoa(unescape(encodeURIComponent(p.name))).replace(/=/g,''),p.transport)}</span>`)).concat(NATIVE?[]:[sf('MIDI outputs appear here in the app','')]))}
-      ${(()=>{ const L=curSetObj(), sy=syncOf(L); return `<h3 style="margin-top:6px">Sync point for “${esc(L.name)}”</h3><p class="d">Before the first song, every device should be on the right sound. Write what each one needs, one message per line. <b>Sync MIDI</b> (in the top bar, on a key or on a remote screen) sends it all; after that the songs change sounds themselves. <button class="linkb" id="stFmt">Message formats</button></p>
-        ${sgrp(sy.devices.map((d,i)=>{ const {msgs,bad}=syncLines(d.text,d.ch); return sf(`<span class="clkrow"><select data-sp="${i}">${[...new Set([...PORTS,d.port])].filter(Boolean).map(p=>`<option ${p===d.port?'selected':''}>${esc(p)}</option>`).join('')}</select><select data-sc="${i}">${[...Array(16)].map((_,k)=>`<option value="${k+1}" ${k+1===+d.ch?'selected':''}>ch ${k+1}</option>`).join('')}</select></span>`,
-          `<span class="clkrow"><textarea data-st="${i}" rows="2" spellcheck="false" style="width:170px;font:12px var(--code,monospace)">${esc(d.text||'')}</textarea><span class="faint" style="font-size:11px;width:56px">${msgs.length} msg${bad.length?` · <span style="color:var(--amber)">${bad.length} not understood</span>`:''}</span><button class="sel2" style="min-width:0" data-sx="${i}" title="Remove">✕</button></span>`); }).concat(sy.devices.length?[]:[sf('No devices yet','')]))}
-        <div class="racts"><button class="btn line" id="stSadd">＋ Add device</button><button class="btn line" id="stSfill">Fill from first song</button><button class="btn pri" id="stSall" ${sy.devices.length?'':'disabled'}>Sync MIDI</button></div>`; })()}
+      <h3 style="margin-top:6px">Sync MIDI</h3><p class="d"><b>Sync MIDI</b> (in the top bar, on a pedal or on a remote screen) sends every device what the setlist’s first song needs at bar 1: each MIDI track’s preset and scene, any other program change or CC there, and the clock at its tempo with Song Position at bar 1. Hover it to see what each device will get; ⌥-click syncs to the selected song.</p>
       ${sgrp([sf('Send MIDI early by',`<span class="rsl"><input type="number" id="stMidiOff" min="-200" max="200" step="1" value="${+off.ms||0}" style="width:70px"> ms</span>`)])}
       <h3 style="margin-top:6px">Patch name lists</h3><p class="d">Optional. A list names program numbers so MIDI clips read “Prog 12 · Lead”. Pick one per MIDI track (none: numbers).</p>
       ${sgrp(patchLists().map(l=>sf(esc(l.name),`<span style="display:flex;gap:6px;align-items:center"><span style="color:var(--muted);font-size:12px">${Object.keys(l.names||{}).length} names${l.built?' · built in':''}</span><button class="sel2" style="min-width:0" data-plist="${esc(l.id)}">${l.built?'View…':'Edit…'}</button></span>`)))}
@@ -4587,13 +4572,6 @@ function wireSettings(tab){ const q=id=>$(id), re=()=>renderSettings();
     q('stPdf').onclick=()=>exportPatchSheet(); }
   if(tab==='midi'){ document.querySelectorAll('#sbody .tog[id^="clk_"],#sbody .tog[id^="trn_"]').forEach(b=>b.onclick=async()=>{ const name=decodeURIComponent(escape(atob(b.id.slice(4)+'=='.slice(0,(4-b.id.slice(4).length%4)%4)))), row=b.closest('.clkrow'), c=row.querySelector('[id^="clk_"]'), tr=row.querySelector('[id^="trn_"]');
       b.classList.toggle('off'); await ncall('setMidiPort',{name,clock:!c.classList.contains('off'),transport:!tr.classList.contains('off')}); });
-    const sy=syncOf();
-    document.querySelectorAll('#sbody [data-sp]').forEach(s=>s.onchange=()=>{ snap(); sy.devices[+s.dataset.sp].port=s.value; refresh(); re(); });
-    document.querySelectorAll('#sbody [data-sc]').forEach(s=>s.onchange=()=>{ snap(); sy.devices[+s.dataset.sc].ch=+s.value; refresh(); re(); });
-    document.querySelectorAll('#sbody [data-st]').forEach(s=>s.onchange=()=>{ snap(); sy.devices[+s.dataset.st].text=s.value; delete SYNC_SENT[+s.dataset.st]; SYNCED=null; refresh(); re(); });
-    document.querySelectorAll('#sbody [data-sx]').forEach(b=>b.onclick=()=>{ snap(); sy.devices.splice(+b.dataset.sx,1); SYNC_SENT={}; refresh(); re(); });
-    q('stSadd').onclick=()=>{ snap(); sy.devices.push({port:PORTS[0]||'',ch:1,text:''}); refresh(); re(); };
-    q('stSfill').onclick=()=>{ fillSyncFromFirst(); re(); }; q('stSall').onclick=()=>syncMidi();
 
     q('stMidiOff').onchange=e=>{ ncall('midiOffset',{ms:+e.target.value||0}); toast('MIDI is sent '+(+e.target.value||0)+' ms early from the next Play'); };
     document.querySelectorAll('#sbody [data-plist]').forEach(b=>b.onclick=()=>patchListBox(b.dataset.plist));
@@ -4737,5 +4715,8 @@ try{ const q=new URLSearchParams(location.search).get('settings'); if(q) setTime
 <script src="d13.js"></script>
 <script src="e13.js"></script>
 <script src="f13.js"></script>
+<script src="brk14.js"></script>
+<script src="sync14.js"></script>
+<script src="add14.js"></script>
 </body>
 </html>
