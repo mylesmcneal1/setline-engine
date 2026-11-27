@@ -15,12 +15,13 @@ const shots = args.includes("--shots") ? resolve(args[args.indexOf("--shots") + 
 const only = args.includes("--only") ? args[args.indexOf("--only") + 1] : null;
 if (!existsSync(join(root, "1-arrange.html"))) { console.error("ui/dist not built (cd ui && npm run build)"); process.exit(2); }
 
-const chrome = process.env.CHROME || [
+const browsers = process.env.CHROME ? [process.env.CHROME] : [
   "C:/Program Files/Google/Chrome/Application/chrome.exe",
   "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
   "/usr/bin/google-chrome", "/usr/bin/chromium-browser", "/usr/bin/chromium",
-].find((p) => existsSync(p));
+].filter((p) => existsSync(p));
+const chrome = browsers[0];
 if (!chrome) { console.log("UI LAYOUT SKIPPED (no Chrome found)"); process.exit(0); }
 
 // ---- a static server for ui/dist
@@ -34,10 +35,20 @@ const base = `http://127.0.0.1:${server.address().port}/1-arrange.html`;
 
 // ---- Chrome
 const prof = await mkdtemp(join(tmpdir(), "sl-ui-"));
-const proc = spawn(chrome, ["--headless=new", "--remote-debugging-port=0", `--user-data-dir=${prof}`, "--no-first-run", "--no-default-browser-check", "--disable-gpu", "--hide-scrollbars", "--force-device-scale-factor=1", "about:blank"], { stdio: "ignore" });
-let port = 0;
-for (let i = 0; i < 100 && !port; i++) { await new Promise((r) => setTimeout(r, 100)); try { port = +(await readFile(join(prof, "DevToolsActivePort"), "utf8")).split("\n")[0]; } catch {} }
-if (!port) { console.error("Chrome didn't start"); proc.kill(); process.exit(2); }
+// (a fresh CI runner can take well over 10 s to start Chrome the first time: wait up to 30 s, then try the next
+//  browser, and print what the browser said if none starts)
+let proc = null, port = 0, said = "";
+for (const exe of browsers) {
+  for (let attempt = 0; attempt < 2 && !port; attempt++) {
+    const dir = attempt || exe !== chrome ? await mkdtemp(join(tmpdir(), "sl-ui-")) : prof;
+    proc = spawn(exe, ["--headless=new", "--remote-debugging-port=0", `--user-data-dir=${dir}`, "--no-first-run", "--no-default-browser-check", "--disable-gpu", "--hide-scrollbars", "--force-device-scale-factor=1", "about:blank"], { stdio: ["ignore", "ignore", "pipe"] });
+    let exited = false; proc.on("exit", () => { exited = true; }); proc.stderr.on("data", (d) => { said = (said + d).slice(-2000); });
+    for (let i = 0; i < 300 && !port && !exited; i++) { await new Promise((r) => setTimeout(r, 100)); try { port = +(await readFile(join(dir, "DevToolsActivePort"), "utf8")).split("\n")[0]; } catch {} }
+    if (!port) { console.log(`(${exe} didn't start${exited ? ": it exited" : " in 30 s"}; trying again)`); try { proc.kill(); } catch {} }
+  }
+  if (port) break;
+}
+if (!port) { console.error("Chrome didn't start\n" + said); process.exit(2); }
 const tgt = await (await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: "PUT" })).json();
 const ws = new WebSocket(tgt.webSocketDebuggerUrl);
 await new Promise((r, j) => { ws.onopen = r; ws.onerror = j; });
