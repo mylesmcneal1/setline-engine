@@ -37,7 +37,8 @@ if (!s.tracks.includes("Gear")) s.tracks.push("Gear");
 s.ck = [{ id: "r1", bar: 1, bars: 6, notes: [0, 1, 2, 3].map((b) => ({ b, st: 0, acc: b === 0 })) }];
 s.cues = [{ id: "q1", bar: 2, text: "Verse" }, { id: "q2", bar: 4, beat: 3, text: "Chorus" }];
 // 13 §16: cues are recordings or the natural voices (no computer voice any more): this show records its two words
-P.addWords(s, [{ name: "Verse.wav", ref: CFG.src[0] }, { name: "Chorus.wav", ref: CFG.src[1] || CFG.src[0] }], false);
+// (the files are the show's own audio, so they travel in the package like an imported recording)
+P.addWords(s, [{ name: "Verse.wav", ref: s.files[stems[0]].path }, { name: "Chorus.wav", ref: s.files[stems[1] || stems[0]].path }], false);
 s.clips = { [stems[0]]: [{ id: 1, start: 0, end: 3, off: 0, gain: 0, fi: 0, fo: 0.5, mute: false }, { id: 2, start: 3, end: 9, off: 3, gain: -6, fi: 0.25, fo: 0, mute: false }] };
 s.midiCfg = s.midiCfg || {}; s.midi = s.midi || {};
 s.midiCfg["Gear"] = { port: P.PORTS[0] || "Any port", ch: 1, profile: "gen", early: "0" };
