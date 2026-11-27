@@ -1078,6 +1078,44 @@ Bridge::Options Bridge::addRest(Options o)
             done(r);
         });
     });
+    // 12: finer than the prepared levels (zoomed far in): one stretch of one file at `spp` frames per value, read on a
+    // thread of its own. {ref, start, end (seconds), spp} -> {rate, spp, start (frame), peaks: base64} | {error}
+    o = addAsync(o, "getPeaksRange", [this](const juce::var& a, auto done) {
+        const auto f = Media::resolve(a["ref"].toString(), session.file());
+        if (f == juce::File() || ! f.existsAsFile()) { done(errorVar("No such file")); return; }
+        const int spp = juce::jlimit(8, 4096, a["spp"].isVoid() ? 64 : (int) a["spp"]);
+        const double t0 = juce::jmax(0.0, (double) a["start"]), t1 = juce::jmax(t0, (double) a["end"]);
+        auto alive_ = alive;
+        std::thread([f, spp, t0, t1, done, alive_] {
+            juce::AudioFormatManager fm; fm.registerBasicFormats();
+            std::unique_ptr<juce::AudioFormatReader> rd(fm.createReaderFor(f));
+            juce::var r;
+            if (rd == nullptr) r = errorVar("Can't read " + f.getFileName());
+            else {
+                const double rate = rd->sampleRate;
+                const juce::int64 a0 = juce::jlimit<juce::int64>(0, rd->lengthInSamples, (juce::int64) (t0 * rate) / spp * spp);
+                const juce::int64 a1 = juce::jlimit<juce::int64>(a0, rd->lengthInSamples, (juce::int64) std::ceil(t1 * rate));
+                const int ch = (int) juce::jmin<unsigned int>(rd->numChannels, 8u);
+                juce::AudioBuffer<float> buf(ch, spp * 256);
+                juce::MemoryBlock out; out.ensureSize((size_t) ((a1 - a0) / spp + 1));
+                std::vector<juce::uint8> bytes; bytes.reserve((size_t) ((a1 - a0) / spp + 1));
+                for (juce::int64 at = a0; at < a1; at += buf.getNumSamples()) {
+                    const int n = (int) juce::jmin<juce::int64>(buf.getNumSamples(), a1 - at);
+                    rd->read(&buf, 0, n, at, true, true);
+                    for (int i = 0; i < n; i += spp) {
+                        float m = 0.0f; const int k = juce::jmin(spp, n - i);
+                        for (int c = 0; c < ch; ++c) m = juce::jmax(m, buf.getMagnitude(c, i, k));
+                        bytes.push_back((juce::uint8) juce::roundToInt(std::sqrt(juce::jlimit(0.0f, 1.0f, m)) * 255.0f));
+                    }
+                }
+                auto* o2 = new juce::DynamicObject();
+                o2->setProperty("rate", rate); o2->setProperty("spp", spp); o2->setProperty("start", (double) a0);
+                o2->setProperty("peaks", juce::Base64::toBase64(bytes.data(), bytes.size()));
+                r = juce::var(o2);
+            }
+            juce::MessageManager::callAsync([alive_, r, done] { if (*alive_ == nullptr) return; done(r); });
+        }).detach();
+    });
     // Spoken cues (Cues.h): the installed voices, rendering ahead of time, Preview on the Cues outputs.
     o = addAsync(o, "getVoices", [this](const juce::var&, auto done) { cues.voicesAsync(done); });
     o = add(o, "prepareCues", [this](const juce::var& a) {

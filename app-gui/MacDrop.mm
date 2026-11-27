@@ -20,6 +20,35 @@ void stopWebViewFileDrops(juce::Component& browser)
 }
 
 
+// 12: the trackpad pinch, caught for the whole window before the web view (which would turn it into a page zoom or a
+// weak gesture event) and sent to the page as "pinch" {m: magnification step, x, y (the web view's points), phase}.
+// Only while the pointer is over the web view of this window.
+static id pinchMonitor = nil;
+void setlineInstallPinch(juce::WebBrowserComponent& browser)
+{
+    if (pinchMonitor != nil) return;
+    juce::Component::SafePointer<juce::WebBrowserComponent> safe(&browser);
+    pinchMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskMagnify handler:^NSEvent*(NSEvent* ev) {
+        auto* b = safe.getComponent();
+        if (b == nullptr || b->getPeer() == nullptr) return ev;
+        NSView* root = (NSView*) b->getPeer()->getNativeHandle();
+        if (root == nil || [ev window] != [root window]) return ev;
+        NSView* web = nil;
+        NSMutableArray* todo = [NSMutableArray arrayWithObject:root];
+        while ([todo count] > 0 && web == nil) { NSView* v = [todo objectAtIndex:0]; [todo removeObjectAtIndex:0]; if ([v isKindOfClass:[WKWebView class]]) web = v; else [todo addObjectsFromArray:[v subviews]]; }
+        if (web == nil) return ev;
+        NSPoint p = [web convertPoint:[ev locationInWindow] fromView:nil];
+        if (! [web isFlipped]) p.y = [web bounds].size.height - p.y;
+        if (p.x < 0 || p.y < 0 || p.x > [web bounds].size.width || p.y > [web bounds].size.height) return ev;
+        const NSEventPhase ph = [ev phase];
+        const char* phase = (ph & NSEventPhaseBegan) ? "begin" : (ph & (NSEventPhaseEnded)) ? "end" : (ph & NSEventPhaseCancelled) ? "cancel" : "change";
+        auto* o = new juce::DynamicObject();
+        o->setProperty("m", (double) [ev magnification]); o->setProperty("x", (double) p.x); o->setProperty("y", (double) p.y); o->setProperty("phase", juce::String(phase));
+        b->emitEventIfBrowserIsVisible("pinch", juce::var(o));
+        return nil; // the page zooms; the web view doesn't
+    }];
+}
+
 // 10b: the Edit menu's text commands, sent to the first responder (the web view) as any Mac app does
 bool setlineMacEditAction(const juce::String& what)
 {

@@ -382,7 +382,7 @@
     if (!inEd(e.target)) return;
     if (e.key === "Enter") { e.preventDefault(); e.stopImmediatePropagation(); editor.end(true); return; }
     if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); editor.end(false); return; }
-    if (e.key === "Tab") { e.preventDefault(); e.stopImmediatePropagation(); editor.end(true); return; }
+    if (e.key === "Tab") { e.preventDefault(); e.stopImmediatePropagation(); if (window.SL12 && SL12.tabNext && SL12.tabNext(e)) return; editor.end(true); return; } // 12: ⇥ also starts the next name
     e.stopPropagation(); // typing (space, letters, ⌫) never reaches the page's shortcuts
   }, true);
   ["pointerdown", "mousedown", "click", "dblclick", "pointerup", "mouseup", "contextmenu", "dragstart"].forEach((t) => window.addEventListener(t, (e) => { if (inEd(e.target)) e.stopPropagation(); }, true));

@@ -232,7 +232,7 @@
   const PAGE_KEYS = [["Playback", "Play / Stop", "Space"], ["Playback", "Next song", "N"], ["Playback", "Previous song", "P"], ["Playback", "Next version", "V"], ["Setlist", "The selected song’s previous / next version", "⌥[ ⌥]"], ["Playback", "Go to start", "↩"],
     ["Playback", "Loop the section", "C"], ["Playback", "Click on / off", "K"], ["Playback", "Leave the loop", "L"],
     ["Editing", "Rename", "↩"], ["Editing", "Delete", "⌫"], ["Editing", "Move up / down", "⌥↑ ⌥↓"], ["Editing", "Copy while dragging", "⌥ drag"], ["Editing", "Cancel", "Esc"],
-    ["View", "Zoom at the pointer", "⌥ scroll"], ["View", "Zoom in / out", "= −"], ["View", "Pinch to zoom", "trackpad"], ["View", "Setlist sidebar", "["], ["View", "Side panel", "]"], ["View", "Back to all songs", "Esc"]];
+    ["View", "Zoom at the pointer", "⌥ scroll"], ["View", "Zoom in / out (around the playhead)", "= −"], ["View", "Zoom to the selection", "Z"], ["View", "Zoom back", "⇧Z  X"], ["Editing", "Rename, then the next name", "⇥"], ["Editing", "Click editor: Draw mode", "B"], ["Editing", "Click editor: grid narrower / wider / triplets / snap", "⌘1 ⌘2 ⌘3 ⌘4"], ["Editing", "Solo only this track", "⌘-click S"], ["View", "Pinch to zoom", "trackpad"], ["View", "Setlist sidebar", "["], ["View", "Side panel", "]"], ["View", "Back to all songs", "Esc"]];
   const GROUP = { File: "Library", Edit: "Editing", Library: "Library", Song: "Editing", Track: "Editing", Setlist: "Setlist", View: "View", Customize: "View", Window: "View", Help: "Help", "set.Line": "Help" };
   function sheet() {
     if ($("sheet10")) { $("sheet10").remove(); return; }

@@ -77,7 +77,7 @@
       it("importAudio", "Audio as a new song…", () => mod().importAudioSong ? mod().importAudioSong() : openNewSong(), { dis: st, group: "Library", help: "Import audio as a new song" }),
       it("importPackage", "set.Line package (.setline)…", () => mod().importPackage(), { dis: st, group: "Library", help: "Import a set.Line package" }),
       sep(), head("Export"),
-      it("exportSong", "This song…", () => mod().exportSong ? mod().exportSong(s && s.id) : mod().exportSetlist(), { key: "cmd+e", dis: !s, help: "Export this song" }),
+      it("exportSong", "This song…", () => mod().exportSong ? mod().exportSong(s && s.id) : mod().exportSetlist(), { key: "cmd+alt+e", dis: !s, help: "Export this song" }),
       it("exportSet", "This setlist…", () => mod().exportSetlist(), { key: "cmd+shift+e", help: "Export this setlist" }),
       sep(),
       it("print", "Print setlist…", () => window.SLPrint && SLPrint.box(), { key: "cmd+p", group: "Setlist" }),
@@ -89,7 +89,7 @@
     const edit = [
       it("undo", "Undo", () => undo(), { key: "cmd+z" }), it("redo", "Redo", () => redo(), { key: "cmd+shift+z" }), sep(),
       it("cut", "Cut", () => doCut(), { key: "cmd+x" }), it("copy", "Copy", () => doCopy(), { key: "cmd+c" }), it("paste", "Paste", () => doPaste(), { key: "cmd+v" }),
-      it("duplicate", "Duplicate", dupAny, { key: "cmd+d" }), it("delete", "Delete", delAny, { key: "backspace", dis: st }), sep(),
+      it("duplicate", "Duplicate", dupAny, { key: "cmd+d" }), it("split", "Split", () => window.SL12 && SL12.split(), { key: "cmd+e", help: "Split the selected clip at the insert marker (or the playhead)" }), it("delete", "Delete", delAny, { key: "backspace", dis: st }), sep(),
       it("rename", "Rename…", renameAny, { key: "return", dis: !s && !T && !(window.SL11 && SL11.current()) }),
       it("editObj", "Edit…", editAny, { dis: !s && !T && !(window.SL11 && SL11.current()), help: "Edit what’s selected" }),
       it("selectAll", "Select all", () => { const x = song(); if (x && typeof selectAllIn === "function") selectAllIn(x); }, { key: "cmd+a", dis: !s }),
@@ -184,6 +184,7 @@
           it("compactTop", "Compact top rows", () => X.setCompact(!X.compact()), { check: X.compact() })], !xs),
         it("fitAll", "Fit all", () => X.fitAll(X.song()), { key: "cmd+alt+f", dis: !xs, check: X.fitAllOn() })]; })() : []),
       sep(),
+      it("follow", "Follow playhead", () => window.SL12 && SL12.follow(!SL12.follow()), { key: "cmd+f", check: !!(window.SL12 && SL12.follow()) }),
       it("toggleSetlist", "Setlist sidebar", () => setPanel("L", !isOpen("L")), { key: "cmd+alt+l", check: isOpen("L") }),
       it("togglePanel", "Side panel", () => setPanel("R", !isOpen("R")), { key: "cmd+alt+r", check: isOpen("R") }),
     ];

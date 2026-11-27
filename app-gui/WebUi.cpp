@@ -8,6 +8,7 @@ namespace setline::gui {
 
 #if JUCE_MAC
 void stopWebViewFileDrops(juce::Component& browser); // MacDrop.mm
+void setlineInstallPinch(juce::WebBrowserComponent& browser); // MacDrop.mm (12)
 #endif
 
 namespace {
@@ -93,6 +94,7 @@ void WebUi::Browser::pageFinishedLoading(const juce::String&)
 {
    #if JUCE_MAC
     stopWebViewFileDrops(*this);
+    setlineInstallPinch(*this);
    #endif
 }
 

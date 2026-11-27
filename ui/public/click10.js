@@ -183,13 +183,15 @@
       const h = (n.a ? hA : hC) * (0.45 + 0.55 * (n.v || 127) / 127);
       g.fillRect(X, n.a ? mid - 1 - h : mid + 1, w, h);
     }
-    if (edit) { g.strokeStyle = "#f5c518"; g.lineWidth = 1.5; g.strokeRect(vx + 1, 1.5, Math.min(vw, AW - vx) - 2, H - 3); }
+    if (edit || (SELCK && SELCK.s === s && SELCK.t === t)) { g.strokeStyle = edit ? "#f5c518" : "#fff"; g.lineWidth = 1.5; g.strokeRect(vx + 1, 1.5, Math.min(vw, AW - vx) - 2, H - 3); }
     if (C.notes.length && C.sig !== sigKey(s)) { g.fillStyle = "rgba(255,180,40,.9)"; g.font = "600 10.5px Inter, sans-serif"; g.fillText("Time signature changed: Refill click?", vx + 8, y0 + 11); }
   };
-  // a click on the Click lane opens its clip (the old click-clip gestures are gone)
+  // 12: a click on the Click lane selects its clip; a double-click opens its editor under the timeline (again: closes it)
   const laneHit = (e) => { const cv = e.target.closest && e.target.closest("canvas[data-t]"); if (!cv) return null; const s = songOf(cv.dataset.song), t = s && s.tracks[+cv.dataset.t]; return s && t && isClick(s, t) ? { s, t, cv } : null; };
-  document.addEventListener("pointerdown", (e) => { const h = laneHit(e); if (!h || e.button !== 0) return; e.stopImmediatePropagation(); e.preventDefault(); open(h.s, h.t); }, true);
-  ["dblclick", "mousedown", "click"].forEach((ty) => document.addEventListener(ty, (e) => { if (laneHit(e)) { e.stopImmediatePropagation(); if (ty !== "click") e.preventDefault(); } }, true));
+  let SELCK = null; // the click clip selected on the timeline {s, t}
+  document.addEventListener("pointerdown", (e) => { const h = laneHit(e); if (!h || e.button !== 0) { if (SELCK && !(e.target.closest && e.target.closest("#clk10"))) { SELCK = null; redrawLanes(); } return; } e.stopImmediatePropagation(); e.preventDefault(); SELCK = { s: h.s, t: h.t }; redrawLanes(); }, true);
+  document.addEventListener("dblclick", (e) => { const h = laneHit(e); if (!h) return; e.stopImmediatePropagation(); e.preventDefault(); if (ED && ED.s.id === h.s.id && ED.t === h.t) close(); else open(h.s, h.t); }, true);
+  ["mousedown", "click"].forEach((ty) => document.addEventListener(ty, (e) => { if (laneHit(e)) { e.stopImmediatePropagation(); if (ty !== "click") e.preventDefault(); } }, true));
   document.addEventListener("contextmenu", (e) => { const h = laneHit(e); if (!h) return; e.preventDefault(); e.stopImmediatePropagation(); open(h.s, h.t); if (window.SLMenus) SLMenus.obj("track", e, h.s, h.t); }, true);
 
   // ================================================================ the clip editor (a panel under the timeline)
@@ -201,9 +203,11 @@
     t = t || clickTracksOf(s)[0];
     if (!t) { if (typeof toast === "function") toast(`“${s.name}” has no click track: Track › Add click track`); return; }
     const same = ED && ED.s === s && ED.t === t;
-    if (!same) ED = { s, t, mode: store.get("clkMode", "draw"), grid: store.get("clkGrid", 1), sel: new Set(), h: store.get("clkH", 250) };
+    if (!same) ED = { s, t, mode: "select", grid: store.get("clkGrid2", -1), tri: !!store.get("clkTri", false), snapOn: store.get("clkSnap", true) !== false, dens: store.get("clkDens", 0), sel: new Set(), h: store.get("clkH", 250), ins: null };
     build(); redrawLanes();
   }
+  // 12: Undo / Redo rebuild the songs: the editor follows at once (not on the next tick), the selection by position
+  function live() { if (!ED || songs.includes(ED.s)) return; const s2 = songOf(ED.s.id); if (!s2) return; const keys = [...ED.sel].map((n) => n.tk + "|" + n.a); ED.s = s2; const N = view(s2, ED.t).notes; ED.sel = new Set(N.filter((n) => keys.includes(n.tk + "|" + n.a))); }
   function close() { ED = null; const p = $("clk10"); if (p) p.remove(); redrawLanes(); }
   const redrawLanes = () => document.querySelectorAll("canvas[data-t]").forEach((cv) => { const s = songOf(cv.dataset.song), t = s && s.tracks[+cv.dataset.t]; if (s && t && isClick(s, t)) window.drawLane(cv); });
   function build() {
@@ -211,15 +215,20 @@
     if (!p) { p = document.createElement("div"); p.id = "clk10"; p.tabIndex = -1; p.dataset.keys = "own"; sc.parentElement.insertBefore(p, sc.nextSibling); }
     p.style.height = ED.h + "px";
     p.innerHTML = `<i class="crz10" title="Drag to resize"></i><div class="ch10"><b>${esc(ED.t)} · MIDI clip</b><span class="cbars10"></span>
-      <div class="seg10" data-k="mode"><button data-v="draw" title="Draw: click to add, click a note to remove, drag to paint  D">✎ Draw</button><button data-v="select" title="Select: drag a box, move, ⌥-drag to copy  S">Select</button></div>
-      <span class="clab10">Grid</span><div class="seg10" data-k="grid">${GRIDS.map(([n], i) => `<button data-v="${i}">${n}</button>`).join("")}</div>
-      <button class="btn line cfill10" title="Accent on beat 1 (each group in odd meters), click on the other beats">Fill from time signature</button>
+      <div class="seg10" data-k="mode"><button data-v="draw" title="Draw mode: click to add, drag to paint, ⌥-drag to erase  B">✎ Draw</button></div>
+      <span class="clab10">Grid</span><div class="seg10" data-k="grid"><button data-v="-1" title="Adaptive: follows the zoom  ⌘1 narrower · ⌘2 wider">Adaptive</button>${GRIDS.slice(0, 3).map(([n], i) => `<button data-v="${i}">${n}</button>`).join("")}</div><div class="seg10" data-k="tri"><button data-v="true" title="Triplets  ⌘3">3</button></div><div class="seg10" data-k="snapOn"><button data-v="true" title="Snap to the grid  ⌘4 (⌘-drag: free)">Snap</button></div>
+      <button class="btn line cfill10" title="Fill from time signature: an accent on beat 1 (each group in odd meters), a click on the other beats">Fill ▾</button>
       <button class="btn line cpat10">Pattern ▾</button><button class="ibtn cmore10" title="More" aria-label="More">⋯</button><button class="ibtn cx10" title="Close  Esc" aria-label="Close">✕</button></div>
       <div class="chint10" hidden>Time signature changed: <b>Refill click?</b><button class="btn line" data-a="refill">Refill</button><button class="btn line" data-a="keep">Keep as drawn</button></div>
       <div class="cb10"><div class="cl10"><div class="crl10" style="height:${RULER}px"><span>Bar</span><span>Time sig.</span></div><div class="crow10" style="height:${ROWH}px"><i style="background:#f2f3f6"></i><b>Accent</b><em>C3</em></div><div class="crow10" style="height:${ROWH}px"><i style="background:#f5c518"></i><b>Click</b><em>C#3</em></div><div class="cvl10">Velocity</div></div><canvas class="cc10"></canvas></div>`;
     const seg = (k, v) => p.querySelectorAll(`.seg10[data-k="${k}"] button`).forEach((b) => b.classList.toggle("on", b.dataset.v === String(v)));
-    seg("mode", ED.mode); seg("grid", ED.grid);
-    p.querySelectorAll(".seg10 button").forEach((b) => b.onclick = () => { const k = b.parentElement.dataset.k; if (k === "mode") { ED.mode = b.dataset.v; store.set("clkMode", ED.mode); } else { ED.grid = +b.dataset.v; store.set("clkGrid", ED.grid); } seg(k, ED[k]); draw(); });
+    segs();
+    p.querySelectorAll(".seg10 button").forEach((b) => b.onclick = () => { const k = b.parentElement.dataset.k;
+      if (k === "mode") setMode(ED.mode === "draw" ? "select" : "draw");
+      else if (k === "grid") { ED.grid = +b.dataset.v; store.set("clkGrid2", ED.grid); }
+      else if (k === "tri") { ED.tri = !ED.tri; store.set("clkTri", ED.tri); }
+      else if (k === "snapOn") { ED.snapOn = !ED.snapOn; store.set("clkSnap", ED.snapOn); }
+      segs(); draw(); });
     p.querySelector(".cx10").onclick = close;
     p.querySelector(".cfill10").onclick = (e) => { const r = e.currentTarget.getBoundingClientRect(), at = { clientX: r.left, clientY: r.bottom + 4 }, sel = selSpan();
       ctxMenu(at, [{ cap: "Fill from time signature" }, { label: "Whole song", icon: "", act: () => doFill(0, endTk(ED.s)) }, { label: "Selection", icon: "", dis: !sel, act: () => doFill(sel[0], sel[1]) }]); };
@@ -234,12 +243,16 @@
     last = ""; draw(); if (!looping) loop();
   }
   // Draw / Select and the grid: the buttons and the drawing (the panel stays as it is)
-  function segs() { const p = $("clk10"); if (!p || !ED) return; p.querySelectorAll(".seg10 button").forEach((b) => { const k = b.parentElement.dataset.k; b.classList.toggle("on", b.dataset.v === String(ED[k])); }); }
-  function setMode(m) { if (!ED) return; ED.mode = m; store.set("clkMode", m); segs(); draw(); }
+  function segs() { const p = $("clk10"); if (!p || !ED) return; p.querySelectorAll(".seg10 button").forEach((b) => { const k = b.parentElement.dataset.k; b.classList.toggle("on", k === "mode" ? ED.mode === "draw" : b.dataset.v === String(ED[k])); }); const c = p.querySelector(".cc10"); if (c) c.style.cursor = ED.mode === "draw" ? "crosshair" : "default"; }
+  function setMode(m) { if (!ED) return; ED.mode = m; segs(); draw(); }
   const change = (what, f) => { snap(); keep(ED.s, ED.t); f(); toast(what + ` in “${ED.s.name}”`, undo); draw(); redrawLanes(); };
   const doFill = (a, b) => change(a === 0 && b >= endTk(ED.s) ? "Filled the click from the time signature" : "Filled the selection from the time signature", () => { fill(ED.s, ED.t, a, b); ED.sel.clear(); });
-  const step = () => GRIDS[ED.grid][1];
-  const snapTk = (tk, how = "round") => { const { bar } = barOf(ED.s, tk), b0 = barTk(ED.s, bar), st = step(); return Math.max(0, b0 + Math[how]((tk - b0) / st + 1e-9) * st); };
+  // the grid step in ticks: Adaptive picks the finest of 1/1 … 1/32 at least ~14 px apart (⌘1 / ⌘2 move it), × 2/3 for triplets
+  const ADAPT = [PPQ * 4, PPQ * 2, PPQ, PPQ / 2, PPQ / 4, PPQ / 8];
+  function adaptive() { const G = geo(); if (!G || !ED) return PPQ; const pxTk = (xOfTk(G, barTk(ED.s, 2)) - xOfTk(G, barTk(ED.s, 1))) / Math.max(1, barTk(ED.s, 2) - barTk(ED.s, 1));
+    let i = ADAPT.findIndex((t, k) => k === ADAPT.length - 1 || ADAPT[k + 1] * pxTk < 14); i = Math.max(0, Math.min(ADAPT.length - 1, i + (ED.dens || 0))); return ADAPT[i]; }
+  const step = () => { const base = ED.grid < 0 ? adaptive() : GRIDS[ED.grid][1]; return ED.tri && ED.grid !== 3 ? base * 2 / 3 : base; };
+  const snapTk = (tk, how = "round", free) => { if (free || !ED.snapOn) return Math.max(0, Math.round(tk)); const { bar } = barOf(ED.s, tk), b0 = barTk(ED.s, bar), st = step(); return Math.max(0, Math.round(b0 + Math[how]((tk - b0) / st + 1e-9) * st)); };
   const selSpan = () => { if (!ED || !ED.sel.size) return null; const L = [...ED.sel].map((n) => n.tk); const a = Math.min(...L), b = Math.max(...L); return [barTk(ED.s, barOf(ED.s, a).bar), barTk(ED.s, barOf(ED.s, b).bar + 1)]; };
   const visSpanTk = () => { const sc = $("scroller"), w = window.TL9 ? TL9.viewW() : 800; const a = timeTk(ED.s, sc.scrollLeft / PXS), b = timeTk(ED.s, Math.min(ED.s.len, (sc.scrollLeft + w) / PXS)); return [barTk(ED.s, barOf(ED.s, a).bar), barTk(ED.s, barOf(ED.s, b).bar + 1)]; };
   // geometry: the canvas sits under the timeline's lanes (same left edge, the same sideways position and zoom)
@@ -253,9 +266,9 @@
   const rowOfY = (y) => (y < RULER ? -1 : y < RULER + ROWH ? 1 : y < RULER + 2 * ROWH ? 0 : y < RULER + 2 * ROWH + 6 ? -1 : 2); // 1 accent, 0 click, 2 velocity
   let last = "";
   let looping = false;
-  function loop() { if (!ED || !$("clk10")) { looping = false; return; } looping = true; const G = geo(); const k = G ? [PXS, G.hx, G.w, G.h, ED.s.bars.length, ED.v || 0].join() : ""; if (k !== last) { last = k; draw(); } requestAnimationFrame(loop); }
+  function loop() { if (!ED || !$("clk10")) { looping = false; return; } looping = true; const G = geo(); const k = G ? [PXS, G.hx, G.w, G.h, ED.s.bars.length, ED.v || 0].join() : ""; if (k !== last || (ED.ins != null && !ED.sel.size)) { last = k; draw(); } requestAnimationFrame(loop); }
   function draw() {
-    if (!ED) return; const G = geo(); if (!G) return; const s = ED.s, C = view(s, ED.t), cv = G.cv, dpr = window.devicePixelRatio || 1;
+    if (!ED) return; live(); const G = geo(); if (!G) return; const s = ED.s, C = view(s, ED.t), cv = G.cv, dpr = window.devicePixelRatio || 1;
     cv.style.left = G.left + "px"; cv.style.width = G.w + "px"; cv.style.height = G.h + "px";
     if (cv.width !== Math.round(G.w * dpr) || cv.height !== Math.round(G.h * dpr)) { cv.width = Math.round(G.w * dpr); cv.height = Math.round(G.h * dpr); }
     const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, G.w, G.h);
@@ -324,6 +337,7 @@
         g.stroke(); });
     }
     g.fillStyle = "rgba(255,255,255,.08)"; g.fillRect(0, yV - 3, G.w, 1);
+    if (ED.ins != null && !ED.sel.size) { const x = xOfTk(G, ED.ins); if (x >= 0 && x <= G.w && (Math.floor(performance.now() / 530) % 2 === 0)) { g.fillStyle = "rgba(255,255,255,.85)"; g.fillRect(Math.round(x), RULER, 1, 2 * ROWH); } }
     if (BOX) { g.strokeStyle = "#5a8cff"; g.fillStyle = "rgba(90,140,255,.15)"; g.lineWidth = 1; const x = Math.min(BOX.x0, BOX.x1), y = Math.min(BOX.y0, BOX.y1); g.fillRect(x, y, Math.abs(BOX.x1 - BOX.x0), Math.abs(BOX.y1 - BOX.y0)); g.strokeRect(x + .5, y + .5, Math.abs(BOX.x1 - BOX.x0), Math.abs(BOX.y1 - BOX.y0)); }
     if (!C.notes.length) { g.fillStyle = "#9aa0ab"; g.font = "13px Inter, sans-serif"; g.fillText("No click in this song yet: Fill from time signature, or draw notes", 12, yC + 8); }
   }
@@ -331,76 +345,110 @@
   const noteAt = (G, x, y) => { const row = rowOfY(y); if (row !== 0 && row !== 1) return null; const C = view(ED.s, ED.t); let best = null, bd = 7;
     for (const n of C.notes) { if (!!n.a !== (row === 1)) continue; const nx = xOfTk(G, n.tk), w = Math.max(4, Math.min(18, xOfTk(G, n.tk + (n.len || 120)) - nx)); if (x < nx - 2 || x > nx + w + 2) continue; const d = Math.abs(x - (nx + w / 2)); if (d < bd + w) { bd = d - w; best = n; } } return best; };
   const velAt = (G, x) => { const C = view(ED.s, ED.t); let best = null, bd = 4; for (const n of C.notes) { const d = Math.abs(xOfTk(G, n.tk) + 2 - x); if (d < bd) { bd = d; best = n; } } return best; };
+  // 12 (conventions §9): double-click empty grid adds a note, a note: deletes it. Select mode (the default): a note
+  // selects (⇧ adds), drags (snapped; ⌘ free; up / down changes its row; ⌥: a copy, or straight up / down: its velocity);
+  // its right edge resizes; empty grid: a box, and the insert marker. Draw mode (B): click adds, drag paints, ⌥-drag
+  // erases. The velocity strip: drag a bar (the selected notes change together, relatively). Positions come from the
+  // pointer's offset in the canvas (Text size's zoom can't shift them).
+  const isCmd = (e) => (MAC ? e.metaKey : e.ctrlKey);
   function wireCanvas(cv) {
+    const pt = (ev) => (ev.target === cv ? { x: ev.offsetX, y: ev.offsetY } : (() => { const r = cv.getBoundingClientRect(); return { x: ev.clientX - r.left, y: ev.clientY - r.top }; })());
+    const yVel = () => { const G = geo(); const yV = RULER + 2 * ROWH + 6; return { yV, hV: Math.max(20, G.h - yV - 4) }; };
+    const sortN = (C) => C.notes.sort((p, q) => p.tk - q.tk || q.a - p.a);
+    cv.ondblclick = (e) => {
+      if (!ED) return; live(); e.preventDefault(); const G = geo(), { x, y } = pt(e), row = rowOfY(y); if (row !== 0 && row !== 1) return;
+      const C = view(ED.s, ED.t), hit = noteAt(G, x, y);
+      if (hit) { change("Deleted a click note", () => { const C2 = view(ED.s, ED.t); C2.notes = C2.notes.filter((n) => !(n.tk === hit.tk && n.a === hit.a)); ED.sel.clear(); }); return; }
+      const tk = snapTk(tkOfX(G, x), "floor", isCmd(e)); if (tk >= endTk(ED.s)) return;
+      change("Added a click note", () => { const C2 = view(ED.s, ED.t); const n = { tk, a: row, v: 127, len: 120 }; C2.notes.push(n); sortN(C2); ED.sel = new Set([n]); });
+    };
     cv.onpointerdown = (e) => {
-      if (e.button !== 0) return; e.preventDefault(); $("clk10").focus({ preventScroll: true });
-      const G = geo(), r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, row = rowOfY(y), C = view(ED.s, ED.t);
-      try { cv.setPointerCapture(e.pointerId); } catch (x) { /* a pointer the browser doesn't track (synthetic) */ }
-      if (row === 2) { // velocity: drag a bar (the selection, when the bar is selected)
-        const n = velAt(G, x); if (!n) return; snap(); keep(ED.s, ED.t); const L = ED.sel.has(n) ? [...ED.sel] : [n], yV = RULER + 2 * ROWH + 6, hV = Math.max(20, G.h - yV - 4);
-        const set = (yy) => { const v = Math.max(1, Math.min(127, Math.round((yV + hV - yy) / hV * 127))); L.forEach((q) => (q.v = v)); draw(); redrawLanes(); };
-        set(y); cv.onpointermove = (m) => set(m.clientY - r.top); cv.onpointerup = () => { cv.onpointermove = null; toast(`Velocity ${L[0].v}${L.length > 1 ? ` on ${L.length} notes` : ""}`, undo); }; return;
+      if (e.button !== 0) return; e.preventDefault(); $("clk10").focus({ preventScroll: true }); live();
+      if (e.detail >= 2) return; // the double-click does it
+      const G = geo(), { x, y } = pt(e), row = rowOfY(y), C = view(ED.s, ED.t);
+      try { cv.setPointerCapture(e.pointerId); } catch (x2) { /* a pointer the browser doesn't track (synthetic) */ }
+      if (row === 2) { // velocity: drag a bar; the selection changes together, relatively
+        const n = velAt(G, x); if (!n) return; snap(); keep(ED.s, ED.t); const L = ED.sel.has(n) ? [...ED.sel] : [n], v0 = L.map((q) => q.v || 127), { yV, hV } = yVel(), y0 = y;
+        const set = (yy) => { const dv = Math.round((y0 - yy) / hV * 127), base = Math.max(1, Math.min(127, Math.round((yV + hV - y0) / hV * 127))); L.forEach((q, i) => { q.v = Math.max(1, Math.min(127, (L.length > 1 ? v0[i] : base) + dv)); }); draw(); redrawLanes(); };
+        set(y); cv.onpointermove = (m) => set(pt(m).y); cv.onpointerup = () => { cv.onpointermove = null; toast(`Velocity ${L[0].v}${L.length > 1 ? ` on ${L.length} notes` : ""}`, undo); }; return;
       }
       if (row !== 0 && row !== 1) return;
       if (ED.mode === "draw") {
-        const cell = (xx) => snapTk(tkOfX(G, xx), "floor"), hit0 = noteAt(G, x, y);
-        snap(); keep(ED.s, ED.t); const erase = !!hit0; const done = new Set();
+        const cell = (xx) => snapTk(tkOfX(G, xx), "floor", isCmd(e)), hit0 = noteAt(G, x, y);
+        snap(); keep(ED.s, ED.t); const erase = e.altKey || !!hit0; const done = new Set();
         const apply = (xx, yy) => { const rw = rowOfY(yy); if (rw !== row) return; const tk = cell(xx), key = tk; if (done.has(key)) return; done.add(key);
-          const ex = C.notes.filter((n) => !!n.a === (row === 1) && Math.abs(n.tk - tk) < step() / 2);
-          if (erase) { if (ex.length) C.notes = C.notes.filter((n) => !ex.includes(n)); }
-          else if (!ex.length && tk < endTk(ED.s)) { C.notes.push({ tk, a: row, v: 127, len: 120 }); C.notes.sort((p, q) => p.tk - q.tk || q.a - p.a); }
+          const C2 = view(ED.s, ED.t), ex = C2.notes.filter((n) => !!n.a === (row === 1) && Math.abs(n.tk - tk) < step() / 2);
+          if (erase) { if (ex.length) C2.notes = C2.notes.filter((n) => !ex.includes(n)); }
+          else if (!ex.length && tk < endTk(ED.s)) { C2.notes.push({ tk, a: row, v: 127, len: 120 }); sortN(C2); }
           draw(); redrawLanes(); };
-        if (erase) { C.notes = C.notes.filter((n) => n !== hit0); done.add(cell(x)); draw(); redrawLanes(); } else apply(x, y);
-        cv.onpointermove = (m) => apply(m.clientX - r.left, m.clientY - r.top);
+        if (hit0 && !e.altKey) { const C2 = view(ED.s, ED.t); C2.notes = C2.notes.filter((n) => n !== hit0); done.add(cell(x)); draw(); redrawLanes(); } else apply(x, y);
+        cv.onpointermove = (m) => { const q = pt(m); apply(q.x, q.y); };
         cv.onpointerup = () => { cv.onpointermove = null; toast(erase ? `Removed click notes in “${ED.s.name}”` : `Drew click notes in “${ED.s.name}”`, undo); };
         return;
       }
-      // select mode: a note: (shift: add) select and move (⌥: copy); empty: a box
       const hit = noteAt(G, x, y);
       if (hit) {
-        if (e.shiftKey) { ED.sel.has(hit) ? ED.sel.delete(hit) : ED.sel.add(hit); draw(); return; }
+        if (e.shiftKey || isCmd(e) && !e.altKey) { ED.sel.has(hit) ? ED.sel.delete(hit) : ED.sel.add(hit); draw(); return; }
         if (!ED.sel.has(hit)) { ED.sel.clear(); ED.sel.add(hit); }
-        const L = [...ED.sel], orig = L.map((n) => ({ n, tk: n.tk, a: n.a })), tk0 = tkOfX(G, x); let moved = false, copies = null;
-        cv.onpointermove = (m) => { const dx = m.clientX - r.left, dy = m.clientY - r.top; if (!moved && Math.abs(dx - x) < 3 && Math.abs(dy - y) < 3) return;
-          if (!moved) { moved = true; snap(); keep(ED.s, ED.t); if (e.altKey) { copies = orig.map((o) => ({ ...o.n })); C.notes.push(...copies); } }
-          const d = snapTk(orig[0].tk + (tkOfX(G, dx) - tk0)) - orig[0].tk, rw = rowOfY(dy), flip = (rw === 0 || rw === 1) && rw !== row;
+        const nx = xOfTk(G, hit.tk), nw = Math.max(4, Math.min(18, xOfTk(G, hit.tk + (hit.len || 120)) - nx)), edge = nw >= 6 && x >= nx + nw - 3;
+        const L = [...ED.sel], orig = L.map((n) => ({ n, tk: n.tk, a: n.a, v: n.v || 127, len: n.len || 120 })), tk0 = tkOfX(G, x); let mode = null, copies = null;
+        cv.onpointermove = (m) => { const q = pt(m), dx = q.x - x, dy = q.y - y; if (!mode && Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
+          if (!mode) { snap(); keep(ED.s, ED.t); mode = edge ? "len" : e.altKey && Math.abs(dy) > Math.abs(dx) ? "vel" : "move"; if (mode === "move" && e.altKey) { copies = orig.map((o) => ({ ...o.n })); view(ED.s, ED.t).notes.push(...copies); } }
+          if (mode === "len") { const end = snapTk(tkOfX(G, q.x), "round", isCmd(m)); orig.forEach((o) => { o.n.len = Math.max(30, end - hit.tk); }); draw(); redrawLanes(); return; }
+          if (mode === "vel") { const { hV } = yVel(), dv = Math.round(-dy / hV * 127); orig.forEach((o) => { o.n.v = Math.max(1, Math.min(127, o.v + dv)); }); draw(); redrawLanes(); return; }
+          const d = snapTk(orig[0].tk + (tkOfX(G, q.x) - tk0), "round", isCmd(m)) - orig[0].tk, rw = rowOfY(q.y), flip = (rw === 0 || rw === 1) && rw !== row;
           const target = copies || L;
           target.forEach((n, i) => { n.tk = Math.max(0, orig[i].tk + d); if (flip) n.a = orig[i].a ? 0 : 1; else n.a = orig[i].a; });
           if (copies) { ED.sel = new Set(copies); } draw(); redrawLanes(); };
-        cv.onpointerup = () => { cv.onpointermove = null; if (moved) { C.notes.sort((p, q) => p.tk - q.tk || q.a - p.a); toast(copies ? `Copied ${copies.length} click note${copies.length > 1 ? "s" : ""}` : `Moved ${L.length} click note${L.length > 1 ? "s" : ""}`, undo); } };
+        cv.onpointerup = () => { cv.onpointermove = null; if (mode) { sortN(view(ED.s, ED.t)); toast(mode === "len" ? "Resized click notes" : mode === "vel" ? `Velocity ${L[0].v}${L.length > 1 ? ` on ${L.length} notes` : ""}` : copies ? `Copied ${copies.length} click note${copies.length > 1 ? "s" : ""}` : `Moved ${L.length} click note${L.length > 1 ? "s" : ""}`, undo); } };
         return;
       }
+      // empty grid: the insert marker here, and a box
+      ED.ins = snapTk(tkOfX(G, x), "round", isCmd(e));
       if (!e.shiftKey) ED.sel.clear();
       BOX = { x0: x, y0: y, x1: x, y1: y };
-      cv.onpointermove = (m) => { BOX.x1 = m.clientX - r.left; BOX.y1 = m.clientY - r.top; const xa = Math.min(BOX.x0, BOX.x1), xb = Math.max(BOX.x0, BOX.x1), ya = Math.min(BOX.y0, BOX.y1), yb = Math.max(BOX.y0, BOX.y1);
-        for (const n of C.notes) { const nx = xOfTk(G, n.tk), ny = n.a ? RULER + ROWH / 2 : RULER + ROWH * 1.5; if (nx >= xa - 2 && nx <= xb && ny >= ya && ny <= yb) ED.sel.add(n); else if (!e.shiftKey) ED.sel.delete(n); } draw(); };
+      cv.onpointermove = (m) => { const q = pt(m); BOX.x1 = q.x; BOX.y1 = q.y; const xa = Math.min(BOX.x0, BOX.x1), xb = Math.max(BOX.x0, BOX.x1), ya = Math.min(BOX.y0, BOX.y1), yb = Math.max(BOX.y0, BOX.y1);
+        for (const n of view(ED.s, ED.t).notes) { const nx = xOfTk(G, n.tk), ny = n.a ? RULER + ROWH / 2 : RULER + ROWH * 1.5; if (nx >= xa - 2 && nx <= xb && ny >= ya && ny <= yb) ED.sel.add(n); else if (!e.shiftKey) ED.sel.delete(n); } draw(); };
       cv.onpointerup = () => { cv.onpointermove = null; BOX = null; draw(); };
     };
     // scrolling and zooming here move the timeline too (one position, one zoom)
     cv.addEventListener("wheel", (e) => {
+      if (e.altKey || e.ctrlKey || e.metaKey) return; // the zoom gesture (fix12.js)
       e.preventDefault(); const sc = $("scroller");
-      if (e.altKey || e.ctrlKey || e.metaKey) { const r = cv.getBoundingClientRect(); SL9.zoomTo(SL9.zoomTarget() * Math.exp(-(e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY) * (e.ctrlKey && !e.altKey ? 0.02 : 0.0025)), e.clientX - r.left); return; }
       sc.scrollLeft += Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
     }, { passive: false });
   }
-  // keys while the editor has focus: ⌫ delete, ⌘D duplicate, ⌘C / ⌘V, ⌘A, Esc, D / S (draw / select)
+  // keys while the editor has focus (conventions §9): ⌫, ⌘A, ⌘C / ⌘V (at the insert marker), ⌘D, ← → nudge (⇧: a
+  // bar), ↑ ↓ the other row, B Draw mode, Esc (Draw mode off, then the selection, then the editor), ⌘1 / ⌘2 the grid
+  // narrower / wider, ⌘3 triplets, ⌘4 snap
   let CB = null;
   document.addEventListener("keydown", (e) => {
-    const p = $("clk10"); if (!ED || !p || !p.contains(document.activeElement)) return;
+    const p = $("clk10"); if (!ED || !p || !(p.contains(document.activeElement) || p.contains(e.target))) return; live();
     const C = view(ED.s, ED.t), cmd = MAC ? e.metaKey : e.ctrlKey, k = e.key.toLowerCase();
     const take = () => { e.preventDefault(); e.stopImmediatePropagation(); };
-    if (e.key === "Escape") { take(); if (ED.sel.size) { ED.sel.clear(); draw(); } else close(); return; }
-    if ((e.key === "Backspace" || e.key === "Delete") && ED.sel.size) { take(); change(`Deleted ${ED.sel.size} click note${ED.sel.size > 1 ? "s" : ""}`, () => { C.notes = C.notes.filter((n) => !ED.sel.has(n)); ED.sel.clear(); }); return; }
+    const sortN = (C2) => C2.notes.sort((p2, q) => p2.tk - q.tk || q.a - p2.a);
+    if (e.key === "Escape") { take(); if (ED.mode === "draw") setMode("select"); else if (ED.sel.size) { ED.sel.clear(); draw(); } else close(); return; }
+    if ((e.key === "Backspace" || e.key === "Delete") && ED.sel.size) { take(); change(`Deleted ${ED.sel.size} click note${ED.sel.size > 1 ? "s" : ""}`, () => { const C2 = view(ED.s, ED.t); C2.notes = C2.notes.filter((n) => !ED.sel.has(n)); ED.sel.clear(); }); return; }
+    if (e.key === "Backspace" || e.key === "Delete") { take(); return; } // nothing selected: nothing
     if (cmd && k === "a") { take(); ED.sel = new Set(C.notes); draw(); return; }
-    if (cmd && k === "c" && ED.sel.size) { take(); const L = [...ED.sel], a = Math.min(...L.map((n) => n.tk)); CB = L.map((n) => ({ ...n, tk: n.tk - a })); toast(`Copied ${L.length} click note${L.length > 1 ? "s" : ""}`); return; }
-    if (cmd && k === "v" && CB) { take(); const at = typeof playId !== "undefined" && playId === ED.s.id ? snapTk(timeTk(ED.s, pos)) : (selSpan() || [0, 0])[1]; change(`Pasted ${CB.length} click note${CB.length > 1 ? "s" : ""}`, () => { const add = CB.map((n) => ({ ...n, tk: n.tk + at })); C.notes.push(...add); C.notes.sort((p, q) => p.tk - q.tk || q.a - p.a); ED.sel = new Set(add); }); return; }
-    if (cmd && k === "d" && ED.sel.size) { take(); const sp = selSpan(), len = sp[1] - sp[0]; change(`Duplicated ${ED.sel.size} click note${ED.sel.size > 1 ? "s" : ""}`, () => { const add = [...ED.sel].map((n) => ({ ...n, tk: n.tk + len })); C.notes.push(...add); C.notes.sort((p, q) => p.tk - q.tk || q.a - p.a); ED.sel = new Set(add); }); return; }
-    if (!cmd && !e.altKey && (k === "d" || k === "s")) { take(); setMode(k === "d" ? "draw" : "select"); return; }
+    if (cmd && k === "c" && ED.sel.size) { take(); const L = [...ED.sel], a2 = Math.min(...L.map((n) => n.tk)); CB = L.map((n) => ({ ...n, tk: n.tk - a2 })); toast(`Copied ${L.length} click note${L.length > 1 ? "s" : ""}`); return; }
+    if (cmd && k === "x" && ED.sel.size) { take(); const L = [...ED.sel], a2 = Math.min(...L.map((n) => n.tk)); CB = L.map((n) => ({ ...n, tk: n.tk - a2 })); change(`Cut ${L.length} click note${L.length > 1 ? "s" : ""}`, () => { const C2 = view(ED.s, ED.t); C2.notes = C2.notes.filter((n) => !ED.sel.has(n)); ED.sel.clear(); }); return; }
+    if (cmd && k === "v" && CB) { take(); const at = ED.ins != null ? ED.ins : typeof playId !== "undefined" && playId === ED.s.id ? snapTk(timeTk(ED.s, pos)) : (selSpan() || [0, 0])[1]; change(`Pasted ${CB.length} click note${CB.length > 1 ? "s" : ""}`, () => { const C2 = view(ED.s, ED.t); const add = CB.map((n) => ({ ...n, tk: n.tk + at })); C2.notes.push(...add); sortN(C2); ED.sel = new Set(add); ED.ins = at + Math.max(...CB.map((n) => n.tk)) + step(); }); return; }
+    if (cmd && k === "d" && ED.sel.size) { take(); const sp = selSpan(), len = sp[1] - sp[0]; change(`Duplicated ${ED.sel.size} click note${ED.sel.size > 1 ? "s" : ""}`, () => { const C2 = view(ED.s, ED.t); const add = [...ED.sel].map((n) => ({ ...n, tk: n.tk + len })); C2.notes.push(...add); sortN(C2); ED.sel = new Set(add); }); return; }
+    if (cmd && (e.key === "1" || e.key === "2")) { take(); const dir = e.key === "1" ? 1 : -1; if (ED.grid < 0) { ED.dens = Math.max(-2, Math.min(2, (ED.dens || 0) + dir)); store.set("clkDens", ED.dens); } else { ED.grid = Math.max(0, Math.min(2, ED.grid + dir)); store.set("clkGrid2", ED.grid); } segs(); draw(); toast(`Grid ${ED.grid < 0 ? "adaptive" : GRIDS[ED.grid][0]}${ED.tri ? " triplets" : ""}: ${dir > 0 ? "narrower" : "wider"}`); return; }
+    if (cmd && e.key === "3") { take(); ED.tri = !ED.tri; store.set("clkTri", ED.tri); segs(); draw(); toast(ED.tri ? "Triplet grid" : "Straight grid"); return; }
+    if (cmd && e.key === "4") { take(); ED.snapOn = !ED.snapOn; store.set("clkSnap", ED.snapOn); segs(); draw(); toast(ED.snapOn ? "Snap on" : "Snap off"); return; }
+    if (!cmd && !e.altKey && k === "b") { take(); setMode(ED.mode === "draw" ? "select" : "draw"); return; }
+    if (!cmd && (e.key === "ArrowLeft" || e.key === "ArrowRight") && ED.sel.size) { take(); const dir = e.key === "ArrowLeft" ? -1 : 1, L = [...ED.sel];
+      const d = e.shiftKey ? barTk(ED.s, 2) - barTk(ED.s, 1) : step(); if (dir < 0 && Math.min(...L.map((n) => n.tk)) - d < 0) return;
+      change(`Moved ${L.length} click note${L.length > 1 ? "s" : ""}`, () => { L.forEach((n) => { n.tk = Math.max(0, Math.round(n.tk + dir * d)); }); sortN(view(ED.s, ED.t)); }); return; }
+    if (!cmd && (e.key === "ArrowUp" || e.key === "ArrowDown") && ED.sel.size) { take(); const L = [...ED.sel], a2 = e.key === "ArrowUp" ? 1 : 0;
+      change(`Moved ${L.length} click note${L.length > 1 ? "s" : ""} to ${a2 ? "Accent" : "Click"}`, () => { L.forEach((n) => { n.a = a2; }); sortN(view(ED.s, ED.t)); }); return; }
   }, true);
   // follow the song shown: the editor closes when its song goes
   setInterval(() => { if (ED && (!songs.includes(ED.s) || !ED.s.tracks.includes(ED.t))) { const s = songOf(ED.s.id); if (s && s.tracks.includes(ED.t)) { ED.s = s; ED.sel.clear(); draw(); } else close(); } }, 500);
 
   // the Track menu's "Edit click (MIDI clip)", the selection bar's "No click" suggestion
   window.SLClick = { TOP: RULER, ROWH, BARS, METER, drawMode: () => (ED ? ED.drawMode : ""), PPQ, qMap, barTk, endTk, barOf, tkTime, timeTk, clipOf, migrate, fill, pattern, PATTERNS, regionsOf, hitsOf, sigKey, view, keep, open, close, editing: () => (ED ? { song: ED.s.id, track: ED.t, mode: ED.mode, grid: ED.grid, sel: [...ED.sel] } : null),
-    setMode, setGrid: (i) => { if (ED) { ED.grid = i; store.set("clkGrid", i); segs(); draw(); } }, select: (L) => { if (ED) { ED.sel = new Set(L); draw(); } }, draw, geo: () => geo() };
+    setMode, setGrid: (i) => { if (ED) { ED.grid = i; store.set("clkGrid2", i); segs(); draw(); } }, grid: () => (ED ? { grid: ED.grid, tri: ED.tri, snap: ED.snapOn, dens: ED.dens, step: step(), ins: ED.ins } : null), selected: () => SELCK, select: (L) => { if (ED) { live(); ED.sel = new Set(L); draw(); } }, draw, geo: () => geo() };
 })();

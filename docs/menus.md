@@ -23,8 +23,8 @@ menu test (every item chosen through the native menu path arrives once), `set.Li
   Hide · Quit. On Windows, Settings / Audio & outputs / MIDI & controllers / Exit are in File, and About / Check
   for updates in Help.
 - **File:** New song… ⌘N · New setlist ⇧⌘N · Import: Ableton project… ⌘I, Audio as a new song…, set.Line package
-  (.setline)… · Export: This song… ⌘E, This setlist… ⇧⌘E · Print setlist… ⌘P · Backups… · Clean up unused audio…
-- **Edit:** Undo ⌘Z · Redo ⇧⌘Z · Cut ⌘X · Copy ⌘C · Paste ⌘V · Duplicate ⌘D · Delete ⌫ · Rename… ↩ · Edit… · Select all ⌘A ·
+  (.setline)… · Export: This song… ⌥⌘E (12: ⌘E is Split), This setlist… ⇧⌘E · Print setlist… ⌘P · Backups… · Clean up unused audio…
+- **Edit:** Undo ⌘Z · Redo ⇧⌘Z · Cut ⌘X · Copy ⌘C · Paste ⌘V · Duplicate ⌘D · Split ⌘E (12) · Delete ⌫ · Rename… ↩ · Edit… · Select all ⌘A ·
   Select songs ⇧⌘S · Search or do anything… ⌘K
 - **Library:** Switch library › · New library… · Rename library… · Delete library › (11: any library but the open one) · Show in Finder / Explorer · Merge as versions… ·
   Unmerge version · Sort by › (Name, Recently added, Length)
@@ -37,7 +37,7 @@ menu test (every item chosen through the native menu path arrives once), `set.Li
   setlist… · Duplicate setlist · Delete setlist (11: undo instead of a question; the last one too)
 - **View:** Show ⌘1 · Perform ⌘2 · Band ⌘3 · Cards ⌥⌘1 · Folders ⌥⌘2 · Collapse all ⌥⌘← · Zoom › (Zoom in ⌘=,
   Zoom out ⌘−, Whole song, 32 bars, 8 bars, Section) · Track height › (Mini … Huge, Shrink tracks ⌥⌘−, Grow tracks
-  ⌥⌘=, Fit tracks to window ⇧⌥⌘F, Compact top rows) · Fit all ⌥⌘F · Setlist sidebar ⌥⌘L · Side panel ⌥⌘R
+  ⌥⌘=, Fit tracks to window ⇧⌥⌘F, Compact top rows) · Fit all ⌥⌘F · Follow playhead ⌘F (12) · Setlist sidebar ⌥⌘L · Side panel ⌥⌘R
 - **Customize:** Theme › · Accent colour › · Fonts › · Text size › · Transport style › · Customize the look… ⌥⌘, ·
   Reset to default
 - **Window:** Minimise ⌘M · Full screen ⌃⌘F
@@ -87,3 +87,13 @@ Help › Quick start shows it again.
 ## The ⌘/ sheet
 Searchable, grouped (Playback · Editing · View · Setlist · Library · Help), made from the menus' own keys plus the
 page's single keys (Space, N, P, V, C, K, L, [, ], = −, ⌥ scroll, ↩, ⌫, ⌥↑ ⌥↓, Esc), so it can't go stale.
+
+## 12: keys added with the conventions guide (docs/daw-conventions.md, docs/daw-audit.md)
+- Timeline: = / − zoom around the playhead · Z zoom to the selection · ⇧Z or X back · ⌘F Follow · ⌘E Split at the
+  insert marker (a click in a lane) or the playhead · ↩ renames the selected track / section / marker · ⇥ while
+  renaming: the next name · ⇧ / ⌘-click track headers: several · ⌘-click S: solo only this
+- Ruler: click (nearest beat; ⌘ free) · drag up / down zooms, sideways scrolls · double-click Fit
+- Lists: type letters to jump · ↑ ↓ move the selection
+- Click editor: double-click adds / deletes a note · B Draw mode (⌥-drag erases, Esc leaves) · ← → nudge (⇧ a bar) ·
+  ↑ ↓ the other row · ⌘C / ⌘X / ⌘V (at the insert marker) · ⌘D · ⌘A · ⌘1 / ⌘2 grid narrower / wider · ⌘3 triplets ·
+  ⌘4 snap · ⌫ · Esc

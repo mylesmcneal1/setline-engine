@@ -171,6 +171,18 @@ jobs:
           "$EXE" --menu-test | tee menu-test.txt
           grep -q "MENU OK" menu-test.txt
 
+      # 12: a trackpad pinch replayed inside the app (in and out, during the gesture and the redraw after) on a song made
+      # from real stems; the numbers go to the log (a slow CI machine doesn't fail the build)
+      - name: Zoom timing (a pinch replayed in the app)
+        shell: bash
+        run: |
+          if [ -d "$APP/Contents/MacOS" ]; then EXE="$APP/Contents/MacOS/set.Line"; else EXE="$APP"; fi
+          "$BIN" --make-test zoom-song --stems 6 --seconds 200 > /dev/null
+          mkdir -p zoom-work
+          node -e "const fs=require('fs'),p=require('path');const d=p.resolve('zoom-song');const src=fs.readdirSync(d).filter(f=>f.endsWith('.wav')).map(f=>p.join(d,f).split(p.sep).join('/'));fs.writeFileSync('zoom-work/replay.js',fs.readFileSync('tests/zoom-replay.js','utf8').replace('/*CFG*/null',JSON.stringify({src})))"
+          perl -e 'alarm 300; exec @ARGV' "$EXE" --test-script zoom-work/replay.js zoom-work/out.json > zoom-work/app.log 2>&1 || true
+          if [ -f zoom-work/out.json ]; then node -e "const r=require('./zoom-work/out.json');(r.checks||[]).forEach(x=>console.log(x));console.log('ZOOM TIMES '+JSON.stringify(r.times,null,1));console.log('waveforms',JSON.stringify(r.waves),JSON.stringify(r.fine));if(r.error)console.log('ERROR',r.error)"; else echo "no result"; tail -20 zoom-work/app.log; fi
+
       # 8d: in-app updates on fake apps: version compare, SHA-256 verify (good / damaged), unpack next to the app,
       # install (the old one kept as "(previous)"), roll back and forward again (the real swap scripts)
       - name: In-app update test

@@ -29,8 +29,8 @@ async function timelineSizes() {
   ok(st && !st.hidden && st.textContent === "4/4" && Math.abs(st.getBoundingClientRect().left - TL9.laneLeft()) <= 1, "the meter in force sticks at the left edge (4/4 at bar 30)");
   sc.scrollLeft = 0; await frames(2);
   ok(sc.querySelector(".meter9 .mstk9").hidden, "…and isn't shown at the song's start (the bar-1 badge is there)");
-  sc.querySelector('.meter9 .msig9[data-bar="25"]').click(); await wait(80);
-  ok(!!document.getElementById("mpop"), "clicking a time signature opens its popover");
+  { const b = sc.querySelector('.meter9 .msig9[data-bar="25"]'); b.click(); await wait(60); ok(b.classList.contains("sel12") && !document.getElementById("mpop"), "12: a click selects a time signature"); b.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true })); await wait(80); }
+  ok(!!document.getElementById("mpop"), "double-clicking a time signature opens its popover (12: conventions §10)");
   if (typeof closeMpop === "function") closeMpop();
   const other = S.find((x) => x !== s && !x.tmap.some((e) => e.bar > 1 && e.sig));
   if (other) { openSong(other.id); await wait(200);

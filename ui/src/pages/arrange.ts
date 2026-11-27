@@ -442,6 +442,8 @@ const SLE = {
     });
   },
   // Meter level for a track: its own peak after the fader, as the engine played it.
+  // 12: the main outputs' levels (the outputs pill's meter)
+  outPeaks: (): number[] => peaks,
   trackLevel(s: Song, t: string): number {
     if (s.id !== loadedSongId) return 0;
     return trackPeaks[t] || 0;
@@ -1065,15 +1067,58 @@ const SLW = {
   get(s: Song, t: string, pxs: number): Wave | null {
     const f = (s.files || {})[t];
     if (!f || !f.path) return null;
-    const level = levelFor(f.rate || sessionRate || 48000, pxs), key = f.path + "|" + level;
+    const rate = f.rate || sessionRate || 48000;
+    // 12: zoomed past the finest level: the visible stretch, read from the file
+    if (rate / pxs < LEVELS[0] * 0.75) {
+      const sc = document.getElementById("scroller"), vw = (window as any).TL9 ? (window as any).TL9.viewW() : 1000;
+      const a = (sc ? sc.scrollLeft : 0) / pxs, b = a + vw / pxs;
+      const fw = fineWave(f.path, rate, Math.max(0, a - 1), b + 1, () => page().redrawTrack(s, t));
+      if (fw) return fw;
+    }
+    const level = levelFor(rate, pxs), key = f.path + "|" + level;
     const w = waves.get(key);
     if (w && w !== "pending" && w !== "missing") return w;
     if (!w) { waves.set(key, "pending"); waveQueue.push({ key, ref: f.path, level }); schedulePump(); }
     for (const l of LEVELS) { const o = waves.get(f.path + "|" + l); if (o && typeof o === "object") return o; } // another zoom's peaks
     return null;
   },
-  stats: () => ({ cached: [...waves.values()].filter((w) => typeof w === "object").length, queued: waveQueue.length, busy: waveBusy }),
+  stats: () => ({ cached: [...waves.values()].filter((w) => typeof w === "object").length, queued: waveQueue.length, busy: waveBusy, fine: fine.size }),
+  // 12: every prepared level of a file, fetched ahead of a zoom (the page's idle time)
+  prefetch(s: Song, t: string) {
+    const f = (s.files || {})[t]; if (!f || !f.path) return;
+    for (const level of LEVELS) { const key = f.path + "|" + level; if (!waves.get(key)) { waves.set(key, "pending"); waveQueue.push({ key, ref: f.path, level }); } }
+    schedulePump();
+  },
+  // 12: the whole-file level that's here (the clip's loudest point is measured on it)
+  full(s: Song, t: string): Wave | null {
+    const f = (s.files || {})[t]; if (!f || !f.path) return null;
+    for (const l of LEVELS) { const o = waves.get(f.path + "|" + l); if (o && typeof o === "object") return o; }
+    return null;
+  },
 };
+// 12: finer than the prepared levels: 20-second stretches at 64 frames per value, read from the file on a thread
+// (getPeaksRange), only for what's on screen; joined into one array for the stretch the lane shows
+const FINE_SPP = 64, CHUNK = 20;
+const fine = new Map<string, Wave & { off: number } | "pending" | "missing">();
+function fineWave(ref: string, rate: number, t0: number, t1: number, redraw: () => void): (Wave & { off: number }) | null {
+  const c0 = Math.max(0, Math.floor(t0 / CHUNK)), c1 = Math.max(c0, Math.floor(t1 / CHUNK));
+  const parts: (Wave & { off: number })[] = [];
+  for (let c = c0; c <= c1; c++) {
+    const key = ref + "|" + c, w = fine.get(key);
+    if (!w) {
+      fine.set(key, "pending");
+      SL.call<{ peaks?: string; rate?: number; spp?: number; start?: number; error?: string }>("getPeaksRange", { ref, start: c * CHUNK, end: (c + 1) * CHUNK, spp: FINE_SPP })
+        .then((r) => { if (r.error || !r.peaks) { fine.set(key, "missing"); return; } const bin = atob(r.peaks), data = new Uint8Array(bin.length); for (let k = 0; k < bin.length; k++) data[k] = bin.charCodeAt(k); fine.set(key, { data, perSec: r.rate! / r.spp!, off: r.start! / r.rate! }); redraw(); })
+        .catch(() => fine.set(key, "missing"));
+      return null;
+    }
+    if (w === "pending" || w === "missing") return null;
+    parts.push(w);
+  }
+  if (parts.length === 1) return parts[0];
+  const n = parts.reduce((a, p) => a + p.data.length, 0), data = new Uint8Array(n); let at = 0; for (const p of parts) { data.set(p.data, at); at += p.data.length; }
+  return { data, perSec: parts[0].perSec, off: parts[0].off };
+}
 
 function laneVisible(ref: string) {
   const sc = document.getElementById("scroller");
@@ -1526,6 +1571,8 @@ async function main() {
   await SL.ready;
   SL.on("transport", onTransport);
   SL.on("meters", (m: { peaks: number[]; tracks?: Record<string, number> }) => { peaks = m.peaks || []; trackPeaks = m.tracks || {}; });
+  // 12: the trackpad pinch, caught natively on macOS (MacDrop.mm)
+  SL.on("pinch", (m: any) => { const w = window as any; if (w.SL12 && w.SL12.pinch) w.SL12.pinch(m); });
   SL.on("audioSetupChanged", (s: Setup) => { loadedKey = null; onSetup(s); });
   // 7a: the interface that was missing at launch is plugged in (while stopped): set.Line plays on it again
   SL.on("interfaceBack", (m: { device: string; listen: ListenState }) => { listen = m.listen; loadedKey = null; page().setListen(listen, listenWhat()); page().toast(`${m.device} is connected: playing on it again`); });

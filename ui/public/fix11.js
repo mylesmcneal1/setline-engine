@@ -430,7 +430,7 @@
     const AS = window.ableSong;
     window.ableSong = function (src) {
       const r = AS.apply(this, arguments), so = r && r.so; if (!so) return r;
-      const before = so.tracks.slice(); const n = cleanNames(so, src.name);
+      const before = so.tracks.slice(); const n = window.SL12 && SL12.applyTrackNames ? SL12.applyTrackNames(src, so, r.rows || []) : cleanNames(so, src.name);
       if (n) { const map = {}; before.forEach((t, i) => { if (so.tracks[i] !== t) map[t] = so.tracks[i]; }); (r.rows || []).forEach((x) => { if (map[x.name]) x.name = map[x.name]; }); }
       if (straighten(so.secs, so.total)) { normSecs(so); buildBars(so); }
       return r;
