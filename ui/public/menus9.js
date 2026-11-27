@@ -29,7 +29,8 @@
   const at0 = () => { const r = (document.activeElement && document.activeElement.getBoundingClientRect && document.activeElement !== document.body) ? document.activeElement.getBoundingClientRect() : { left: innerWidth / 2 - 100, bottom: 160 }; return { clientX: r.left, clientY: r.bottom + 4 }; };
   let ACT = {}, libs = [], DRY = null;
   // an item: id, label, key (cmd+shift+a), act, and dis / check / danger
-  const it = (id, label, act, o = {}) => { ACT[id] = act; return { id: "m:" + id, label, key: o.key || "", dis: !!o.dis, check: !!o.check, danger: !!o.danger, group: o.group || "", help: o.help || "" }; };
+  // 13 §21: the key a command has now (Key Commands can remap it on this computer)
+  const it = (id, label, act, o = {}) => { ACT[id] = act; return { id: "m:" + id, label, key: window.SLKeys ? SLKeys.key(id, o.key || "") : o.key || "", dis: !!o.dis, check: !!o.check, danger: !!o.danger, group: o.group || "", help: o.help || "" }; };
   const sep = () => ({ sep: true });
   const head = (label) => ({ header: label });
   const sub = (label, items, dis) => ({ label, sub: items, dis: !!dis });
@@ -69,7 +70,12 @@
     const s = song(), T = trk(), p = busy(), st = stage(), many = sel();
     const look = window.SLLook ? SLLook.get() : {};
     const reveal = MAC ? "Show in Finder" : "Show in Explorer";
+    const dirtyLib = !!(mod().libDirty && mod().libDirty());
     const file = [
+      head(dirtyLib ? "● Unsaved changes" : "Saved"),
+      it("saveLibrary", "Save Library", () => mod().saveLibrary ? mod().saveLibrary() : toast("Save Library is in the app"), { key: "cmd+s" }),
+      it("saveLibraryAs", "Save Library As…", () => mod().saveLibraryAs ? mod().saveLibraryAs() : toast("Save Library As is in the app"), { dis: st }),
+      sep(),
       it("newSong", "New song…", () => openNewSong(), { key: "cmd+n", dis: st, group: "Library" }),
       it("newSetlist", "New setlist", () => setlistCmd("new"), { key: "cmd+shift+n", dis: st, group: "Setlist" }),
       sep(), head("Import"),
@@ -95,6 +101,7 @@
       it("selectAll", "Select all", () => { const x = song(); if (x && typeof selectAllIn === "function") selectAllIn(x); }, { key: "cmd+a", dis: !s }),
       it("selectMode", "Select songs", () => window.SL9 && SL9.select(!SL9.state.sel), { key: "cmd+shift+s", check: !!(window.SL9 && SL9.state.sel) }),
       sep(), it("palette", "Search or do anything…", () => window.SLix && SLix.palette(), { key: "cmd+k" }),
+      it("keyCommands", "Key Commands…", () => window.SLKeys && SLKeys.open(), { key: "cmd+alt+k" }),
     ];
     const curLib = libs.find((l) => l.current);
     const sortBy = typeof LIBSORT !== "undefined" ? LIBSORT : "az";
@@ -111,11 +118,13 @@
       sep(),
       sub("Sort by", [["az", "Name"], ["recent", "Recently added"], ["len", "Length"]].map(([k, n]) => it("sort_" + k, n, () => { LIBSORT = k; if ($("libSort")) $("libSort").value = k; refresh(); }, { check: sortBy === k }))),
     ];
+    const D13 = window.SL13D, KEYS13 = ["—", ...["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"].flatMap((k) => [k, k + " min"])];
     const songM = [
-      it("renameSong", "Rename song…", () => { const x = song(); if (x) renameSong(x.id); }, { dis: !s }),
-      sub("Colour", s ? colourItems(s.col, (c) => { snap(); s.col = c; refresh(); }, "scol") : [], !s),
-      it("dupSong", "Duplicate song", () => dupSong(s.id), { dis: !s || st }),
-      it("deleteSong", "Delete song…", () => deleteSong(s.id), { dis: !s || st, danger: true }),
+      ...(s ? [head("This song · " + s.name)] : []),
+      it("songInfo", "Song info…", () => D13 && D13.songInfo(s && s.id), { key: "cmd+alt+i", dis: !s }),
+      it("renameSong", "Rename…", () => { const x = song(); if (x) renameSong(x.id); }, { dis: !s }),
+      sub("Colour", s ? colourItems(s.col, (c) => { snap(); s.col = c; refresh(); toast(`Changed the colour of “${s.name}”`, undo); }, "scol") : [], !s),
+      sub("Key", s ? KEYS13.map((k, i) => it("skey" + i, k, () => { snap(); s.key = k; refresh(); }, { check: (s.key || "—") === k })) : [], !s),
       sep(),
       sub("Versions", verItems(s, "ver"), !s),
       ...(window.SL11 && s ? [sub("Edit version", versOf(s).map((v, i) => sub(v.name, objOf("version", s, v.id, "ev" + i))), false),
@@ -129,24 +138,45 @@
       it("addTempo", "Add tempo change…", () => { const x = song(); if (!x) return; const bar = Math.max(2, playId === x.id ? barAtTime(x, pos) : 2); addPoint(x, { bar, bpm: +bpmAt(x, bar).toFixed(3) }); tsel = { song: x.id, i: x.tmap.findIndex((e) => e.bar === bar) }; setTimeout(() => openTpop(true), 30); }, { key: "cmd+alt+t", dis: !s }),
       it("secsFromCues", "Make sections from cues…", () => secsFromCuesAct(many), { dis: !s && !many.length }),
       sep(),
+      sub("Song fields", s ? [...(typeof FIELDS !== "undefined" ? FIELDS : []).map((f, i) => it("sfield" + i, f.name + "…", () => D13 && D13.songInfo(s.id, "fields"))), ...((typeof FIELDS !== "undefined" && FIELDS.length) ? [sep()] : []),
+        it("fieldsTable", "Song fields table…", () => typeof fieldsTable === "function" && fieldsTable()), it("fieldsEdit", "Add or edit fields…", () => openSettings("band"))] : [], !s),
+      it("songNotes", "Notes for the band…", () => D13 && D13.songInfo(s && s.id, "notes"), { dis: !s }),
+      sep(),
       it("addToSet", "Add to setlist", () => addToSet(many.length ? many : [s.id]), { key: "cmd+shift+a", dis: !s && !many.length }),
+      it("deleteSong", "Delete song…", () => deleteSong(s.id), { dis: !s || st, danger: true }),
+      sep(),
+      it("dupSong", "Duplicate song", () => dupSong(s.id), { dis: !s || st }),
       it("sortMidi", "Sort tracks: MIDI to the bottom", () => window.SL10a && SL10a.sortMidi(many.length ? many : s ? [s.id] : []), { dis: !s && !many.length }),
     ];
     const ts = T ? T.s : s;
+    const TT = window.SL13M ? SL13M.track(T) : null, CL = window.SL13M ? SL13M.clip() : null;
     const trackM = [
+      ...(T ? [head("Selected track · " + T.t)] : []),
+      it("renameTrack", "Rename…", () => renameTrack(T.s, T.t), { dis: !T }),
+      sub("Colour", T ? colourItems(trackCol(T.s, T.t), (c) => { snap(); const L = window.SL12 && SL12.tsel().length > 1 ? SL12.tsel() : [{ s: T.s.id, t: T.t }]; L.forEach((x) => { const so = songOf(x.s); if (so) (so.tcol || (so.tcol = {}))[x.t] = c; }); refresh(); toast(L.length > 1 ? `Changed the colour of ${L.length} tracks` : `Changed the colour of “${T.t}”`, undo); }, "tcol") : [], !T),
+      sub("Output", TT ? TT.outputs.map((o, i) => it("tout" + i, o.label, o.act, { check: o.on })) : [], !TT || !TT.outputs.length),
+      sub("Height", heights(ts, "th"), !ts),
+      it("trackMute", "Mute", () => TT && TT.mute(), { check: !!(TT && TT.muted), dis: !TT }),
+      it("trackSolo", "Solo", () => TT && TT.solo(), { check: !!(TT && TT.soloed), dis: !TT || !TT.canSolo }),
+      sep(), head("MIDI tracks"),
+      sub("Device", TT && TT.midi ? [["qc", "Quad Cortex"], ["axe", "Axe-Fx III"], ["", "Generic MIDI"]].map(([k, n]) => it("tdev_" + (k || "gen"), n, () => TT.setDevice(k), { check: TT.device === k })) : [], !(TT && TT.midi)),
+      sub("Port & channel", TT && TT.midi ? [...TT.ports.map((p, i) => it("tport" + i, p.label, p.act, { check: p.on })), sep(), ...TT.channels.map((c, i) => it("tch" + i, c.label, c.act, { check: c.on }))] : [], !(TT && TT.midi)),
+      it("editPatches", "Edit patch changes…", () => window.PE13 && PE13.open(T.s, T.t), { dis: !(TT && TT.midi) }),
+      sep(), head("Clip"),
+      it("clipGain", "Clip gain…", () => SL13M.clipGain(), { dis: !CL }),
+      sub("Fades", CL ? SL13M.fadeItems().map((f, i) => it("tfade" + i, f.label, f.act, { check: f.on })) : [], !CL),
+      it("splitClip", "Split", () => window.SL12 && SL12.split(), { dis: !CL && !(typeof pick !== "undefined" && pick && (pick.kind === "mreg" || pick.kind === "ck")) }),
+      sep(),
       it("addAudio", "Add audio track", () => addTrack(ts, "audio"), { key: "cmd+t", dis: !ts || st }),
       it("addClick", "Add click track", () => addTrack(ts, "click"), { dis: !ts || st }),
       it("addMidi", "Add MIDI track", () => addTrack(ts, "midi"), { dis: !ts || st }),
       sep(),
-      it("renameTrack", "Rename track…", () => renameTrack(T.s, T.t), { dis: !T }),
-      sub("Colour", T ? colourItems(trackCol(T.s, T.t), (c) => { snap(); (T.s.tcol || (T.s.tcol = {}))[T.t] = c; refresh(); }, "tcol") : [], !T),
       it("dupTrack", "Duplicate track", () => SL9.dupTrack(T.s, T.t), { dis: !T || fixedT(T.t) || st }),
       it("deleteTrack", "Delete track", () => SL9.deleteTrack(T.s, T.t), { dis: !T || st, danger: true }),
       sep(),
       it("trackUp", "Move up", () => moveTrack(-1), { key: "alt+up", dis: !T }),
       it("trackDown", "Move down", () => moveTrack(1), { key: "alt+down", dis: !T }),
-      sub("Height", heights(ts, "th"), !ts),
-      sep(),
+      it("trackSettings", "Track settings…", () => { if (T) { openTrack(T.s, T.t); if (window.SL13D) SL13D.openDetails(document.querySelector(`.row.trk > .lh[data-song="${T.s.id}"][data-track="${CSS.escape(T.t)}"]`)); } }, { dis: !T }),
       it("editClick", "Edit click (MIDI clip)", () => window.SL10c && SL10c.openClip(ts), { dis: !ts || !window.SL10c }),
     ];
     const L = curSetObj();
@@ -158,6 +188,8 @@
       sep(),
       it("setUp", "Move up", () => moveSet(-1), { key: "alt+up", dis: !setOrder.length }),
       it("setDown", "Move down", () => moveSet(1), { key: "alt+down", dis: !setOrder.length }),
+      sub("After this song", s && setOrder.includes(s.id) ? [["stop", "Stop"], ["segue", "Segue"], ["auto", "Auto-next"]].map(([k, n]) => it("after_" + k, n, () => setAfter(s, k, afterOf(s).sec), { check: afterOf(s).mode === k })) : [], !(s && setOrder.includes(s.id))),
+      it("editBreak", "Edit break…", () => { const b = document.querySelector("#songs .brk9.on"); if (b && window.SL13D) SL13D.editBreak(b.dataset.b, b); }, { dis: !document.querySelector("#songs .brk9.on") }),
       it("setRemove", "Remove from setlist", () => { const b = document.querySelector("#songs .brk9.on"); if (b && breaks()) { breaks().del(b.dataset.b); return; } remFromSet(many.length ? many : s ? [s.id] : []); }, { dis: !(s && setOrder.includes(s.id)) && !many.length && !document.querySelector("#songs .brk9.on") }),
       sep(),
       it("renameSet", "Rename setlist…", () => setlistCmd("ren")),
@@ -186,7 +218,6 @@
       sep(),
       it("follow", "Follow playhead", () => window.SL12 && SL12.follow(!SL12.follow()), { key: "cmd+f", check: !!(window.SL12 && SL12.follow()) }),
       it("toggleSetlist", "Setlist sidebar", () => setPanel("L", !isOpen("L")), { key: "cmd+alt+l", check: isOpen("L") }),
-      it("togglePanel", "Side panel", () => setPanel("R", !isOpen("R")), { key: "cmd+alt+r", check: isOpen("R") }),
     ];
     const Lk = window.SLLook;
     const cust = Lk ? [
@@ -202,7 +233,7 @@
     const win = [it("minimise", "Minimise", () => native() && ncall("windowCmd", { what: "minimise" }), { key: MAC ? "cmd+m" : "" }), it("fullscreen", "Full screen", () => native() && ncall("windowCmd", { what: "fullscreen" }), { key: MAC ? "cmd+ctrl+f" : "" })];
     const help = [
       it("quickStart", "Quick start", () => window.SLix && SLix.quickStart()),
-      it("shortcuts", "Keyboard shortcuts", () => window.SLix && SLix.sheet(), { key: "cmd+slash" }),
+      it("shortcuts", "Keyboard shortcuts", () => window.SLKeys ? SLKeys.open() : window.SLix && SLix.sheet(), { key: "cmd+slash" }),
       sep(),
       it("diag", "Diagnostics", () => openSettings("diag")),
       it("copyDiag", "Copy diagnostics", () => SLE && SLE.diagnostics && SLE.diagnostics("copy")),
@@ -213,8 +244,9 @@
     const app = [{ id: "about", label: "About set.Line" }, { id: "checkUpdates", label: "Check for updates…" }, sep(), { id: "prefs", label: "Settings…", key: "cmd+comma" },
       it("prefsAudio", "Audio & outputs…", () => openSettings("audio")), it("prefsMidi", "MIDI & controllers…", () => openSettings("midi"))];
     ACT.about = () => mod().about && mod().about(); ACT.prefs = () => openSettings(); ACT.checkUpdates = () => window.SLUpd && SLUpd.check(true);
-    return { menus: [{ name: "File", items: file }, { name: "Edit", items: edit }, { name: "Library", items: library }, { name: "Song", items: songM }, { name: "Track", items: trackM },
-      { name: "Setlist", items: setM }, { name: "View", items: view }, { name: "Customize", items: cust }, { name: "Window", items: win }, { name: "Help", items: help }], app: MAC ? app : [] };
+    const cues = window.SL13E ? SL13E.menu(it, sub, sep, head) : [];
+    return { menus: [{ name: "File", items: file }, { name: "Edit", items: edit }, { name: "View", items: view }, { name: "Library", items: library }, { name: "Song", items: songM }, { name: "Track", items: trackM },
+      { name: "Setlist", items: setM }, ...(cues.length ? [{ name: "Cues", items: cues }] : []), { name: "Customize", items: cust }, { name: "Window", items: win }, { name: "Help", items: help }], app: MAC ? app : [] };
   }
 
   // ================================================================ object menus: right-click = ⋯ = the menu bar
@@ -304,6 +336,7 @@
         sub("At its end", [["continue", "Play on"], ["hold", "Hold on last bar"], ["stop", "Stop"]].map(([k, l]) => it("sEnd_" + k, l, set(() => { so.end = k; }), { check: so.end === k }))),
         it("sDup", "Duplicate", set(() => { const c = { ...JSON.parse(JSON.stringify(so)), id: sid++, start: so.start + so.bars }; s.secs.push(c); selSec = { song: s.id, id: c.id }; }), { dis: room < so.bars }),
         it("sSplit", "Split at playhead", () => splitAt(s, b, nearestBoundary(s, pos)), { dis: !(playId === s.id && barAtTime(s, pos) > so.start && barAtTime(s, pos) < so.start + so.bars) }),
+        it("sSettings", "Section settings…", () => { selectSec(s.id, b); if (window.SL13D) SL13D.openDetails(document.querySelector(`.secs .lane[data-song="${s.id}"] .sec[data-sid="${b}"]`)); }), // 13 D: what the side panel showed (cue words, notes, MIDI…)
         sep(),
         it("sDel", "Delete", () => deleteSec(s, b), { danger: true }),
       ];

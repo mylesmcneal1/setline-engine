@@ -111,10 +111,6 @@ public:
             quit();
             return;
         }
-        if (const int st = args.indexOf("--speech-test"); st >= 0 && st + 1 < args.size()) {
-            speechTest(juce::File::getCurrentWorkingDirectory().getChildFile(args[st + 1].unquoted()));
-            return;
-        }
         settings = std::make_unique<juce::PropertiesFile>(settingsOptions());
         applog::start(JUCE_APPLICATION_VERSION_STRING);
         applog::line("Started: " + args.joinIntoString(" "));
@@ -220,8 +216,10 @@ public:
         }
         bridge->reopenLastInTests = args.contains("--reopen-last");
         // Tests never touch the real Libraries: SETLINE_LIBRARIES, else a fresh temporary folder per run.
-        if (bridge->testScript != juce::File() && juce::SystemStats::getEnvironmentVariable("SETLINE_LIBRARIES", {}).isEmpty())
-            LibraryStore::setTestRoot(juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("setline-test-libraries").getNonexistentChildFile("run", ""));
+        if (bridge->testScript != juce::File() && juce::SystemStats::getEnvironmentVariable("SETLINE_LIBRARIES", {}).isEmpty()) {
+            testLibraries = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("setline-test-libraries").getNonexistentChildFile("run", "");
+            LibraryStore::setTestRoot(testLibraries);
+        }
         bridge->onLoadingStep = [this](const juce::var& a) {
             if (! splash) return;
             const auto id = a["id"].toString();
@@ -244,7 +242,9 @@ public:
         // Window title: "<session> — set.Line", with a dot while there are unsaved changes.
         bridge->onDocument = [this](const juce::String& name, bool dirty) {
             static const juce::String dot = juce::CharPointer_UTF8("\xe2\x80\xa2 "), dash = juce::CharPointer_UTF8(" \xe2\x80\x94 set.Line");
-            if (window) window->setName((dirty ? dot : juce::String()) + (name.isEmpty() ? juce::String("Library") : name) + dash);
+            // 13 §19: the save state in the title: "● My Library — Unsaved changes — set.Line" / "My Library — Saved — set.Line"
+            static const juce::String sep = juce::CharPointer_UTF8(" \xe2\x80\x94 ");
+            if (window) window->setName((dirty ? dot : juce::String()) + (name.isEmpty() ? juce::String("Library") : name) + sep + (dirty ? "Unsaved changes" : "Saved") + dash);
         };
         // 9c: the menus in the window chrome (macOS menu bar / the Windows window's menu bar), described by the page
         menus = std::make_unique<AppMenus>([this](const juce::String& cmd) { sendMenu(cmd); });
@@ -317,9 +317,11 @@ public:
         splash->finish([this] { if (window) { window->setVisible(true); window->toFront(true); } if (bridge) bridge->loading = false; applog::mark("window visible"); });
     }
 
+    juce::File testLibraries; // 13 §20: a test run's own libraries (temp): deleted when it ends
     void shutdown() override
     {
         applog::line("Quit");
+        if (testLibraries != juce::File() && testLibraries.getParentDirectory().getFileName() == "setline-test-libraries") testLibraries.deleteRecursively();
         dialogs::closeAll();
         if (bridge) bridge->markStopped(); // 8d: a normal quit: nothing to resume next time
         splash.reset();
@@ -362,71 +364,6 @@ public:
 
 private:
     std::unique_ptr<AppMenus> menus; // 9c
-    // --speech-test <dir>: lists the installed voices, speaks a cue with each (at 48 kHz, through the same
-    // render + cache path as the show), writes <dir>/<voice>.wav and <dir>/speech-test.txt, then quits
-    // (exit code 1 if nothing could be spoken). No window or audio device: CI runs it on Windows and macOS.
-    void speechTest(const juce::File& dir)
-    {
-        dir.createDirectory();
-        testCues = std::make_unique<Cues>();
-        testThread = std::thread([this, dir] {
-            juce::StringArray report;
-            auto progress = [](const juce::String& m) { std::fprintf(stderr, "speech-test: %s\n", m.toRawUTF8()); std::fflush(stderr); };
-            progress("listing voices");
-            const auto list = testCues->voices();
-            progress(juce::String(list.size()) + " voices");
-            report.add("voices: " + juce::String(list.size()));
-            int spoken = 0;
-            auto speak = [&](const Cues::Choice& c, const juce::String& label) {
-                progress("speaking with " + label);
-                juce::String err;
-                bool fellBack = false;
-                const auto t0 = juce::Time::getMillisecondCounterHiRes();
-                auto a = testCues->get("Verse one", c, 48000, err, fellBack);
-                const auto ms = juce::Time::getMillisecondCounterHiRes() - t0;
-                progress(a ? "spoken" : "failed: " + err);
-                if (! a) { report.add("FAIL " + label + ": " + err); return; }
-                float peak = 0;
-                for (float x : *a) peak = juce::jmax(peak, std::abs(x));
-                report.add("ok   " + label + ": " + juce::String((double) a->size() / 48000.0, 2) + " s, peak " + juce::String(peak, 2)
-                           + ", first sample above -48 dB at " + juce::String((int) (std::find_if(a->begin(), a->end(), [](float x) { return std::abs(x) >= 0.004f; }) - a->begin()))
-                           + ", " + juce::String((int) ms) + " ms" + (fellBack ? " (fell back to the default voice)" : ""));
-                juce::WavAudioFormat wav;
-                std::unique_ptr<juce::OutputStream> os = dir.getChildFile(juce::File::createLegalFileName(label) + ".wav").createOutputStream();
-                if (os) {
-                    static_cast<juce::FileOutputStream*>(os.get())->setPosition(0);
-                    static_cast<juce::FileOutputStream*>(os.get())->truncate();
-                    const auto opts = juce::AudioFormatWriterOptions {}.withSampleRate(48000).withNumChannels(1).withBitsPerSample(24);
-                    if (auto w = wav.createWriterFor(os, opts)) { const float* ch[] = { a->data() }; w->writeFromFloatArrays(ch, 1, (int) a->size()); }
-                }
-                ++spoken;
-            };
-            speak({}, "default voice");
-            if (auto* arr = list.getArray())
-                for (auto& v : *arr)
-                    if (v["engine"].toString() != "kokoro") // the computer's voices only (--kokoro-test covers Kokoro)
-                        speak({ v["id"].toString(), v["name"].toString(), 1.0, {} }, v["name"].toString() + " [" + v["lang"].toString() + "]");
-            // A voice from another computer: falls back to the default voice.
-            juce::String err;
-            bool fellBack = false;
-            auto a = testCues->get("Verse one", { "com.example.not-installed", "Not Installed Voice", 1.0, {} }, 48000, err, fellBack);
-            report.add(juce::String(a && fellBack ? "ok   " : "FAIL ") + "voice not installed here: falls back to the default voice");
-            // Same cue again: from the cache, no new rendering.
-            const auto t0 = juce::Time::getMillisecondCounterHiRes();
-            auto again = testCues->get("Verse one", {}, 48000, err, fellBack);
-            report.add(juce::String(again ? "ok   " : "FAIL ") + "cached cue: " + juce::String((int) (juce::Time::getMillisecondCounterHiRes() - t0)) + " ms");
-            // 7a: a count-in on the beat (the computer's default voice)
-            {
-                const auto line = countInCheck(*testCues, {}, "default voice");
-                report.add(line);
-                if (line.startsWith("FAIL")) spoken = 0;
-            }
-            report.add(spoken > 0 ? "SPEECH OK" : "SPEECH FAILED");
-            dir.getChildFile("speech-test.txt").replaceWithText(report.joinIntoString("\n") + "\n");
-            std::printf("%s\n", report.joinIntoString("\n").toRawUTF8());
-            juce::MessageManager::callAsync([spoken] { juce::JUCEApplication::getInstance()->setApplicationReturnValue(spoken > 0 ? 0 : 1); juce::JUCEApplication::quit(); });
-        });
-    }
     // 7a: "1 2 3 4" at 120 BPM through the engine (each word placed with its onset lead, as a show does): every word's
     // onset (Cues::onsetOf on what the engine played) is within 2 ms of its beat. Says how late the raw words were.
     static juce::String countInCheck(Cues& cues, const Cues::Choice& voice, const juce::String& label)

@@ -118,4 +118,11 @@
 - **↩ renames the selected item** (as the guide says) **and is still "go to start" when nothing nameable is selected**, because the band uses ↩ that way on stage.
 - **⌘E is Split** (Ableton); Export this song moved to ⌥⌘E.
 
+- **An audio clip's level line takes the pointer only on the selected clip** (Phase 13): elsewhere a plain drag always moves the clip, so a quick move never turns into a gain change.
+- **Snapping uses the Snap grid everywhere** (Phase 13): the bar by default and the Adaptive grid only once its lines are 40 px apart, so a click near a bar lands on that bar (30 % in: its start; 70 %: the next).
+- **⌫ on a version that a setlist plays still asks** (the conventions allow it: it's used elsewhere); setlist rows and library songs go without a question.
+- **File › Save Library (⌘S) is a commit point; autosave keeps writing every change** as the safety net. Quitting with changes since the last save asks Save / Don't Save / Cancel, and Don't Save puts the last saved library back.
+- **Key Commands remaps the menu commands** (those with ⌘ / Ctrl). Single keys that act on what's selected (Space, ⌫, ↩, B, Z, arrows) are listed but fixed.
+- **A song's count-in is spoken counts in the bars before its first section** (set.Line has no pre-roll before bar 1): a song whose first section starts at bar 1 keeps the setting without counts until it gets a bar before it.
+
 (Add to this list, with a reason, whenever set.Line deliberately departs from a convention.)

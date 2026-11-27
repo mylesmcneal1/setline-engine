@@ -35,7 +35,7 @@ menu test (every item chosen through the native menu path arrives once), `set.Li
   Delete track · Move up ⌥↑ · Move down ⌥↓ · Height › · Edit click (MIDI clip)
 - **Setlist:** Switch setlist › · Add song… · Add break ⌘B · Move up ⌥↑ · Move down ⌥↓ · Remove from setlist · Rename
   setlist… · Duplicate setlist · Delete setlist (11: undo instead of a question; the last one too)
-- **View:** Show ⌘1 · Perform ⌘2 · Band ⌘3 · Cards ⌥⌘1 · Folders ⌥⌘2 · Collapse all ⌥⌘← · Zoom › (Zoom in ⌘=,
+- **View:** Show ⌘1 · Perform ⌘2 · Remote ⌘3 · Cards ⌥⌘1 · Folders ⌥⌘2 · Collapse all ⌥⌘← · Zoom › (Zoom in ⌘=,
   Zoom out ⌘−, Whole song, 32 bars, 8 bars, Section) · Track height › (Mini … Huge, Shrink tracks ⌥⌘−, Grow tracks
   ⌥⌘=, Fit tracks to window ⇧⌥⌘F, Compact top rows) · Fit all ⌥⌘F · Follow playhead ⌘F (12) · Setlist sidebar ⌥⌘L · Side panel ⌥⌘R
 - **Customize:** Theme › · Accent colour › · Fonts › · Text size › · Transport style › · Customize the look… ⌥⌘, ·
@@ -97,3 +97,14 @@ page's single keys (Space, N, P, V, C, K, L, [, ], = −, ⌥ scroll, ↩, ⌫, 
 - Click editor: double-click adds / deletes a note · B Draw mode (⌥-drag erases, Esc leaves) · ← → nudge (⇧ a bar) ·
   ↑ ↓ the other row · ⌘C / ⌘X / ⌘V (at the insert marker) · ⌘D · ⌘A · ⌘1 / ⌘2 grid narrower / wider · ⌘3 triplets ·
   ⌘4 snap · ⌫ · Esc
+
+## Phase 13
+- **Order:** File · Edit · View · Library · Song · Track · Setlist · Cues · Customize · Window · Help.
+- **File:** the save state ("Saved" / "● Unsaved changes") · Save Library ⌘S · Save Library As….
+- **Edit:** Key Commands… ⌥⌘K (Help › Keyboard shortcuts and ⌘/ open it too).
+- **Song** (the open song): Song info… ⌥⌘I · Rename… · Colour › · Key › · Versions › · New version · Add section ⌥⌘S · Add time signature… ⌥⌘M · Add tempo change… ⌥⌘T · Make sections from cues… · Song fields › · Notes for the band… · Add to setlist ⇧⌘A · Delete song….
+- **Track** (the selected track): Rename… · Colour › · Output › · Height › · Mute · Solo · MIDI: Device › · Port & channel › · Edit patch changes… · Clip: Clip gain… · Fades › · Split ⌘E · Add audio track ⌘T · Add click track · Add MIDI track · Duplicate track · Delete track · Move up / down ⌥↑ / ⌥↓ · Track settings….
+- **Setlist:** After this song › (Stop / Segue / Auto-next) · Edit break….
+- **Cues:** Voice › · Announce › · Count-in › · Output › · Level… · Cue words… · Record missing words….
+- **View:** Show ⌘1 · Perform ⌘2 · Remote ⌘3 (no Side panel).
+- **Keys:** ⇧Space plays from the insert line, ⌥Space restarts from bar 1.

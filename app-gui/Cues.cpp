@@ -57,22 +57,6 @@ juce::String pronKey(const juce::String& text, const kokoro::Pronunciations& pro
     return k;
 }
 
-// The computer's voices can't take phonemes, but they can take a respelling: "Djentworth" -> "jent worth".
-juce::String respell(const juce::String& text, const kokoro::Pronunciations& pron)
-{
-    if (pron.empty()) return text;
-    juce::String out, word;
-    auto flush = [&] {
-        if (word.isEmpty()) return;
-        auto it = pron.find(word.toLowerCase());
-        const bool phon = it != pron.end() && it->second.trim().startsWith("/");
-        out << (it != pron.end() && ! phon ? it->second : word);
-        word.clear();
-    };
-    for (auto c : text) { if (juce::CharacterFunctions::isLetterOrDigit(c) || c == '\'') word += c; else { flush(); out += c; } }
-    flush();
-    return out;
-}
 } // namespace
 
 Cues::Choice Cues::choiceFrom(const juce::var& v)
@@ -133,15 +117,15 @@ void Cues::ensureVoices()
     { std::lock_guard<std::mutex> g(dataLock); if (listed) return; }
     juce::String def;
     const double t0 = juce::Time::getMillisecondCounterHiRes();
+    // 13 §16: cues come from your recordings or the natural voices (Kokoro) only; the computer's own voices are gone
     auto list = kokoro::voices();
-    const auto sys = speech::listVoices(def);
-    for (auto& v : sys) list.push_back(v);
+    if (! list.empty()) def = list.front().id; // the best natural voice speaks when none is chosen
     const double ms = juce::Time::getMillisecondCounterHiRes() - t0;
-    applog::line("Voices listed: " + juce::String((int) (list.size() - sys.size())) + " set.Line + " + juce::String((int) sys.size()) + " computer voices in " + juce::String((int) ms) + " ms");
+    applog::line("Voices listed: " + juce::String((int) list.size()) + " natural voices in " + juce::String((int) ms) + " ms");
     std::lock_guard<std::mutex> g(dataLock);
     installed = std::move(list);
     defaultId = def;
-    listMs = ms; listSys = (int) sys.size();
+    listMs = ms; listSys = 0;
     listed = true;
 }
 
@@ -149,7 +133,7 @@ juce::String Cues::voiceListInfo()
 {
     std::lock_guard<std::mutex> g(dataLock);
     if (! listed) return "not listed yet";
-    return juce::String((int) installed.size() - listSys) + " set.Line + " + juce::String(listSys) + " computer voices (listed in " + juce::String((int) listMs) + " ms)";
+    return juce::String((int) installed.size()) + " natural voices (listed in " + juce::String((int) listMs) + " ms)";
 }
 
 juce::var Cues::voices()
@@ -196,15 +180,13 @@ juce::String Cues::resolve(const Choice& c, bool& fellBack)
 juce::String Cues::resolveLocked(const Choice& c, bool& fellBack) const
 {
     fellBack = false;
-    if (c.voice.isEmpty() && c.name.isEmpty()) return {};
-    juce::String id;
-    for (auto& v : installed) if (v.id == c.voice) { id = v.id; break; }
-    if (id.isEmpty() && ! kokoro::isKokoro(c.voice)) // ids differ between computers; Kokoro's never do
-        for (auto& v : installed) if (c.name.isNotEmpty() && v.engine == "system" && v.name.equalsIgnoreCase(c.name)) { id = v.id; break; }
-    if (id.isNotEmpty() && kokoro::isKokoro(id) && kokoro::status().state != kokoro::State::ready)
-        id = {}; // not downloaded (yet): the computer's default voice stands in
-    fellBack = id.isEmpty();
-    return id;
+    // 13 §16: a natural voice (Kokoro) or nothing. A voice from before (a computer voice) or none chosen: the best
+    // natural voice; not downloaded yet: no voice (the cue needs a recording or the download)
+    const bool ready = kokoro::status().state == kokoro::State::ready;
+    if (! ready) { fellBack = c.voice.isNotEmpty() || c.name.isNotEmpty(); return {}; }
+    for (auto& v : installed) if (v.id == c.voice && kokoro::isKokoro(v.id)) return v.id;
+    fellBack = c.voice.isNotEmpty() || c.name.isNotEmpty();
+    return defaultId;
 }
 
 juce::String Cues::fallbackReason(const Choice& c)
@@ -402,7 +384,7 @@ void Cues::saveStored(const juce::File& dir, const juce::String& key, const juce
     o->setProperty("text", text); o->setProperty("rate", rate); o->setProperty("samples", (int) a->size());
     if (c.recording.isNotEmpty()) { o->setProperty("source", "recording"); o->setProperty("recording", juce::File(c.recording).getFileName()); }
     else {
-        o->setProperty("source", kokoro::isKokoro(voiceId) ? "kokoro" : "system");
+        o->setProperty("source", "kokoro");
         o->setProperty("voice", c.voice); o->setProperty("name", c.name); o->setProperty("speed", c.speed);
         if (kokoro::isKokoro(voiceId)) o->setProperty("model", "Kokoro-82M v1.0");
     }
@@ -471,8 +453,8 @@ Cues::Audio Cues::renderRaw(const juce::String& text, const juce::String& voiceI
     std::vector<float> raw;
     double rawRate = 0;
     if (c.recording.isNotEmpty()) { if (! readRecording(juce::File(c.recording), raw, rawRate, error)) return nullptr; }
-    else if (kokoro::isKokoro(voiceId) ? ! kokoro::render(text, voiceId, c.speed, c.pron, raw, rawRate, error)
-                                       : ! speech::render(respell(text, c.pron), voiceId, c.speed, rate, raw, rawRate, error))
+    else if (! kokoro::isKokoro(voiceId)) { error = "No natural voice here yet: download the natural voices (Cues › Voice) or record this word."; return nullptr; }
+    else if (! kokoro::render(text, voiceId, c.speed, c.pron, raw, rawRate, error))
         return nullptr;
     auto a = std::make_shared<std::vector<float>>(resample(raw, rawRate, rate));
     trim(*a, rate);

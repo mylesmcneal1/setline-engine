@@ -142,7 +142,7 @@
     const hasCues = (cur.cues || []).length > 0;
     return { kind: "Song", name: cur.name, items: [["Rename", () => renameSong(cur.id)], ["Colour", (b) => { const r = b.getBoundingClientRect(); swatchPop({ left: r.left, right: r.left, top: r.bottom, bottom: r.bottom }, cur.col, (c) => { snap(); cur.col = c; refresh(); }); }],
       ["Versions ▾", (b) => { const r = b.getBoundingClientRect(), at = { clientX: r.left, clientY: r.bottom + 4 }; ctxMenu(at, SLMenus.toCtx(SLMenus.objItems("song", cur.id).find((x) => x.label === "Versions").sub, at)); }],
-      ...(hasCues ? [["✨ Sections from cues", () => SLMenus.run("m:secsFromCues"), false, "hl"]] : []),
+      ...(hasCues && !(cur.secs || []).length ? [["✨ Sections from cues", () => SLMenus.run("m:secsFromCues"), false, "hl"]] : []), // 13 §18: only until the song has sections
       ["Add track ▾", (b) => { const r = b.getBoundingClientRect(); ctxMenu({ clientX: r.left, clientY: r.bottom + 4 }, [{ label: "Audio track", icon: "∿", act: () => addTrack(cur, "audio") }, { label: "Click track", icon: "♩", act: () => addTrack(cur, "click") }, { label: "MIDI track", icon: "⎍", act: () => addTrack(cur, "midi") }, ...(cur.tracks.includes("Cues") ? [] : [{ label: "Cues track", icon: "❝", act: () => addTrack(cur, "cues") }])]); }]] };
   }
   let barKey = "";

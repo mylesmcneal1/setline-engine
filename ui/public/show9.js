@@ -11,7 +11,7 @@
   const $ = (id) => document.getElementById(id);
   const libKey = () => { const n = ($("crumbAll") && $("crumbAll").textContent) || "Library"; return "setline.view." + n; };
   const S9 = {
-    view: "cards", tab: "songs", filt: "all", q: "", oneOpen: localStorage.getItem("setline.oneOpen") !== "0", sel: false,
+    view: "cards", tab: "songs", // 13 §15: Songs · Setlists (no Presets tab); kept across views (this session) filt: "all", q: "", oneOpen: localStorage.getItem("setline.oneOpen") !== "0", sel: false,
     timings: [], // {what, ms} (Diagnostics timing log)
   };
   // (older test scripts drive the folders: window.SL9_TEST_DEFAULT / SL9_ONEOPEN, in memory only)
@@ -60,7 +60,7 @@
     et.insertAdjacentHTML("afterbegin", `<div class="seg9" id="viewTog" role="tablist" aria-label="Show the library as">
         <button data-v="cards" role="tab" title="Cards: the library as a wall of songs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg><span>Cards</span></button>
         <button data-v="folders" role="tab" title="Folders: one row per song, opening inline"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/></svg><span>Folders</span></button></div>
-      <div class="tabs9" id="cardTabs"><button data-t="songs">Songs</button><button data-t="sets">Setlists</button><button data-t="presets">Presets</button></div>`);
+      <div class="tabs9" id="cardTabs"><button data-t="songs">Songs</button><button data-t="sets">Setlists</button></div>`);
     const sp = et.querySelector(".sp");
     if (sp) sp.insertAdjacentHTML("afterbegin", `<div class="chips9" id="cardFilt"><button data-f="all"></button><button data-f="out"></button></div>
       <label class="sw9" id="oneOpenL" title="Opening a song closes the others"><input type="checkbox" id="oneOpen"><i></i><span>One song open at a time</span></label>
@@ -119,7 +119,6 @@
     const sc = $("scroller"); sc.classList.remove("focus"); sc.classList.add("wall9"); sc.classList.remove("rows9");
     const t0 = performance.now();
     if (S9.tab === "sets") { drawSetCards(sc); return; }
-    if (S9.tab === "presets") { drawPresetCards(sc); return; }
     const list = [...songs].sort(byName).filter((s) => (S9.filt === "out" ? !inSet(s.id) : true) && matches(s, S9.q));
     sc.innerHTML = `<div class="wall9g">${list.map(cardHTML).join("") || `<p class="faint empty9">${songs.length ? "No song matches." : "No songs yet."}</p>`}</div>`;
     sc.querySelectorAll(".card9").forEach((c) => {
@@ -167,8 +166,21 @@
       <div class="r9b">${o ? "" : ""}</div></div>`;
   }
   function rowOrder() { const inS = setOrder.map((id) => songs.find((s) => s.id === id)).filter(Boolean), rest = songs.filter((s) => !inSet(s.id)).sort(byName); return { inS, rest }; }
+  // 13 §15: Folders › Setlists: one row per setlist (name, songs, total time), opening to its songs and breaks
+  const SETOPEN = new Set();
+  function setItems(L) { const order = (L.order || []).filter((id) => songs.some((s) => s.id === id)), out = [], bs = (L.breaks || []).slice();
+    bs.filter((b) => !b.after).forEach((b) => out.push({ b })); order.forEach((id) => { out.push({ id }); bs.filter((b) => b.after === id).forEach((b) => out.push({ b })); }); return out; }
+  function drawSetRows(sc) {
+    sc.innerHTML = '<div class="sets13">' + setlists.map((L) => { const it = setItems(L), ids = it.filter((x) => x.id).map((x) => x.id), len = ids.reduce((a, id) => a + lenOf(songs.find((s) => s.id === id)), 0) + it.filter((x) => x.b).reduce((a, x) => a + (+x.b.len || +x.b.sec || 0), 0), o = SETOPEN.has(L.id);
+      return `<div class="set13 ${o ? "open" : ""} ${L.id === curSet ? "cur" : ""}" data-l="${L.id}"><div class="set13h" tabindex="0"><span class="chev">›</span><i style="background:${L.col || "#5a5f6a"}"></i><b>${esc(L.name)}</b>${L.id === curSet ? '<span class="inset9">CURRENT</span>' : ""}<span class="set13n">${ids.length} song${ids.length === 1 ? "" : "s"}</span><em>${fmt(len)}</em></div>
+        ${o ? `<div class="set13l">${it.map((x, i) => x.id ? `<div class="set13s" data-id="${x.id}"><span>${it.slice(0, i + 1).filter((y) => y.id).length}</span><i style="background:${songs.find((s) => s.id === x.id).col}"></i><b>${esc(songs.find((s) => s.id === x.id).name)}</b><em>${fmt(lenOf(songs.find((s) => s.id === x.id)))}</em></div>` : `<div class="set13b"><span>⏸</span><b>${esc(x.b.label || "Break")}</b><em>${x.b.len || x.b.sec ? fmt(+x.b.len || +x.b.sec) : ""}</em></div>`).join("") || '<p class="faint">No songs yet.</p>'}</div>` : ""}</div>`; }).join("") + "</div>";
+    sc.querySelectorAll(".set13h").forEach((h) => { const id = h.parentElement.dataset.l; h.onclick = () => { SETOPEN.has(id) ? SETOPEN.delete(id) : SETOPEN.add(id); drawSetRows(sc); };
+      h.ondblclick = () => { if (useSet(id) !== false) refresh(); }; h.onkeydown = (e) => { if (e.key === "Enter") { if (useSet(id) !== false) refresh(); } }; });
+    sc.querySelectorAll(".set13s").forEach((r) => { r.ondblclick = () => openSong(r.dataset.id); r.onclick = () => select(r.dataset.id, false); });
+  }
   function drawRows() {
     const sc = $("scroller"); sc.classList.remove("wall9", "focus"); sc.classList.add("rows9");
+    if (S9.tab === "sets") { drawSetRows(sc); return; }
     sc.style.setProperty("--vw", sc.clientWidth + "px");
     if (S9.oneOpen && open.size > 1) { const keep = open.has(selId) ? selId : [...open].pop(); open.clear(); open.add(keep); }
     const t0 = performance.now(), keepT = sc.scrollTop;

@@ -1,29 +1,18 @@
-// set.Line desktop app: the operating system's text-to-speech voices (step 2, spoken cues).
-// Windows: SAPI 5 (the desktop voices plus the OneCore voices SAPI can use). macOS: AVSpeechSynthesizer.
-// Speech is rendered to audio ahead of time (Cues.h); nothing here runs during playback.
-// Both functions block; call them from one background thread (the Cues worker).
+// set.Line desktop app: a cue voice's description. 13 §16: cues come from your recordings or the natural voices
+// (Kokoro, Kokoro.h), never the computer's own voices (SAPI / AVSpeechSynthesizer are gone).
 #pragma once
 #include <juce_core/juce_core.h>
-#include <vector>
 
 namespace setline::gui::speech {
 
 struct Voice {
-    juce::String id;   // platform identifier (SAPI token id / AVSpeechSynthesisVoice identifier)
-    juce::String name; // "Microsoft Zira", "Samantha"...
+    juce::String id;   // "kokoro:af_heart"...
+    juce::String name; // "Heart"
     juce::String lang; // "en-US"
-    int quality = 1;   // 1 standard, 2 enhanced, 3 premium (macOS's rating; Windows: OneCore 2, desktop 1)
-    juce::String engine = "system"; // "system", or "kokoro" (built in, Kokoro.h)
-    juce::String gender, grade;     // Kokoro: "F"/"M", the model card's grade
-    int rank = 0;                   // Kokoro: grade as a number, higher = better
+    int quality = 1;
+    juce::String engine = "kokoro";
+    juce::String gender, grade; // "F"/"M", the model card's grade
+    int rank = 0;               // grade as a number, higher = better
 };
-
-// Installed voices; defaultId = the system's default voice.
-std::vector<Voice> listVoices(juce::String& defaultId);
-
-// Speaks text with voice id ("" = default) at speed (1 = normal) into mono samples. The backend picks the
-// sample rate: wantRate if it can render at that rate, else its own; rateOut says which.
-bool render(const juce::String& text, const juce::String& voiceId, double speed, double wantRate,
-            std::vector<float>& out, double& rateOut, juce::String& error);
 
 } // namespace setline::gui::speech

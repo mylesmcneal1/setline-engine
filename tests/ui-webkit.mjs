@@ -20,7 +20,7 @@ if (!pw || !pw.webkit) { console.log("UI WEBKIT SKIPPED (no Playwright)"); proce
 
 const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".woff2": "font/woff2", ".woff": "font/woff", ".png": "image/png", ".json": "application/json" };
 const server = createServer(async (req, res) => {
-  let p, body; try { p = join(root, decodeURIComponent(new URL(req.url, "http://x").pathname)); body = await readFile(p); } catch { res.writeHead(404); res.end(); return; }
+  let p, body; try { const pn = decodeURIComponent(new URL(req.url, "http://x").pathname); p = pn === "/demo13.js" ? join(import.meta.dirname, "fixtures/demo13.js") : join(root, pn); body = await readFile(p); } /* 13 §20: the example songs are the tests' own */ catch { res.writeHead(404); res.end(); return; }
   res.writeHead(200, { "content-type": types[extname(p)] || "application/octet-stream" }); res.end(body);
 });
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
@@ -35,7 +35,7 @@ for (const suite of pick(args)) {
   const errs = []; pg.on("pageerror", (e) => errs.push(String(e).split("\n")[0]));
   // 11b: the rename suite saves a picture of each spot before and while editing (CI artifact: rename/*.png)
   if (shots) { await mkdir(join(shots, "rename"), { recursive: true }); await pg.exposeFunction("__shot", async (name, clip) => { try { await pg.screenshot({ path: join(shots, "rename", String(name).replace(/[^\w%-]+/g, "_") + ".png"), clip }); } catch (e) {} return true; }); }
-  await pg.goto(base + "?webkit=" + Date.now()); await pg.waitForTimeout(800);
+  await pg.goto(base + "?demo&webkit=" + Date.now()); await pg.waitForTimeout(800);
   let r;
   try { r = await pg.evaluate(`(async()=>{ ${await suiteCode(suite)} })()`); } catch (e) { r = { problems: ["error: " + String(e.message).split("\n")[0]], log: [] }; }
   if (errs.length) r.problems.push("page errors: " + errs.slice(0, 3).join(" | "));
@@ -46,6 +46,13 @@ for (const suite of pick(args)) {
   if (shots) await pg.screenshot({ path: join(shots, `webkit-${suite.name}.png`) });
   await pg.close();
 }
+// 13 §20: the app's start (no example songs: no ?demo): no page errors, an empty library with one setlist
+{ const pg = await browser.newPage({ viewport: { width: 1280, height: 800 } }); const errs = []; pg.on("pageerror", (e) => errs.push(String(e).split("\n")[0]));
+  await pg.goto(base + "?blank=" + Date.now()); await pg.waitForTimeout(800);
+  const r = await pg.evaluate(() => ({ songs: songs.length, page: !!window.SLPage, sets: setlists.length }));
+  const bad = errs.length || r.songs !== 0 || !r.page || r.sets !== 1;
+  console.log(`${bad ? "FAIL" : "ok  "} webkit 1280x800 blank start (no example songs)`); if (bad) { console.log("   !! " + JSON.stringify(r) + " " + errs.slice(0, 3).join(" | ")); fails++; }
+  await pg.close(); }
 await browser.close(); server.close();
 console.log(fails ? `UI WEBKIT FAILED (${fails})` : "UI WEBKIT OK");
 process.exit(fails ? 1 : 0);

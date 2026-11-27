@@ -14,15 +14,15 @@ async function check10b() {
 
   // ================================================================ the menus
   const sp = SLMenus.spec(), names = sp.menus.map((m) => m.name);
-  ok(names.join() === "File,Edit,Library,Song,Track,Setlist,View,Customize,Window,Help", "menus in order: " + names.join());
+  ok(names.join() === "File,Edit,View,Library,Song,Track,Setlist,Cues,Customize,Window,Help", "menus in order: " + names.join());
   const labels = (n) => SLMenus.flat({ menus: [sp.menus.find((m) => m.name === n)], app: [] }).map((x) => (x.path.length > 1 ? x.path.slice(1).join(" › ") + " › " : "") + x.label);
   const has = (n, l) => labels(n).includes(l);
   for (const [m, l] of [["File", "Ableton project…"], ["File", "Audio as a new song…"], ["File", "set.Line package (.setline)…"], ["File", "This song…"], ["File", "This setlist…"], ["File", "Print setlist…"], ["File", "Backups…"],
     ["Edit", "Duplicate"], ["Edit", "Rename…"], ["Edit", "Select songs"], ["Library", "New library…"], ["Library", "Merge as versions…"], ["Library", "Unmerge version"], ["Library", "Sort by › Name"],
-    ["Song", "Rename song…"], ["Song", "Duplicate song"], ["Song", "Delete song…"], ["Song", "New version"], ["Song", "Make sections from cues…"], ["Song", "Add to setlist"], ["Song", "Sort tracks: MIDI to the bottom"],
-    ["Track", "Add audio track"], ["Track", "Add click track"], ["Track", "Add MIDI track"], ["Track", "Rename track…"], ["Track", "Move up"], ["Track", "Edit click (MIDI clip)"],
+    ["Song", "Song info…"], ["Song", "Rename…"], ["Song", "Notes for the band…"], ["Song", "Duplicate song"], ["Song", "Delete song…"], ["Song", "New version"], ["Song", "Make sections from cues…"], ["Song", "Add to setlist"], ["Song", "Sort tracks: MIDI to the bottom"],
+    ["Track", "Add audio track"], ["Track", "Add click track"], ["Track", "Add MIDI track"], ["Track", "Rename…"], ["Track", "Edit patch changes…"], ["Track", "Clip gain…"], ["Track", "Track settings…"], ["Track", "Move up"], ["Track", "Edit click (MIDI clip)"],
     ["Setlist", "Add song…"], ["Setlist", "Add break"], ["Setlist", "Remove from setlist"], ["Setlist", "Rename setlist…"], ["Setlist", "Delete setlist"],
-    ["View", "Cards"], ["View", "Folders"], ["View", "Fit all"], ["View", "Setlist sidebar"], ["View", "Side panel"], ["View", "Zoom › Zoom in"], ["View", "Track height › Mini"],
+    ["View", "Cards"], ["View", "Folders"], ["View", "Fit all"], ["View", "Setlist sidebar"], ["View", "Zoom › Zoom in"], ["View", "Track height › Mini"],
     ["Help", "Quick start"], ["Help", "Keyboard shortcuts"], ["Help", "Report a problem…"]]) ok(has(m, l), `${m} › ${l}`);
   ok(!labels("Customize").some((l) => /Density/.test(l)), "Customize: no Density (View › Track height has the sizes)");
   ok(!labels("File").some((l) => /Open recent|Add break/.test(l)), "File: no Open recent, no Add break");
@@ -69,7 +69,7 @@ async function check10b() {
 
   // ================================================================ the selection bar
   const bar = () => { const b = document.getElementById("selbar10"); return b && !b.hidden ? [...b.querySelectorAll("button")].map((x) => x.textContent).join(" · ") : ""; };
-  SLix.syncBar(); ok(/^Rename · Colour · Versions ▾ · .*Add track ▾$/.test(bar()) && /Sections from cues/.test(bar()), "a song selected: " + bar());
+  SLix.syncBar(); ok(/^Rename · Colour · Versions ▾ · .*Add track ▾$/.test(bar()), "a song selected: " + bar()); // 13 §18: "Sections from cues" only until a song has sections
   { openTrack(S("glass"), "Bass"); SLDrag.setArea("track"); SLix.syncBar(); ok(bar() === "Rename · Colour · Height ▾ · Delete", "a track selected: " + bar()); closeTrack(); SLDrag.setArea("set"); }
   closeSong(); await wait(150);
   { SL9.select(true); songSel.clear(); songSel.add("low"); songSel.add("sat"); SLix.syncBar(); ok(!bar() && !!document.getElementById("selBar9"), "several songs: the bulk bar instead"); SL9.select(false); await frames(1); }
@@ -90,10 +90,11 @@ async function check10b() {
 
   // ================================================================ ⌘/
   { document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "/", code: "Slash", metaKey: MAC, ctrlKey: !MAC, bubbles: true, cancelable: true })); await frames(1);
-    const sh = document.getElementById("sheet10"); const G = sh ? [...sh.querySelectorAll("h4")].map((x) => x.textContent) : [];
-    ok(sh && ["Playback", "Editing", "View", "Setlist"].every((g) => G.includes(g)), "⌘/ shows the shortcut sheet: " + G.join(", "));
-    ok(sh && /Fit all/.test(sh.textContent) && /Play \/ Stop/.test(sh.textContent), "the sheet lists menu keys and page keys");
-    if (sh) { const i = sh.querySelector("input"); i.value = "fit"; i.dispatchEvent(new Event("input")); ok(sh.querySelectorAll(".sr10").length >= 2 && [...sh.querySelectorAll(".sr10")].every((r) => /fit/i.test(r.textContent)), "the sheet is searchable"); sh.remove(); } }
+    // 13 §21: ⌘/ opens the Key Commands window (it replaces the read-only sheet)
+    const sh = document.querySelector(".kc13"); const G = sh ? [...sh.querySelectorAll(".kc13g")].map((x) => x.textContent) : [];
+    ok(sh && ["Playback", "Editing", "View", "Setlist"].every((g) => G.includes(g)), "⌘/ opens Key Commands: " + G.join(", "));
+    ok(sh && /Fit all/.test(sh.textContent) && /Play \/ Stop/.test(sh.textContent), "it lists menu keys and page keys");
+    if (sh) { const i = sh.querySelector(".kc13q"); i.value = "fit"; i.dispatchEvent(new Event("input")); ok(sh.querySelectorAll(".kc13r").length >= 2 && [...sh.querySelectorAll(".kc13r")].every((r) => /fit/i.test(r.textContent)), "it is searchable"); SLKeys.close(); } }
 
   // ================================================================ the undo note
   { const s = S("sat"), c0 = s.col; snap(); s.col = "#123456"; refresh(); await wait(30);

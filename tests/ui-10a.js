@@ -174,6 +174,6 @@ async function check10a() {
     newMidiTrack("low"); await frames(1); ok(SL10a.isMidi(S("low"), l[l.length - 1]), "a new MIDI track goes at the bottom");
     if (typeof closeTpop === "function") closeTpop(); }
   // the Song menu has both
-  { const sm = SLMenus.spec().menus.find((x) => x.name === "Song").items.map((x) => x.label); ok(sm.includes("Rename song…") && sm.some((x) => /MIDI to the bottom/.test(x || "")), "Song menu: " + sm.filter(Boolean).join(" · ")); }
+  { const sm = SLMenus.spec().menus.find((x) => x.name === "Song").items.map((x) => x.label); ok(sm.includes("Rename…") && sm.includes("Song info…") && sm.some((x) => /MIDI to the bottom/.test(x || "")), "Song menu: " + sm.filter(Boolean).join(" · ")); }
   return { problems: P, log };
 }

@@ -95,7 +95,7 @@
   function decorate() {
     document.querySelectorAll(".row.secs > .lh").forEach((lh) => {
       const add = lh.querySelector(".lhadd"), s = add && songOf(add.dataset.song); if (!s || lh.querySelector(".lhcues10")) return;
-      if (!(s.cues || []).length) return;
+      if (!(s.cues || []).length || (s.secs || []).length) return; // 13 §18: a prompt only until the song has sections (Song › Make sections from cues… always)
       add.insertAdjacentHTML("beforebegin", `<button class="lhcues10" data-song="${s.id}" title="Make sections from the cues (Verse, Chorus…)">From cues</button>`);
     });
     document.querySelectorAll(".row.secs > .lane[data-song]").forEach((lane) => {

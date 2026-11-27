@@ -70,3 +70,62 @@
 .cwpop13 { padding: 12px !important; }
 .lk-custom { border: 0; background: none; cursor: pointer; padding: 0 4px; }
 .lk-custom i { width: 20px; height: 20px; border-radius: 50%; background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red); box-shadow: 0 0 0 2px var(--c, transparent), inset 0 0 0 1px rgba(255, 255, 255, .2); }
+/* D §13: no right-side panel (its toggle goes too); the details card and the Song info window */
+body.noside13 .insp, body.noside13 #tglR, body.noside13 #closeR { display: none !important; }
+.dc13 { position: fixed; z-index: 55; width: 330px; max-height: min(78vh, 640px); display: flex; flex-direction: column; background: #1b1d22; border: 1px solid rgba(255, 255, 255, .12); border-radius: 12px; box-shadow: 0 18px 50px rgba(0, 0, 0, .55); }
+.dc13h { display: flex; align-items: center; gap: 8px; padding: 8px 10px 8px 14px; border-bottom: 1px solid rgba(255, 255, 255, .07); cursor: move; }
+.dc13h b { flex: 1; font-size: 13.5px; }
+.dc13b { overflow: auto; padding: 4px 10px 12px; }
+.si13bg .si13 { width: min(760px, 94vw); padding: 0; text-align: left; }
+.si13h { display: flex; align-items: center; gap: 12px; padding: 16px 18px 12px; border-bottom: 1px solid rgba(255, 255, 255, .07); }
+.si13h i { width: 6px; height: 26px; border-radius: 3px; }
+.si13h b { font: 800 20px var(--title, Inter), sans-serif; text-transform: uppercase; }
+.si13h span { flex: 1; color: #8b90a0; font-size: 13px; }
+.si13tabs { display: flex; gap: 4px; padding: 10px 18px 0; }
+.si13tabs button { border: 0; background: none; color: #9aa0ab; font: 600 13.5px var(--ui, Inter), sans-serif; padding: 8px 14px; border-radius: 8px 8px 0 0; cursor: pointer; }
+.si13tabs button.on { background: rgba(255, 255, 255, .06); color: #fff; }
+.si13body { margin: 0 18px 18px; padding: 16px; background: rgba(255, 255, 255, .06); border-radius: 0 10px 10px 10px; max-height: 62vh; overflow: auto; }
+.si13g { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 18px; }
+.si13g label, .si13wide, .si13c, .si13ci { display: flex; flex-direction: column; gap: 6px; font: 700 10.5px var(--ui, Inter), sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #8b90a0; }
+.si13g input, .si13g select, .si13wide textarea, .si13wide input { font: 500 14px var(--ui, Inter), sans-serif; text-transform: none; letter-spacing: 0; color: #fff; }
+.si13t { display: flex; align-items: center; gap: 8px; text-transform: none; letter-spacing: 0; font: 500 14px var(--ui, Inter), sans-serif; color: #c9ccd3; } .si13t input { width: 90px; } .si13t em { color: #8b90a0; font-style: normal; }
+.si13wide { grid-column: 1 / -1; } .si13wide small { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.si13ci .segm { text-transform: none; letter-spacing: 0; }
+.si13v { display: flex; flex-direction: column; gap: 6px; }
+.si13vr { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 8px; background: rgba(255, 255, 255, .04); }
+.si13vr.cur { box-shadow: inset 0 0 0 1px rgba(100, 210, 255, .45); }
+.si13vn { flex: 1; min-width: 0; } .si13vd { font-size: 12px; color: #9aa0ab; display: flex; gap: 4px; align-items: center; white-space: nowrap; } .si13vl { font: 500 12px var(--nums, ui-monospace, monospace); color: #9aa0ab; }
+.si13body .racts { display: flex; gap: 10px; align-items: center; margin-top: 12px; }
+.cg13 { display: flex; flex-direction: column; gap: 10px; width: 240px; } .cg13 span { display: flex; align-items: center; gap: 6px; } .cg13 input[type=number] { width: 80px; }
+/* D §15: Songs · Setlists tabs in Folders too; Folders › Setlists rows */
+.edit.v-folders .tabs9 { display: inline-flex; }
+.sets13 { padding: 10px 14px 40px; display: flex; flex-direction: column; gap: 6px; }
+.set13 { border-radius: 10px; background: rgba(255, 255, 255, .03); }
+.set13.cur { box-shadow: inset 0 0 0 1px rgba(255, 159, 10, .35); }
+.set13h { display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 14px; cursor: pointer; }
+.set13h .chev { transition: transform .12s; color: #8b90a0; } .set13.open .set13h .chev { transform: rotate(90deg); }
+.set13h i { width: 4px; height: 22px; border-radius: 2px; } .set13h b { font-size: 15px; } .set13n { margin-left: auto; color: #8b90a0; font-size: 13px; } .set13h em { font: 500 13px var(--nums, ui-monospace, monospace); color: #c9ccd3; font-style: normal; min-width: 54px; text-align: right; }
+.set13l { padding: 2px 14px 10px 42px; display: flex; flex-direction: column; gap: 2px; }
+.set13s, .set13b { display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 8px; border-radius: 6px; font-size: 13.5px; }
+.set13s:hover { background: rgba(255, 255, 255, .05); } .set13s span { width: 18px; color: #8b90a0; text-align: right; font-size: 12px; } .set13s i { width: 3px; height: 16px; border-radius: 2px; }
+.set13s em, .set13b em { margin-left: auto; font: 500 12px var(--nums, ui-monospace, monospace); color: #9aa0ab; font-style: normal; }
+.set13b { color: #9aa0ab; font-style: italic; } .set13b span { width: 18px; text-align: right; font-style: normal; }
+/* E §17 Cue words… / Record missing words… */
+.cw13win { width: min(760px, 94vw); padding: 0; text-align: left; }
+.cw13list { max-height: 60vh; overflow: auto; padding: 8px 18px 14px; display: flex; flex-direction: column; gap: 4px; }
+.cw13r { display: flex; align-items: center; gap: 10px; padding: 4px 6px; border-radius: 8px; } .cw13r:hover { background: rgba(255, 255, 255, .04); }
+.cw13t { flex: 1; min-width: 0; } .cw13n { width: 64px; color: #8b90a0; font-size: 12px; } .cw13s { width: 120px; font-size: 12px; color: #8b90a0; } .cw13s.on { color: #f5a524; }
+.cw13new { flex: 1; }
+/* F §21 Key Commands */
+.kc13 { width: min(860px, 95vw); padding: 0; text-align: left; display: flex; flex-direction: column; max-height: 88vh; }
+.kc13 .si13h { flex-wrap: wrap; } .kc13 .si13h span { flex: 1; }
+.kc13s { padding: 10px 18px 4px; } .kc13q { width: 100%; box-sizing: border-box; }
+.kc13l { overflow: auto; padding: 4px 18px 8px; flex: 1; min-height: 0; }
+.kc13g { font: 700 10.5px var(--ui, Inter), sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #8b90a0; margin: 12px 0 4px; }
+.kc13r { display: grid; grid-template-columns: 1fr 120px 150px 40px; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.kc13r:hover { background: rgba(255, 255, 255, .05); } .kc13r.rec { background: rgba(10, 132, 255, .18); } .kc13r.fx { cursor: default; opacity: .75; }
+.kc13r.chg .kc13k { color: #ffcf6b; }
+.kc13n small { display: block; color: #7d838e; font-size: 11px; } .kc13k { font: 500 12.5px var(--nums, ui-monospace, monospace); color: #d7dae0; } .kc13k.w { color: #9aa0ab; }
+.kc13f { padding: 8px 18px 14px; min-height: 22px; font-size: 12.5px; color: #c9ccd3; } .kc13w { color: #ffcf6b; }
+.kc13print { display: none; }
+@media print { body.printkc13 > *:not(.kc13print) { display: none !important; } body.printkc13 .kc13print { display: block; color: #000; background: #fff; font: 11pt sans-serif; } .kc13print table { border-collapse: collapse; width: 100%; } .kc13print td { border-bottom: 1px solid #ccc; padding: 3px 6px; } }

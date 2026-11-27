@@ -33,7 +33,7 @@ async function check11() {
     trackOpen = { song: s.id, track: "Click" }; if (window.SLDrag) SLDrag.setArea("track");
     const flat = SLMenus.flat(), it = (l) => flat.find((x) => x.path[0] === "Track" && x.label === l);
     ok(it("Delete track") && !it("Delete track").dis, "Track › Delete track works on Click");
-    ok(it("Rename track…") && !it("Rename track…").dis, "Track › Rename track… works on Click");
+    ok(it("Rename…") && !it("Rename…").dis, "Track › Rename… works on Click");
     const lh = document.querySelector(`.row.trk > .lh[data-song="${s.id}"][data-track="Click"]`); rclick(lh); await frames(1);
     const items = ctxItems(); closeCtx();
     ok(items.includes("Delete track") && items.includes("Rename…"), "right-click on Click: Rename… and Delete track: " + items.join(" | "));

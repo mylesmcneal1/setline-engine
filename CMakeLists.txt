@@ -174,7 +174,6 @@ if(SETLINE_WITH_JUCE)
       app-gui/Folders.cpp
       app-gui/Kokoro.cpp
       app-gui/Ort.cpp
-      app-gui/SpeechWin.cpp
       app-gui/WebUi.cpp
       app-gui/WinIcon.cpp
       app-gui/LibraryStore.cpp
@@ -188,9 +187,9 @@ if(SETLINE_WITH_JUCE)
       app-gui/Package.cpp
       app-gui/BandServer.cpp)
     if(APPLE)
-      target_sources(setline PRIVATE app-gui/MacDrop.mm app-gui/SpeechMac.mm)
+      target_sources(setline PRIVATE app-gui/MacDrop.mm)
       # Objective-C++ without changing how JUCE's own sources compile.
-      set_source_files_properties(app-gui/MacDrop.mm app-gui/SpeechMac.mm PROPERTIES COMPILE_OPTIONS "-xobjective-c++")
+      set_source_files_properties(app-gui/MacDrop.mm PROPERTIES COMPILE_OPTIONS "-xobjective-c++")
     endif()
     target_compile_definitions(setline PRIVATE
       JUCE_WEB_BROWSER=1
@@ -212,11 +211,9 @@ if(SETLINE_WITH_JUCE)
     if(MSVC) # Kokoro.cpp spells phonemes in UTF-8 (ˈ ɹ ə...); MSVC reads sources as the system code page otherwise
       set_source_files_properties(app-gui/Kokoro.cpp PROPERTIES COMPILE_OPTIONS "/utf-8")
     endif()
-    # Spoken cues: the system's speech (SAPI on Windows, AVSpeechSynthesizer on macOS).
+    # 13: no system speech any more (cues: recordings or the Kokoro voices); Windows still links what the app uses
     if(WIN32)
-      target_link_libraries(setline PRIVATE sapi ole32 normaliz)
-    elseif(APPLE)
-      target_link_libraries(setline PRIVATE "-framework AVFoundation")
+      target_link_libraries(setline PRIVATE ole32 normaliz)
     endif()
   endif()
 endif()

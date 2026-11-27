@@ -1145,6 +1145,7 @@
 </style>
 <script src="ui.js"></script>
 <script src="modeler.js"></script>
+<script>/* 13 §20: the tests' example songs (tests/fixtures/demo13.js, served by the test harnesses), never in the app */ if(/[?&]demo\b/.test(location.search)) document.write('<script src="demo13.js"><\/script>');</script>
 <script src="tx13.js"></script>
 <script src="ed13.js"></script>
 <link rel="stylesheet" href="show9.css">
@@ -1267,34 +1268,10 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 // ======================= SESSION DATA =======================
-const songs = [
-  { id:'neon', name:'Neon Rivers', key:'A min', col:'#f5a524', trans:'segue', tmap:[{bar:1,bpm:128,sig:[4,4]}],
-    secs:[['Intro','intro',8],['Verse 1','verse',16],['Pre','pre',8],['Chorus 1','chorus',16],['Verse 2','verse',16],['Pre','pre',8],['Chorus 2','chorus',16],['Bridge','bridge',8],['Chorus 3','chorus',16],['Outro','outro',8]],
-    tracks:['Click','Cues','Drums','Bass','Keys','Guitars','BGVs','Synth / Pads','FX / Risers','Guitar rig','Lights'] },
-  { id:'glass', name:'Glasshouse', key:'F♯', col:'#22c3a6', trans:'stop',
-    tmap:[{bar:1,bpm:92,sig:[4,4]},{bar:25,sig:[7,8]},{bar:27,sig:[4,4]},{bar:41,bpm:96},{bar:69,bpm:96},{bar:77,bpm:84,ramp:true}],
-    secs:[['Intro','intro',8],['Verse 1','verse',16],['Turn','turn',2],['Chorus 1','chorus',14],['Verse 2','verse',16],['Chorus 2','chorus',12],['Outro (rit.)','outro',12]],
-    tracks:['Click','Cues','Drums','Bass','Keys','Guitars','Strings','Guitar rig','Lights'] },
-  { id:'low', name:'Low Tide', key:'D', col:'#6b7cff', trans:'auto', tmap:[{bar:1,bpm:76,sig:[6,8]}],
-    secs:[['Intro','intro',8],['Verse','verse',16],['Chorus','chorus',16],['Verse','verse',16],['Chorus','chorus',16],['Outro','outro',12]],
-    tracks:['Click','Cues','Drums','Bass','Keys','Pads','Guitar rig'] },
-  { id:'sat', name:'Satellites', key:'E min', col:'#ff5fa2', trans:'segue', tmap:[{bar:1,bpm:140,sig:[4,4]},{bar:57,bpm:150}],
-    secs:[['Intro','intro',8],['Verse','verse',16],['Chorus','chorus',16],['Verse','verse',16],['Chorus','chorus',16],['Bridge','bridge',8],['Chorus','chorus',16],['Outro','outro',4]],
-    tracks:['Click','Cues','Drums','Bass','Guitars','Synth / Pads','Lights'] },
-  { id:'copper', name:'Copper Sun', key:'B♭', col:'#a46bff', trans:'stop', tmap:[{bar:1,bpm:110,sig:[4,4]},{bar:33,sig:[3,4]},{bar:41,sig:[4,4]}],
-    secs:[['Intro','intro',8],['Verse','verse',16],['Pre','pre',8],['Waltz','bridge',8],['Chorus','chorus',16],['Chorus','chorus',16],['Outro','outro',8]],
-    tracks:['Click','Cues','Drums','Bass','Keys','Guitars','BGVs','Guitar rig','Lights'] },
-  { id:'paper', name:'Paper Kings', key:'A', col:'#ff9f43', trans:'stop', tmap:[{bar:1,bpm:100,sig:[4,4]}],
-    secs:[['Intro','intro',8],['Verse','verse',16],['Chorus','chorus',16],['Verse','verse',16],['Chorus','chorus',16],['Outro','outro',8]],
-    tracks:['Click','Cues','Drums','Bass','Guitars','Guitar rig'] },
-  { id:'under', name:'Undertow (alt intro)', key:'C♯ min', col:'#5aa9ff', trans:'stop', tmap:[{bar:1,bpm:72,sig:[4,4]},{bar:9,bpm:88,ramp:true}],
-    secs:[['Rubato intro','intro',8],['Verse','verse',16],['Chorus','chorus',16],['Verse','verse',16],['Chorus','chorus',16],['Outro','outro',8]],
-    tracks:['Click','Cues','Drums','Bass','Keys','Guitars','Lights'] },
-  { id:'sound', name:'Soundcheck loop', key:'—', col:'#7d8696', trans:'stop', tmap:[{bar:1,bpm:120,sig:[4,4]}],
-    secs:[['Loop','verse',16]], tracks:['Click','Drums','Bass','Keys'] },
-];
-let setOrder=['neon','glass','low','sat','copper'];
-let setlists=[{id:'L1',name:'Full show',order:setOrder},{id:'L2',name:'Festival 30',order:['neon','glass','sat']},{id:'L3',name:'Acoustic',order:['low','paper']}], curSet='L1', setSeq=4;
+// 13 §20: no example songs in the app (tests load theirs from tests/fixtures/demo13.js with ?demo)
+const songs = (window.SETLINE_DEMO && SETLINE_DEMO.songs) || [];
+let setOrder=window.SETLINE_DEMO?SETLINE_DEMO.setOrder.slice():[];
+let setlists=window.SETLINE_DEMO?SETLINE_DEMO.setlists(setOrder):[{id:'L1',name:'Setlist 1',order:setOrder}], curSet='L1', setSeq=4;
 const curSetObj=()=>setlists.find(x=>x.id===curSet)||setlists[0];
 function syncSet(){ const c=curSetObj(); if(c) c.order=setOrder; }
 function useSet(id){ if(playing&&id!==curSet){ toast('Stop playback first: the setlist can’t change while a song plays'); return false; } syncSet(); const was=curSet; curSet=id; setOrder=curSetObj().order; refresh(); if(perfOn) renderPerform(true); return true; }
@@ -1401,8 +1378,10 @@ function buildBars(s){
 let sid=1;
 function normSecs(s){ let acc=1; s.secs=(s.secs||[]).map(x=>{ const o=Array.isArray(x)?{id:sid++,name:x[0],type:x[1],bars:x[2],end:x[3]||'continue',say:'',notes:{},tile:true}:x; if(o.start===undefined) o.start=acc; acc=o.start+o.bars; return o; }); }
 songs.forEach(normSecs);
+if(window.SETLINE_DEMO){ // (the tests' example songs only)
 [['neon','Bridge','loop'],['neon','Outro','hold'],['sat','Bridge','loop'],['copper','Outro','hold']].forEach(([id,n,e])=>{ const sec=songs.find(x=>x.id===id).secs.find(x=>x.name===n); if(sec) sec.end=e; });
-songs.find(x=>x.id==='neon').secs.forEach((x,i)=>x.notes.drums=['Hats only, full kit at bar 5','Half-time feel, cross-stick','8ths on floor tom','Open hats, four on the floor','Cross-stick, fill bar 16','Build to crash','Open hats','Vamp on ride, watch for exit','Double time last 4','Hold the last hit'][i]||'');
+(songs.find(x=>x.id==='neon')||{secs:[]}).secs.forEach((x,i)=>x.notes.drums=['Hats only, full kit at bar 5','Half-time feel, cross-stick','8ths on floor tom','Open hats, four on the floor','Cross-stick, fill bar 16','Build to crash','Open hats','Vamp on ride, watch for exit','Double time last 4','Hold the last hit'][i]||'');
+}
 songs.forEach(buildBars);
 const fmtMs=x=>Math.floor(x/60)+':'+String(Math.floor(x%60)).padStart(2,'0')+'.'+String(Math.floor((x%1)*1000)).padStart(3,'0');
 const fmt=x=>Math.floor(x/60)+':'+String(Math.floor(x%60)).padStart(2,'0');
@@ -1887,9 +1866,8 @@ function clickHit(cfg,acc,sub,when,level){ const db=sub?cfg.subGain:acc&&cfg.acc
 let lastClickT=-1;
 // Spoken cues. The mockup voices each cue with the browser's speech engine at its bar; the real app plays recorded cue samples.
 let lastCueKey='', cueVoice=null;
-function pickVoice(){ try{ const v=speechSynthesis.getVoices(); cueVoice=v.find(x=>/Samantha|Ava|Allison|Google US English/i.test(x.name))||v.find(x=>/^en/i.test(x.lang))||null; }catch(e){} }
-try{ pickVoice(); speechSynthesis.onvoiceschanged=pickVoice; }catch(e){}
-function sayCue(text,vol){ if(window.SLC&&text){ const s=songs.find(x=>x.id===(pick&&pick.song)||x.id===selId); if(s){ SLC.preview(s,text); return; } } try{ if(!window.speechSynthesis||!text) return; speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(text); if(cueVoice) u.voice=cueVoice; u.rate=1.08; u.volume=Math.max(0,Math.min(1,vol??1)); speechSynthesis.speak(u); }catch(e){} }
+// 13 §16: no computer speech (cues: your recordings or the natural voices, rendered by the app)
+function sayCue(text,vol){ if(window.SLC&&text){ const s=songs.find(x=>x.id===(pick&&pick.song)||x.id===selId); if(s){ SLC.preview(s,text); return; } } }
 function cuesBetween(a,b){ const s=songs.find(x=>x.id===playId); if(!s||!s.tracks.includes('Cues')||isOff(s,'Cues')) return; const LEAD=.12; // speech engines start a little late
   cuesOf(s).forEach(c=>{ if(!s.bars[c.bar-1]) return; const ct=cueT(s,c), tt=Math.max(0,ct-LEAD), key=s.id+'|'+c.id+'|'+ct; if(tt>=a&&tt<b&&key!==lastCueKey){ lastCueKey=key; sayCue(c.text,linOf(gainOf(s,'Cues'))); } }); }
 function clickBetween(a,b){ const s=songs.find(x=>x.id===playId); if(!s||!actx) return; if(!$('clickBtn').classList.contains('on')) return;
@@ -1975,8 +1953,8 @@ const cueCfg=s=>s.cueVoice||CUEV;
 // 7a: the set.Line (Kokoro) voices come with the voice model's state (KVOICES), not with the computer's voice list,
 // so they're listed even when the computer's voices are slow to list or never answer (the Mac bug in 0.1.40).
 let KVOICES=[];
-function voiceList(){ let sys; if(VOICES) sys=VOICES; else try{ sys=speechSynthesis.getVoices().map(v=>({id:v.name,name:v.name,lang:v.lang,isDefault:v.default})); }catch(e){ sys=[]; }
-  const have=new Set(sys.map(v=>v.id)); return [...KVOICES.filter(v=>!have.has(v.id)),...sys]; }
+// 13 §16: the natural voices only (the computer's own voices are gone)
+function voiceList(){ const sys=(VOICES||[]).filter(v=>v.engine==='kokoro'); const have=new Set(sys.map(v=>v.id)); return [...KVOICES.filter(v=>!have.has(v.id)),...sys]; }
 const OS_VOICES=/Mac/.test(navigator.platform)?'Mac voices':'Windows voices';
 const kokoroLabel=v=>`${v.name} · ${({'en-US':'American','en-GB':'British'})[v.lang]||v.lang} · ${v.gender==='M'?'male':'female'}`;
 // The "set.Line voices" group: every Kokoro voice once downloaded; before that, the download item (and the saved
@@ -1986,14 +1964,14 @@ function kokoroGroup(selId){ const k=voiceList().filter(v=>v.engine==='kokoro').
   const pct=VMODEL.total?Math.floor(100*VMODEL.done/VMODEL.total):0, sel=k.find(v=>v.id===selId);
   return `<optgroup label="set.Line voices">${VMODEL.state==='downloading'?`<option value="__downloading" disabled>Downloading better voices… ${pct}%</option>`:`<option value="__download">⬇ Download better voices (${KOKORO_MB()} MB)…</option>`}${sel?`<option value="${esc(sel.id)}" selected>${esc(kokoroLabel(sel))} · not downloaded</option>`:''}</optgroup>`; }
 const sysOpt=(v,selId)=>`<option value="${esc(v.id)}" ${v.id===selId?'selected':''}>${esc(v.name)}${v.lang?' · '+esc(v.lang):''}</option>`;
-function defaultVoice(){ const l=voiceList().filter(v=>v.engine!=='kokoro'); return l.find(v=>v.isDefault)||l[0]||null; }
+function defaultVoice(){ const l=voiceList().filter(v=>v.engine==='kokoro').sort((a,b)=>(b.rank||0)-(a.rank||0)); return l[0]||null; } // 13 §16: the best natural voice
 function voiceFound(c){ if(!c.voice&&!c.name) return defaultVoice(); const l=voiceList(); return l.find(v=>v.id===c.voice)||l.find(v=>c.name&&v.name.toLowerCase()===c.name.toLowerCase())||null; }
 function voiceLabel(c){ if(!c.voice&&!c.name){ const d=defaultVoice(); return d?d.name:'Default voice'; } return c.name||c.voice; }
 function openCuePanel(s){ const ct=s.tracks.find(x=>ROLE[x]==='cues'); if(ct) openTrack(s,ct); }
 // Preview text: the selected cue on this song, otherwise "Verse one".
 function previewText(s){ if(pick&&pick.kind==='cue'&&pick.song===s.id){ const c=cuesOf(s).find(x=>x.id===pick.id); if(c&&c.text) return c.text; } return 'Verse one'; }
 function previewCue(s,text){ const c=cueCfg(s); if(window.SLC){ SLC.preview(s,text); return; }
-  try{ speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(text), v=speechSynthesis.getVoices().find(x=>x.name===(voiceFound(c)||{}).name); if(v) u.voice=v; u.rate=c.speed||1; speechSynthesis.speak(u); }catch(e){} }
+  toast('Cues preview in the app (the natural voices or your recordings)'); } // 13 §16: no computer speech
 function cuePanel(s){ if(!cueOpen) return ''; const c=cueCfg(s), own=!!s.cueVoice, list=voiceList(), found=voiceFound(c), missing=(c.voice||c.name)&&!found, d=defaultVoice();
   // Voice menu (phase 7): the Kokoro download, Kokoro by accent and gender (best first), your recorded words (choosing
   // one plays it), the computer's voices (Default first; its language first, best on top), then More voices….
@@ -2002,7 +1980,7 @@ function cuePanel(s){ if(!cueOpen) return ''; const c=cueCfg(s), own=!!s.cueVoic
       const words=[...(s.cueWords||[]),...CUEWORDS.filter(w=>!(s.cueWords||[]).some(x=>normCue(x.word)===normCue(w.word)))];
       const rec=words.length?`<optgroup label="Your recorded words (played instead of the voice)">${words.map(w=>`<option value="__word:${esc(w.id)}">“${esc(w.word)}” · ${esc(w.name)}</option>`).join('')}</optgroup>`:'';
       const def=`<option value="" ${!c.voice&&!c.name?'selected':''}>Default voice${d?' ('+esc(d.name)+')':''}</option>`, comp=def+m.first.map(o).join('');
-      return kok+`<optgroup label="${OS_VOICES}">${comp}</optgroup>`+rec+(m.rest.length?(allVoices?`<optgroup label="More voices">${m.rest.map(o).join('')}</optgroup>`:`<option value="__more">More voices… (${m.rest.length})</option>`):''); })();
+      return kok+(comp?`<optgroup label="${OS_VOICES}">${comp}</optgroup>`:"")+rec+(m.rest.length?(allVoices?`<optgroup label="More voices">${m.rest.map(o).join('')}</optgroup>`:`<option value="__more">More voices… (${m.rest.length})</option>`):''); })();
   const sp=c.speed||1;
   return rcard('Voice',kokoroBox()+rrow('Voice','<select id="cvVoice">'+opts+'</select>')
     +(missing?'<p class="hint" id="cvMissing" style="color:var(--amber);font-size:11px;line-height:1.5;margin:2px 0 8px">“'+esc(c.name||c.voice)+'” isn’t installed on this computer, so cues use '+(d?esc(d.name):'the default voice')+'. The choice stays saved and comes back on a computer that has it.</p>':'')
@@ -2064,6 +2042,7 @@ function secMenu(e,s,id){ const so=secObj(s,id), nx=s.secs.find(x=>x.start>so.st
     ...[['continue','Play on'],['loop','Loop until released'],['hold','Hold on last bar'],['stop','Stop at the end']].map(([k,l])=>({label:l,icon:so.end===k?'✓':'',act:()=>{ snap(); so.end=k; buildBars(s); refresh(); }})),'-',
     {label:'Duplicate after',icon:'⧉',dis:room<so.bars,act:()=>{ snap(); const c={...JSON.parse(JSON.stringify(so)),id:sid++,start:so.start+so.bars}; s.secs.push(c); buildBars(s); selSec={song:s.id,id:c.id}; refresh(); }},
     {label:'Split at playhead',icon:'✂',dis:!(playId===s.id&&barAtTime(s,pos)>so.start&&barAtTime(s,pos)<so.start+so.bars),act:()=>splitAt(s,id,nearestBoundary(s,pos))},
+    {label:'Section settings…',icon:'',act:()=>{ selectSec(s.id,id); if(window.SL13D) SL13D.openDetails(document.querySelector(`.secs .lane[data-song="${s.id}"] .sec[data-sid="${id}"]`)); }}, /* 13 D: what the side panel showed */
     {label:'Delete section',icon:'⌫',danger:true,act:()=>deleteSec(s,id)}]); }
 function wireSecLane(lane){ const s=songs.find(x=>x.id===lane.dataset.song), tAt=ev=>TX.timeAt(ev,lane), xOf=bar=>TX.songX(s.bars[Math.min(bar,s.total+1)-1].t);
   lane.onpointerdown=e=>{ if(e.button!==0||e.target.closest('.sec')) return; const b0=barAtTime(s,tAt(e)), r=freeRange(s,b0); if(!r) return; e.preventDefault();
@@ -2550,7 +2529,7 @@ function wireRegLane(cv){ const s=songs.find(x=>x.id===cv.dataset.song), t=s.tra
     const b=barAtTime(s,lx(cv,e)/PXS), others=list(), nx=Math.min(s.total+1,...others.filter(q=>q.bar>b).map(q=>q.bar)); if(others.some(q=>b>=q.bar&&b<q.bar+q.bars)) return; snap();
     const r2={id:'r'+regSeq++,bar:b,bars:Math.max(1,Math.min(k==='ck'?1:4,nx-b))}; /* a new click clip is one bar: Repeat… or drag its edge for more */ if(k==='ck') fillCk(s,r2,1); list().push(r2); list().sort((a,b)=>a.bar-b.bar); setPick({kind:k,song:s.id,track:t,id:r2.id}); };
   cv.oncontextmenu=e=>{ e.preventDefault(); const r=at(lx(cv,e)); if(!r) return; setPick({kind:k,song:s.id,track:t,id:r.id});
-    ctxMenu(e,[...(k==='ck'?[{label:'Edit beats…',icon:'▦',act:()=>openCkEd(s,r,t)},{label:'Repeat…',icon:'↻',act:()=>repeatBox(s,t,r)},{label:'Fill with quarter notes',icon:'♩',act:()=>{ snap(); fillCk(s,r,1); drawLane(cv); }},{label:'Fill with 8ths',icon:'♫',act:()=>{ snap(); fillCk(s,r,2); drawLane(cv); }},{label:'Fill with 16ths',icon:'♬',act:()=>{ snap(); fillCk(s,r,4); drawLane(cv); }},{label:'Clear beats',icon:'○',act:()=>{ snap(); r.notes=[]; drawLane(cv); }},'-']:[{label:'Edit MIDI…',icon:'✎',act:()=>openMidi(s.id,t)},'-']),
+    ctxMenu(e,[...(k==='ck'?[{label:'Edit beats…',icon:'▦',act:()=>openCkEd(s,r,t)},{label:'Repeat…',icon:'↻',act:()=>repeatBox(s,t,r)},{label:'Fill with quarter notes',icon:'♩',act:()=>{ snap(); fillCk(s,r,1); drawLane(cv); }},{label:'Fill with 8ths',icon:'♫',act:()=>{ snap(); fillCk(s,r,2); drawLane(cv); }},{label:'Fill with 16ths',icon:'♬',act:()=>{ snap(); fillCk(s,r,4); drawLane(cv); }},{label:'Clear beats',icon:'○',act:()=>{ snap(); r.notes=[]; drawLane(cv); }},'-']:[{label:'Edit MIDI…',icon:'✎',act:()=>openMidi(s.id,t)},{label:'Rename…',icon:'✎',act:()=>renameRegion(s,t,r,cv)},{label:'Colour…',icon:'●',act:()=>swatchPop({left:e.clientX,right:e.clientX,top:e.clientY},r.col||trackCol(s,t),c=>{ snap(); r.col=c; refresh(); toast('Changed the MIDI clip colour',undo); })},'-']),
       {label:'Copy',icon:'⧉',act:()=>doCopy()},{label:'Duplicate',icon:'⊕',act:()=>doDup()},{label:'Delete',icon:'⌫',danger:true,act:()=>doDelete()}]); };
   return true; }
 // click beat editor (one row per bar, a cell per 16th; tap: off → beat → accent)
@@ -2883,7 +2862,7 @@ function wireClipLane(cv){ const s=songs.find(x=>x.id===cv.dataset.song), t=s.tr
   // Right-click a clip (6d: the scissors tool is gone): Split at playhead, copy, duplicate, delete.
   cv.oncontextmenu=e=>{ e.preventDefault(); const cl=clipAt(s,t,lx(cv,e)/PXS); if(!cl) return; if(!isMulti('audio',s.id,t,cl.id)) selectClip(s,t,cl);
     const here=playId===s.id&&pos>cl.start+0.05&&pos<cl.end-0.05;
-    ctxMenu(e,[{label:'Split at playhead',icon:'✂',key:'S',dis:!here,act:()=>splitClip(s,t,cl,pos)},'-',{label:'Copy',icon:'⧉',key:'⌘C',act:()=>doCopy()},{label:'Duplicate',icon:'⊕',key:'⌘D',act:()=>doDup()},{label:'Delete',icon:'⌫',danger:true,act:()=>doDelete()}]); };
+    ctxMenu(e,[{label:'Split at playhead',icon:'✂',key:'S',dis:!here,act:()=>splitClip(s,t,cl,pos)},'-',{label:'Rename…',icon:'✎',act:()=>renameClip(s,t,cl,cv)},{label:'Colour…',icon:'●',act:()=>swatchPop({left:e.clientX,right:e.clientX,top:e.clientY},cl.col||trackCol(s,t),c=>{ snap(); const L=selItems().filter(x=>x.kind==='audio'); (L.length?L.map(x=>x.o):[cl]).forEach(o=>{ o.col=c; }); refresh(); toast('Changed the clip colour',undo); })},{label:'Clip gain…',icon:'',act:()=>window.SL13M&&SL13M.clipGain({left:e.clientX,right:e.clientX,top:e.clientY})},'-',{label:'Copy',icon:'⧉',key:'⌘C',act:()=>doCopy()},{label:'Duplicate',icon:'⊕',key:'⌘D',act:()=>doDup()},{label:'Delete',icon:'⌫',danger:true,act:()=>doDelete()}]); };
   // 13 §3: double-click a clip's name (its label strip) to rename it in place
   cv.ondblclick=d=>{ const c2=clipAt(s,t,lx(cv,d)/PXS); if(!c2) return; if(TX.localY(d,cv)<=Math.max(18,Math.min(20,cv.height*0.4))) { d.preventDefault(); d.stopPropagation(); renameClip(s,t,c2,cv); } };
   return true; }
@@ -3903,7 +3882,7 @@ function vamp(){ const s=songs.find(x=>x.id===playId); if(VAMP){ VAMP=null; toas
 
 // ---- what the remote screens are told about the setlist (the host sends it when it changes) ----
 function bandShow(){ const L=curSetObj(), out={t:'show',lib:'',setlist:{id:L.id,name:L.name,finishBy:L.finishBy||'',order:[]},songs:{},fields:FIELDS,screens:BAND.screens.map(x=>({id:x.id,name:x.name,col:x.col,device:x.device})),network:BAND.network||''};
-  const add=(s,v)=>{ const doc={name:s.name,col:s.col,key:s.key,ver:versOf(s).length>1?v.name:'',vers:versOf(s).map(x=>({id:x.id,name:x.name})),len:verLen(s,v),bars:[],secs:[],cues:[],patches:{},fields:SLBandMerge(SLBandMerge(window.MODUI?MODUI.presetFields(s):{},s.fields),v&&v.fields)};
+  const add=(s,v)=>{ const doc={name:s.name,col:s.col,key:s.key,note:s.bandNote||'',ver:versOf(s).length>1?v.name:'',vers:versOf(s).map(x=>({id:x.id,name:x.name})),len:verLen(s,v),bars:[],secs:[],cues:[],patches:{},fields:SLBandMerge(SLBandMerge(window.MODUI?MODUI.presetFields(s):{},s.fields),v&&v.fields)};
     const map=(!v||v.custom||isFullVer(s,v))?s.secPos.map(p=>({sb:p.start,bars:p.bars,secId:p.id,name:p.name,type:p.type})):verMap(s,v);
     let t=0; const srcToVer=[]; // [srcStart, srcEnd, verStart]
     map.forEach((p,i)=>{ const t0=t;
@@ -4168,7 +4147,7 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
   openSettings:tab=>openSettings(tab), settingsChanged:()=>{ if(settingsOpen()&&['audio','out','midi','voices'].includes(SET_TAB)) renderSettings(); },
   // The interface's outputs (from the app): its name, how many, their names. Renames are kept per device.
   setOutputs(device,names){ OUTS.device=device||''; OUTS.names=names||[]; OUTS.count=(names||[]).length; if(device&&names&&names.length) try{ localStorage.setItem('setline.lastOuts',JSON.stringify({device,names})); }catch(e){} },
-  setDirty(d){ const m=$('dirtyMk'); if(m) m.hidden=!d||LIBMODE; },
+  setDirty(d){ const m=$('dirtyMk'); if(m){ const was=!m.hidden; m.hidden=!d; m.textContent='● Unsaved changes'; m.title='Changed since you last saved the library (File › Save Library, ⌘S). Autosave keeps a safety copy.'; if(was!==!!d&&window.SLMenus) SLMenus.update(); } }, /* 13 §19 */
   // 6g: the remote screens
   band:{ show:()=>bandShow(), live:()=>bandLive(), get data(){ return BAND; }, set data(v){ BAND=v; }, screen:id=>BAND.screens.find(x=>x.id===id)||null, addScreen:(n,k)=>{ const s=addScreen(n,k); refresh(); return s; },
     online:(m,devs)=>{ BONLINE=m||{}; BDEVS=devs||[]; if(bandOn) renderBand(); }, info:i=>{ BINFO=i; if(bandOn) renderBand(); }, status:(from,label,on)=>bandStatus(from,label,on), clearStatus:()=>{ BSTATUS=[]; renderStatusBar(); },
@@ -4731,17 +4710,9 @@ let tipT=0; document.addEventListener('mouseover',e=>{ clearTimeout(tipT); const
 function tipShow(e){ const el=e.target.closest('[data-tip]'); if(!el||!el.dataset.tip){ tip.style.display='none'; return; } tip.textContent=el.dataset.tip; tip.style.display='block'; const r=el.getBoundingClientRect(); tip.style.left=Math.min(innerWidth-270,r.left)+'px'; tip.style.top=(r.bottom+6)+'px'; }
 document.addEventListener('pointerdown',()=>{ clearTimeout(tipT); tip.style.display='none'; },true);
 window.addEventListener('resize',()=>$('scroller').style.setProperty('--vw',$('scroller').clientWidth+'px'));
-// example: Glasshouse has a "With intro" version (an intro pad only it plays, then everything from Verse 1) and a
-// "Festival cut" (Verse 1, Chorus 1, Chorus 2, Outro); the Full show plays "With intro" and segues out of Neon Rivers.
-(()=>{ const g=songs.find(x=>x.id==='glass'); if(g){ versOf(g); const secs=[...g.secs].sort((a,b)=>a.start-b.start), id=n=>(secs.find(x=>x.name===n)||{}).id;
-    const wi={id:'v'+verSeq++,name:'With intro',order:secs.map(x=>({k:'sec',id:x.id,on:x.name!=='Intro'})),extras:[{id:'x'+xSeq++,name:'Intro pad',bars:8,track:'Intro pad ◆'}]};
-    wi.order.unshift({k:'x',id:wi.extras[0].id,on:true}); g.tracks.push('Intro pad ◆'); (g.vonly||(g.vonly={}))['Intro pad ◆']=wi.id; (g.tcol||(g.tcol={}))['Intro pad ◆']='#bf5af2';
-    const fc={id:'v'+verSeq++,name:'Festival cut',order:secs.map(x=>({k:'sec',id:x.id,on:['Verse 1','Chorus 1','Chorus 2','Outro (rit.)'].includes(x.name)})),extras:[]};
-    g.versions.push(wi,fc); buildBars(g); const L1=setlists.find(l=>l.id==='L1'); if(L1){ (L1.vers||(L1.vers={})).glass=wi.id; (L1.after||(L1.after={})).neon={mode:'segue',sec:4}; L1.after.low={mode:'auto',sec:4}; L1.after.sat={mode:'segue',sec:4}; } }
-  const n=songs.find(x=>x.id==='neon'); if(n){ const ax=n.tracks.find(t=>t==='Lights'); if(ax){ altsOf(n,ax); const cur=n.muse[ax]; newAlt(n,ax,true,'Festival looks'); useAlt(n,ax,cur); } }
-  songs.forEach(s=>delete s.trans); })();
-// Start empty. Set EXAMPLE=true to load the demo session again.
-const EXAMPLE=true;
+if(window.SETLINE_DEMO&&SETLINE_DEMO.after) SETLINE_DEMO.after(); // (the tests' example songs: their versions and alternates)
+// Start empty (13 §20); the tests load the example songs with ?demo.
+const EXAMPLE=!!window.SETLINE_DEMO;
 if(!EXAMPLE){ songs.length=0; selId=null; open.clear(); setlists=[{id:'L1',name:'Setlist 1',order:[]}]; curSet='L1'; setOrder=setlists[0].order; setSeq=2; }
 refresh();
 try{ document.fonts.ready.then(()=>renderFolders()); }catch(e){}
@@ -4763,5 +4734,8 @@ try{ const q=new URLSearchParams(location.search).get('settings'); if(q) setTime
 <script src="fix12.js"></script>
 <script src="fix13.js"></script>
 <script src="pe13.js"></script>
+<script src="d13.js"></script>
+<script src="e13.js"></script>
+<script src="f13.js"></script>
 </body>
 </html>

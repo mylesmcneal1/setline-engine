@@ -29,7 +29,7 @@ const suites = pick(args);
 // ---- a static server for ui/dist
 const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".woff2": "font/woff2", ".woff": "font/woff", ".png": "image/png", ".json": "application/json" };
 const server = createServer(async (req, res) => {
-  let p, body; try { p = join(root, decodeURIComponent(new URL(req.url, "http://x").pathname)); body = await readFile(p); } catch { res.writeHead(404); res.end(); return; }
+  let p, body; try { const pn = decodeURIComponent(new URL(req.url, "http://x").pathname); p = pn === "/demo13.js" ? join(import.meta.dirname, "fixtures/demo13.js") : join(root, pn); body = await readFile(p); } /* 13 §20: the example songs are the tests' own */ catch { res.writeHead(404); res.end(); return; }
   res.writeHead(200, { "content-type": types[extname(p)] || "application/octet-stream" }); res.end(body);
 });
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
@@ -57,7 +57,7 @@ for (const suite of suites) {
   const mode = suite.name;
   await cdp("Emulation.setDeviceMetricsOverride", { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
   const loaded = once("Page.loadEventFired");
-  await cdp("Page.navigate", { url: base + "?timeline=" + Date.now() });
+  await cdp("Page.navigate", { url: base + "?demo&timeline=" + Date.now() });
   await loaded;
   await evaluate(`await new Promise(r=>setTimeout(r,600));`);
   let r;

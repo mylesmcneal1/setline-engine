@@ -506,6 +506,22 @@ Bridge::Options Bridge::addTo(Options o)
     o = add(o, "libraryDelete", [this](const juce::var& a) { return lib.remove(a["name"].toString()); });
     o = add(o, "libraryWrite", [this](const juce::var& a) { return lib.write(a["files"], a["remove"]); });
     o = add(o, "libraryBackup", [this](const juce::var& a) { return lib.backup(a["text"].toString(), a["reason"].toString()); });
+    // 13 §19: File › Save Library As…: a full copy of the open library (songs, setlists, audio, cues) in a chosen folder
+    o = addAsync(o, "libraryCopyTo", [this](const juce::var&, auto done) {
+        const auto src = lib.folder();
+        if (! src.isDirectory()) { done(errorVar("No library is open.")); return; }
+        dialogs::open("Save Library As", std::make_unique<juce::FileChooser>("Save a copy of the library in…", juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)),
+                      juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories, [src, done](const juce::FileChooser& fc) {
+            auto* r = new juce::DynamicObject();
+            const auto parent = fc.getResult();
+            if (parent == juce::File() || ! parent.isDirectory()) { r->setProperty("cancelled", true); done(juce::var(r)); return; }
+            auto dest = parent.getChildFile(src.getFileName());
+            for (int k = 2; dest.exists() && k < 100; ++k) dest = parent.getChildFile(src.getFileName() + " " + juce::String(k));
+            if (! src.copyDirectoryTo(dest)) { r->setProperty("error", "Couldn't copy the library to " + dest.getFullPathName() + "."); done(juce::var(r)); return; }
+            applog::line("Library copied to " + dest.getFullPathName());
+            r->setProperty("path", dest.getFullPathName()); done(juce::var(r));
+        });
+    });
     o = add(o, "libraryBackups", [this](const juce::var&) { return lib.backups(); });
     o = add(o, "libraryReveal", [this](const juce::var&) { if (lib.folder().isDirectory()) lib.folder().revealToUser(); return juce::var(true); });
     // this computer: the setlist last open in this library, and what to open on launch

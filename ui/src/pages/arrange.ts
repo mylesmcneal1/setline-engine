@@ -145,10 +145,15 @@ function payload(s: Song, v: any = page().ver.play(s)) {
   const pron = p.pron();
   // 7a: each voice's timing nudge (ms) goes with it; the app puts every word's onset on its beat, then nudges
   const nz = (v: any) => ({ ...v, pron, nudge: p.nudge(v && v.voice ? v.voice : "") });
-  if (song.cueVoice) song.cueVoice = nz(song.cueVoice);
-  for (const q of (song.cues || []) as { text?: string; rec?: string; voice?: Record<string, unknown> }[]) {
+  // 13 §17: the Cues menu applies to every song (no song's own voice); its Voice mode (recordings / a natural voice /
+  // recordings first) and Announce choices decide which cues go and what they add
+  delete song.cueVoice;
+  const w13 = (window as any).SL13E;
+  if (w13 && w13.cuesFor) song.cues = w13.cuesFor(s, song.cues || []);
+  for (const q of (song.cues || []) as { text?: string; rec?: string; norec?: boolean; voice?: Record<string, unknown> }[]) {
     if (q.voice) q.voice = nz(q.voice);
-    const rec = p.recFor(s, q.text || ""); if (rec) q.rec = rec; // a recorded word plays instead of the voice
+    const rec = q.norec ? "" : p.recFor(s, q.text || ""); if (rec) q.rec = rec; // a recorded word plays instead of the voice
+    delete q.norec;
   }
   // each click track other than "Click" with its own settings (the app plays every click track, sample-exact)
   const clickTracks: Record<string, Record<string, unknown>> = {};
@@ -660,7 +665,7 @@ function remember(text = sessionText()) {
   try { sessionStorage.setItem("setline.session", JSON.stringify({ doc, text, lib })); } catch {}
   if (lib && text !== libText) libSave().catch(() => {});
   if (lib) { const cs = page().curSetId(); if (cs !== lastSetSent) { lastSetSent = cs; SL.call("libraryState", { lastSetlist: cs }).catch(() => {}); } }
-  const dirty = lib ? text !== libText : text !== doc.savedText;
+  const dirty = lib ? text !== libCommitted : text !== doc.savedText; // 13 §19: since the last Save Library
   page().setDirty(dirty);
   const key = doc.name + "|" + dirty;
   if (key !== lastReported) { lastReported = key; SL.call("setDocument", { name: doc.name, dirty }).catch(() => {}); }
@@ -676,6 +681,36 @@ interface LibInfo { name: string; root: string }
 let lib: LibInfo | null = null;
 let libWritten = new Map<string, string>(); // relative path -> the text last written
 let libText = "";                           // the whole library as last written
+// 13 §19: the library as last saved with File › Save Library (⌘S), or as opened. Autosave keeps writing every change
+// (the safety net); "● Unsaved changes" means changed since the last save, and quitting then asks Save / Don't Save /
+// Cancel (Don't Save puts the saved library back on disk).
+let libCommitted = "";
+const libDirty = () => !!lib && sessionText() !== libCommitted;
+async function saveLibrary(): Promise<void> {
+  if (!lib) { page().toast("No library is open"); return; }
+  await libSave(true); libCommitted = libText || sessionText(); await libBackup("save");
+  remember(); page().toast(`Saved “${lib.name}”`);
+}
+// Save Library As…: a full copy of the library (its songs, setlists, audio and cues) in a folder you choose
+async function saveLibraryAs(): Promise<void> {
+  if (!lib) { page().toast("No library is open"); return; }
+  await libSave(true);
+  const r = await SL.call<{ path?: string; cancelled?: boolean; error?: string }>("libraryCopyTo", {});
+  if (r.cancelled) return;
+  if (r.error) { page().toast(r.error); return; }
+  libCommitted = libText || sessionText(); remember();
+  page().toast(`Saved a copy of “${lib.name}” to ${r.path}`);
+}
+// quitting with unsaved changes: Save / Don't Save / Cancel
+function askQuit() {
+  const P: any = page(), bg = document.createElement("div"); bg.className = "cfbg";
+  bg.innerHTML = `<div class="cfbox"><b>Save the changes to “${lib ? lib.name : "the library"}”?</b><p>If you don't save, the library goes back to how it was when you last saved it.</p><div class="cfa"><button class="btn line" data-a="no">Don't Save</button><button class="btn line" data-a="cancel">Cancel</button><button class="btn pri" data-a="save">Save</button></div></div>`;
+  document.body.appendChild(bg); const close = () => bg.remove();
+  (bg.querySelector('[data-a="save"]') as HTMLElement).onclick = async () => { close(); await saveLibrary(); quitApp(); };
+  (bg.querySelector('[data-a="cancel"]') as HTMLElement).onclick = () => close();
+  (bg.querySelector('[data-a="no"]') as HTMLElement).onclick = async () => { close(); if (libCommitted) { applySession(libCommitted); await libSave(true); } SL.call("quitNow").catch(() => {}); };
+  (bg.querySelector('[data-a="save"]') as HTMLElement).focus(); void P;
+}
 let libSaving: Promise<void> | null = null, libBackupAt = 0, libBackupText = "";
 const BACKUP_EVERY = 10 * 60 * 1000;
 const safeId = (id: string) => String(id).replace(/[^A-Za-z0-9_-]/g, (c) => "_" + c.charCodeAt(0).toString(16));
@@ -1016,11 +1051,11 @@ async function restoreBackup(path: string, into: "replace" | "new") {
     await openLibrary(name);
     const refs = new Set<string>(); for (const s of o.songs || []) for (const f of Object.values(s.files || {}) as any[]) if (f && f.path) refs.add(f.path);
     page().toast(`Restored into a new library “${name}”`);
-    applySession(JSON.stringify(o)); await libSave(true);
+    applySession(JSON.stringify(o)); await libSave(true); libCommitted = libText;
     return;
   }
   await libBackup("before restoring");
-  applySession(r.text); await libSave(true);
+  applySession(r.text); await libSave(true); libCommitted = libText;
   page().toast("The library is back as it was in that backup (a backup of how it was just before is kept)");
 }
 
@@ -1324,7 +1359,7 @@ async function renameLibrary(to?: string) {
   const r = await SL.call<{ name?: string; root?: string; error?: string }>("libraryRename", { name: pick.name });
   if (r.error) { page().toast(r.error); return; }
   lib = { name: r.name!, root: r.root! }; doc.name = lib.name;
-  page().setSessionName(lib.name); await libSave(true); remember();
+  page().setSessionName(lib.name); await libSave(true); libCommitted = libText; remember();
 }
 
 // 11: delete a library that isn't open (it goes to the Trash / Recycle Bin, where it can be put back)
@@ -1605,7 +1640,7 @@ async function main() {
     else if (m.cmd === "openBackup") openBackup();
     else if (m.cmd === "copyDiagnostics") diagnostics("copy"); else if (m.cmd === "saveDiagnostics") diagnostics("save");
     else if (m.cmd === "new") page().setlistCmd("new");
-    else if (m.cmd === "quit") { SL.call("quitAnswered").catch(() => {}); quitApp(); } // the last change goes to disk first
+    else if (m.cmd === "quit") { SL.call("quitAnswered").catch(() => {}); if (libDirty()) askQuit(); else quitApp(); } // 13 §19: unsaved changes: ask
   });
 
   const info = await SL.call<{ roundTrip?: { in: string; out: string }; testScript?: string; reopenLast?: boolean }>("getAppInfo");
@@ -1703,7 +1738,7 @@ async function main() {
       const hooks = { SLE, page, importStems, probe, audioFiles, applyRefMap, checkAudio, onFileDrag, sessionText, applySession,
         getRate: () => sessionRate, openPath: (p: string) => openPath(p), retryStartShow: () => retryStartShow(), docName: () => doc.name, saveTo: (path: string) => saveSession(false, path), cueList: () => cueList(), setListen: (r: Partial<ListenState>) => setListen(r), SLR: window.SLR, SLW, waves, SLC, prepareCues, remember, payload, toBarBeat, toTime, getNext: () => nextMeta, getLoaded: () => ({ id: loadedSongId, ver: curVerId, map: curMap }), isDirty: () => (lib ? sessionText() !== libText : sessionText() !== doc.savedText), setDoc: (n: string) => { doc = { name: n, savedText: "" }; },
         // 6f: the Library
-        openLibrary: (n = "", empty?: boolean) => openLibrary(n, empty), libSave: () => libSave(), lib: () => lib, libFiles, exportSetlist: (id?: string, to?: string) => exportSetlist(id, to), exportText,
+        openLibrary: (n = "", empty?: boolean) => openLibrary(n, empty), libSave: () => libSave(), saveLibrary: () => saveLibrary(), saveLibraryAs: () => saveLibraryAs(), libDirty: () => libDirty(), lib: () => lib, libFiles, exportSetlist: (id?: string, to?: string) => exportSetlist(id, to), exportText,
         bandStart: (port: number) => SL.call("bandStart", { port, test: true }), rigFollow: (st: any) => rigFollow(st), rigSendSetlist: () => rigSendSetlist(), bandHost: () => bandHost,
         importPackage: (p: string, choose?: any) => importPackage(p, choose), importAbleton: (p: string, choose?: any, mode?: string, choices?: any) => importAbleton(p, choose, mode, choices), migrateShows: (paths: string[]) => migrateShows(paths), restoreBackup: (p: string, how: "replace" | "new") => restoreBackup(p, how), switchLibrary: (n: string) => switchLibrary(n), offerMigration: () => offerMigration() };
       out = await new AsyncFn("SL", "hooks", info.testScript)(SL, hooks);
