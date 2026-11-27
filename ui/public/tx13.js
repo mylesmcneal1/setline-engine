@@ -69,6 +69,13 @@
     const Z = zoomOf(el); if (Z === 1 && e.target === el && typeof e.offsetY === 'number') return e.offsetY;
     const q = box(el, Z); return (e.clientY - q.y) * q.ky;
   };
+  // 13 §9: a viewport x (a pointer, the trackpad's pinch point) as a view x in the timeline (0 = the lanes' left edge),
+  // read against an open song's ruler canvas: right at any Text size
+  function laneX(clientX) {
+    const cv = document.querySelector("#scroller .folder canvas.rcv");
+    if (cv && cv.offsetWidth) return local({ clientX, target: null }, cv) + (+cv.dataset.vx || 0) - main().hx;
+    const Z = zoomOf(document.getElementById("scroller")); return (clientX - (window.TL9 ? TL9.laneLeft() : 0)) / Z;
+  }
   // where el's own x lands on screen (for tests and popovers): the inverse of local()
   const screenX = (el, xx) => { const Z = zoomOf(el), q = box(el, Z); return q.x + xx / q.kx; };
   // a lane canvas: its drawing starts at song pixel dataset.vx (only the visible part is a canvas)
@@ -108,5 +115,5 @@
   function view(id) { const v = views.get(id); if (!v || v.linked) return Object.assign(main(), v ? { linked: true, id } : {}); return v; }
   function setView(id, o) { const v = Object.assign(views.get(id) || { pxs: main().pxs, hx: main().hx, linked: false }, o); v.hx = Math.max(0, v.hx); views.set(id, v); return v; }
 
-  window.TX = { MAC, zoomOf, screenX, main, x, t, songX, col, lineLeft, free, local, localY, canvasSongX, timeAt, snap, gridPoints, view, setView, views };
+  window.TX = { MAC, zoomOf, screenX, laneX, box: (el) => box(el, zoomOf(el)), main, x, t, songX, col, lineLeft, free, local, localY, canvasSongX, timeAt, snap, gridPoints, view, setView, views };
 })();

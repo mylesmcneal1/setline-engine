@@ -152,7 +152,34 @@ MappedSong mapSong(const juce::var& payload, double sr, int numOutputs,
             } else {
                 const auto f = s["files"][tid];
                 const auto ref = f["path"].toString();
-                if (ref.isEmpty()) { ++noFile; continue; } // a track with no audio file yet (e.g. the demo songs)
+                // 13: clips moved here from another track carry their file (c.file.path): each such file plays as an
+                // extra stem on this track's outputs, with this track's level, mute and solo (MappedSong::trackOf)
+                std::map<juce::String, std::vector<ClipDef>> moved;
+                if (auto* cl = s["clips"][tid].getArray())
+                    for (auto& c : *cl) {
+                        const auto fr = c["file"].isObject() ? c["file"]["path"].toString() : c["file"].toString();
+                        if (fr.isEmpty() || fr == ref) continue;
+                        ClipDef x;
+                        x.start = toSamples(c["start"]); x.end = toSamples(c["end"]); x.offset = toSamples(c["off"]);
+                        x.gainDb = (float) toDouble(c["gain"], 0);
+                        x.fadeIn = std::max<int64_t>(0, toSamples(c["fi"])); x.fadeOut = std::max<int64_t>(0, toSamples(c["fo"]));
+                        x.mute = (bool) c["mute"];
+                        if (x.end > x.start && x.offset >= 0) moved[fr].push_back(x);
+                    }
+                int movedN = 0;
+                for (auto& [fr, cls] : moved) {
+                    const auto mf = Media::resolve(fr, sessionFile);
+                    auto* mr = mf.existsAsFile() ? formats().createReaderFor(mf) : nullptr;
+                    if (mr == nullptr) { warn(quoted(t) + ": a moved clip's file " + mf.getFileName() + " is missing, so it plays silence."); continue; }
+                    StemDef d;
+                    d.name = (t + " (moved clip)").toStdString();
+                    d.source = std::make_shared<FileSource>(mr);
+                    d.outs = outsFor(t);
+                    d.clips = std::move(cls);
+                    def.stems.push_back(std::move(d));
+                    out.engineTrack[t + juce::String::charToString((juce::juce_wchar) 1) + juce::String(++movedN)] = (int) def.stems.size() - 1;
+                }
+                if (ref.isEmpty()) { if (! movedN) ++noFile; continue; } // a track with no audio file yet (e.g. the demo songs)
                 const auto file = Media::resolve(ref, sessionFile);
                 auto* reader = file.existsAsFile() ? formats().createReaderFor(file) : nullptr;
                 if (reader == nullptr) {
@@ -169,6 +196,7 @@ MappedSong mapSong(const juce::var& payload, double sr, int numOutputs,
                 std::vector<ClipDef> clips;
                 if (auto* cl = s["clips"][tid].getArray()) {
                     for (auto& c : *cl) {
+                        { const auto fr = c["file"].isObject() ? c["file"]["path"].toString() : c["file"].toString(); if (fr.isNotEmpty() && fr != ref) continue; } // (an extra stem, above)
                         ClipDef x;
                         x.start = toSamples(c["start"]); x.end = toSamples(c["end"]); x.offset = toSamples(c["off"]);
                         x.gainDb = (float) toDouble(c["gain"], 0);

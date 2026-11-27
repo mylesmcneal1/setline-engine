@@ -1168,7 +1168,7 @@
   <nav class="tabs">
     <a class="on" href="#show" data-tab="show">Show</a>
     <a href="#perform" data-tab="perform" title="The song playing, what’s next, live jumps and loops">Perform</a>
-    <a href="#band" data-tab="band" title="The band’s screens: what each phone and tablet shows and may do">Band</a>
+    <a href="#band" data-tab="band" title="The remote screens: what each phone and tablet shows and may do">Remote</a>
   </nav>
   <div class="transport">
     <button class="tb" id="prevSong" title="Previous song"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M3 3h1.6v10H3zM13 3v10L5.5 8z"/></svg></button>
@@ -1646,7 +1646,7 @@ function markSongSel(){ const on=id=>songSel.size>1&&songSel.has(id);
   document.querySelectorAll('#songs .song,#pool .ps').forEach(r=>r.classList.toggle('msel',on(r.dataset.id))); document.querySelectorAll('.folder').forEach(f=>f.classList.toggle('msel',on(f.dataset.id))); }
 function removeFromSet(ids){ syncSet(); const before=[...setOrder]; const n=ids.filter(id=>setOrder.includes(id)).length; if(!n) return;
   snap(); setOrder.splice(0,setOrder.length,...setOrder.filter(id=>!ids.includes(id))); songSel.clear(); refresh(); toast('Removed '+n+' song'+(n>1?'s':'')+' from '+curSetObj().name,()=>undo()); }
-function deleteSongs(ids,from){ ids=ids.filter(id=>songs.some(s=>s.id===id)); if(!ids.length) return;
+function deleteSongs(ids,from,now){ ids=ids.filter(id=>songs.some(s=>s.id===id)); if(!ids.length) return;
   const names=ids.map(id=>songs.find(s=>s.id===id).name), n=ids.length, inSet=ids.filter(id=>setOrder.includes(id)).length;
   const list=names.slice(0,8).map(x=>'“'+esc(x)+'”').join(', ')+(n>8?' and '+(n-8)+' more':'');
   const del=()=>{ snap(); syncSet();
@@ -1654,6 +1654,7 @@ function deleteSongs(ids,from){ ids=ids.filter(id=>songs.some(s=>s.id===id)); if
     if(ids.includes(playId)){ if(NATIVE&&window.SLE) SLE.stop(); playing=false; playId=null; pos=0; $('playBtn').classList.remove('on'); }
     if(ids.includes(selId)){ const nxt=[...songs].sort(byName)[0]; selId=nxt?nxt.id:null; } selSec=null; selClip=null; if(ids.includes(ed.song)) closeMidi();
     songSel.clear(); refresh(); toast('Deleted '+(n>1?n+' songs':'“'+names[0]+'”')+' (the audio files stay)',()=>undo()); };
+  if(now){ del(); return; } // 13 §4: ⌫ in the library (undo brings it back)
   const usedIn=setlists.filter(l=>ids.some(id=>l.order.includes(id))).map(l=>'“'+esc(l.name)+'”');
   const body='Removes '+list+' with all their versions, sections, MIDI and audio edits from the library'+(usedIn.length?', and from '+(usedIn.length>1?'the setlists ':'the setlist ')+usedIn.join(', ')+' that use'+(n>1?'':'s')+' '+(n>1?'them':'it'):'')+'. The audio files on disk aren’t touched (File ▾ › Clean up unused audio… lists the ones nothing uses).';
   if(from==='set'&&inSet){ // in a setlist: just take them out of it, or delete them from the show
@@ -2082,7 +2083,7 @@ function wireSecLane(lane){ const s=songs.find(x=>x.id===lane.dataset.song), tAt
         if(mode==='m'){ let ns=nearestBoundary(s,t0); ns=Math.max(lo,Math.min(hi-o.bars,ns)); so.start=ns; }
         else if(mode==='r'){ const end=Math.max(o.start+1,Math.min(hi,nearestBoundary(s,s.bars[Math.min(o.start+o.bars,s.total+1)-1].t+dT))); so.bars=end-o.start; }
         else { const st=Math.max(lo,Math.min(o.start+o.bars-1,nearestBoundary(s,t0))); so.start=st; so.bars=o.start+o.bars-st; }
-        el.style.left=(xOf(so.start)+1)+'px'; el.style.width=(xOf(so.start+so.bars)-xOf(so.start)-2)+'px'; showTip(`${so.name} · bars ${so.start}–${so.start+so.bars-1} (${so.bars})`,m); };
+        el.style.left=(xOf(so.start)+1)+'px'; el.style.width=(xOf(so.start+so.bars)-xOf(so.start)-2)+'px'; if(window.SL12&&SL12.ghost) SL12.ghost(s,s.bars[(mode==='r'?so.start+so.bars:so.start)-1].t); showTip(`${so.name} · bars ${so.start}–${so.start+so.bars-1} (${so.bars})`,m); };
       const up=()=>{ document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up); hideTip(); if(moved){ undoS.push(pre); redoS=[]; buildBars(s); } selectSec(s.id,id); };
       document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); }; }); }
 // ---- the Versions strip (6e): one row per version, its parts as section colours on a shared bar scale ----
@@ -2235,7 +2236,7 @@ function hexA(h,a){ if(h.startsWith('var(')) h=cssVar(h); const n=parseInt(h.rep
 function clip(g,x,w,H,col,label,off){ const top=3,h=H-6,r=6; g.fillStyle=off?'rgba(255,255,255,.04)':hexA(col,.2); g.beginPath(); g.roundRect(x+1,top+.5,w-2,h-1,r); g.fill();
   g.strokeStyle=off?'rgba(255,255,255,.08)':hexA(col,.5); g.lineWidth=1; g.stroke();
   if(H>=40&&label){ g.save(); g.beginPath(); g.roundRect(x+1,top+.5,w-2,h-1,r); g.clip(); g.fillStyle=off?'rgba(255,255,255,.06)':hexA(col,.42); g.fillRect(x,top,w,15); g.restore();
-    g.fillStyle=off?'rgba(235,235,245,.45)':'rgba(255,255,255,.95)'; g.font='600 10.5px -apple-system, "SF Pro Text", Inter, sans-serif'; g.save(); g.beginPath(); g.rect(x,top,Math.max(0,w-6),15); g.clip(); g.fillText(label,x+8,top+11); g.restore(); return top+16; } return top+2; }
+    g.fillStyle=off?'rgba(235,235,245,.45)':(window.inkOn&&inkOn(col,.42)==='#000'?'rgba(0,0,0,.85)':'rgba(255,255,255,.95)'); g.font='600 10.5px -apple-system, "SF Pro Text", Inter, sans-serif'; g.save(); g.beginPath(); g.rect(x,top,Math.max(0,w-6),15); g.clip(); g.fillText(label,x+8,top+11); g.restore(); return top+16; } return top+2; }
 // Lanes draw only what's on screen: each canvas is as wide as the visible part of its lane and moves with the
 // scroll (translateX), drawing in lane coordinates. A canvas can't be wider than 32,767 px, which a long song
 // passes at deep zoom. lx(): an event's x in lane coordinates.
@@ -2290,21 +2291,21 @@ function drawLane(cv){
     const chip=(e,X,nx,cy,ch,faint)=>{ let lab=evName(e,s,t); g.font='500 10px Inter, sans-serif'; const room=nx-X-6; let tw=g.measureText(lab).width+10; if(tw>room){ lab=autoLabel(e).replace('Prog ','P'); tw=g.measureText(lab).width+10; }
       const w=Math.max(6,Math.min(tw,room)); g.globalAlpha=faint||off?.35:1; g.fillStyle=hexA(c,.9); g.fillRect(X,cy-1,1.5,ch+2);
       g.save(); g.beginPath(); g.rect(X+1,cy,w,ch); g.clip(); g.fillStyle='rgba(225,238,255,.92)'; g.fillText(lab,X+6,cy+ch/2+3.5); g.restore(); g.globalAlpha=1; };
-    regs.forEach(r=>{ const x0=xOf(r.bar), x1=xOf(r.bar+r.bars); const inside=evIn(evs,r); const y0=clip(g,x0,x1-x0,H,c,inside.length?'':'Empty',off), y1=H-4;
+    regs.forEach(r=>{ const x0=xOf(r.bar), x1=xOf(r.bar+r.bars); const inside=evIn(evs,r); const y0=clip(g,x0,x1-x0,H,r.col||c,r.name||(inside.length?'':'Empty'),off), y1=H-4;
       inside.forEach((e,i)=>{ const X=evTime(s,e)*PXS, nx=i<inside.length-1?evTime(s,inside[i+1])*PXS:x1; chip(e,X,nx,y0+1,Math.max(12,y1-y0-2)); });
       if(isPick('mreg',r.id)){ g.strokeStyle='#fff'; g.lineWidth=1.5; g.beginPath(); g.roundRect(x0+.75,3.75,x1-x0-1.5,H-7.5,4); g.stroke(); } });
     evs.filter(e=>!regs.some(r=>e.bar>=r.bar&&e.bar<r.bar+r.bars)).forEach(e=>chip(e,evTime(s,e)*PXS,evTime(s,e)*PXS+80,H/2-8,16,true));
     if(!regs.length&&!evs.length){ g.fillStyle='#4f555f'; g.font='11px Inter, sans-serif'; g.fillText('Empty. Double-click to add a MIDI clip.',(+cv.dataset.vx||0)+10,H/2+4); }
   } else {
-    const e=ROLE_E[role]||.5, base=linOf(gainOf(s,t)), sel=selClip&&selClip.song===s.id&&selClip.track===t;
+    const e=ROLE_E[role]||.5, base=linOf(gainOf(s,t)), sel=selClip&&selClip.song===s.id&&selClip.track===t, c0=c;
     g.clearRect(0,0,W,H);
-    clipsOf(s,t).forEach((cl,ci)=>{ const x0=cl.start*PXS, x1=cl.end*PXS, cw=x1-x0, dim=off||cl.mute, isSel=(sel&&selClip.id===cl.id)||isMulti('audio',s.id,t,cl.id);
-      const y0=clip(g,x0,cw,H,c,[cl.gain?`${cl.gain>0?'+':''}${cl.gain} dB`:'',cl.mute?'Muted':''].filter(Boolean).join(' · '),dim), y1=H-4, mid=(y0+y1)/2, half=(y1-y0)/2-1;
+    clipsOf(s,t).forEach((cl,ci)=>{ const x0=cl.start*PXS, x1=cl.end*PXS, cw=x1-x0, dim=off||cl.mute, isSel=(sel&&selClip.id===cl.id)||isMulti('audio',s.id,t,cl.id), c=cl.col||c0;
+      const y0=clip(g,x0,cw,H,c,[cl.name||'',cl.gain?`${cl.gain>0?'+':''}${(+cl.gain).toFixed(1).replace(/\.0$/,'')} dB`:'',cl.mute?'Muted':''].filter(Boolean).join(' · ')||(cl.name===undefined&&cw>90?t:''),dim), y1=H-4, mid=(y0+y1)/2, half=(y1-y0)/2-1;
       // waveform: a smooth peak envelope with an RMS core, drawn as one mirrored shape (Logic / Ableton style)
       // In the app, a stem's real peaks (window.SLW: null while they load); the simulation is for the browser.
-      const real=window.SLW&&(s.files||{})[t]?SLW.get(s,t,PXS):undefined;
+      const sf=clipSong(s,t,cl), real=window.SLW&&(sf.files||{})[t]?SLW.get(sf,t,PXS):undefined;
       const X0=Math.max(Math.ceil(x0)+2,Math.floor(vx)-1), X1=Math.min(Math.floor(x1)-2,Math.ceil(vx+vw)+1); if(X1>X0&&real!==undefined){
-        const pk=[]; let boost=1; if(real){ const d=real.data, ps=real.perSec, ro=real.off||0, nk=clipPeak(real.off!=null&&window.SLW&&SLW.full?SLW.full(s,t)||real:real,cl), norm=Math.min(256,1/Math.max(1e-4,nk*nk)), amp0=norm*Math.min(1.6,base*linOf(cl.gain)); boost=norm; // the file fits the lane at 0 dB; clip gain and the fader still show // 11: scaled to fit the lane (display only: the sound is unchanged)
+        const pk=[]; let boost=1; if(real){ const d=real.data, ps=real.perSec, ro=real.off||0, nk=clipPeak(real.off!=null&&window.SLW&&SLW.full?SLW.full(sf,t)||real:real,cl), norm=Math.min(256,1/Math.max(1e-4,nk*nk)), amp0=norm*Math.min(1.6,base*linOf(cl.gain)); boost=norm; // the file fits the lane at 0 dB; clip gain and the fader still show // 11: scaled to fit the lane (display only: the sound is unchanged)
           for(let X=X0;X<=X1;X++){ const tt=X/PXS, src=tt-cl.start+cl.off; let i=Math.floor((src-ro)*ps), j=Math.max(i+1,Math.ceil((src-ro+1/PXS)*ps)), m=0;
             if(i<0) i=0; if(j>d.length) j=d.length; for(;i<j;i++) if(d[i]>m) m=d[i];
             const v=(m/255)*(m/255)*amp0*.92*clipEnv(cl,tt); pk.push(j<=0||src-ro>=d.length/ps?0:Math.min(half,Math.max(.6,v*half*.98))); } }
@@ -2334,6 +2335,7 @@ function drawLane(cv){
       g.strokeStyle=dim?'#6b7280':'rgba(255,255,255,.75)'; g.lineWidth=1.2;
       if(cl.fi>0){ g.beginPath(); g.moveTo(x0+1,y1); g.quadraticCurveTo(x0+cl.fi*PXS*.2,y0+2,x0+cl.fi*PXS,y0+1); g.stroke(); }
       if(cl.fo>0){ g.beginPath(); g.moveTo(x1-cl.fo*PXS,y0+1); g.quadraticCurveTo(x1-cl.fo*PXS*.2,y0+2,x1-1,y1); g.stroke(); }
+      { const gy=clipGainY(cl,H); g.fillStyle=dim?'rgba(255,255,255,.25)':isSel?'rgba(255,255,255,.9)':hexA(c,.75); g.fillRect(x0+3,gy-.5,Math.max(0,cw-6),1); }
       if(isSel){ g.strokeStyle='#fff'; g.lineWidth=1.5; g.beginPath(); g.roundRect(x0+.75,3.75,cw-1.5,H-7.5,4); g.stroke();
         [[x0+cl.fi*PXS,'fi'],[x1-cl.fo*PXS,'fo']].forEach(([hx])=>{ g.fillStyle='#fff'; g.fillRect(Math.max(x0+2,Math.min(x1-8,hx-3)),4,6,6); }); }
     });
@@ -2341,11 +2343,31 @@ function drawLane(cv){
 }
 // ---------- clips (editable audio regions; never time-stretched) ----------
 let selClip=null, clipSeq=1;
+// 13 §3: the clip gain line's height in a lane H px tall: -48 dB at the bottom, +6 dB at the top (0 dB near the top)
+const GAIN_LO=-48, GAIN_HI=6;
+function clipGainY(cl,H){ const y0=H>=40?20:4, y1=H-4, f=(Math.max(GAIN_LO,Math.min(GAIN_HI,+cl.gain||0))-GAIN_LO)/(GAIN_HI-GAIN_LO); return Math.round(y1-f*(y1-y0))+.5; }
+// 13 §3: the audio lane of the same song under the pointer (another track of the same kind), or null
+function clipLaneAt(s,t,ev){ if(!ev||!isFinite(ev.clientX)||!isFinite(ev.clientY)) return null; const el=document.elementFromPoint(ev.clientX,ev.clientY), cv2=el&&el.closest&&el.closest('canvas[data-t]'); if(!cv2||cv2.dataset.song!==s.id) return null; const t2=s.tracks[+cv2.dataset.t]; return t2&&t2!==t&&isAudio(s,t2)?{cv:cv2,t:t2}:null; }
+// 13 §3: rename a clip in place, on its label
+function renameClip(s,t,cl,cv){ const X=cl.start*PXS+5; renameAt({lane:cv.parentElement,x:X,y:3,w:Math.max(60,Math.min(220,(cl.end-cl.start)*PXS-10)),h:15,font:'600 10.5px -apple-system, "SF Pro Text", Inter, sans-serif'},cl.name||'',v=>{ const n=(v||'').trim().slice(0,60); if(n===(cl.name||'')) return; snap(); if(n) cl.name=n; else delete cl.name; drawLane(cv); toast(n?`Renamed the clip “${n}”`:'Clip name cleared',undo); },{label:'Clip'}); }
+// a clip's own file (moved from another track) for its waveform: the song as seen with that file on this track
+const clipSong=(s,t,cl)=>cl&&cl.file&&cl.file.path?Object.assign(Object.create(s),{files:{...(s.files||{}),[t]:cl.file}}):s;
+function clipGainAt(y,H){ const y0=H>=40?20:4, y1=H-4, f=Math.max(0,Math.min(1,(y1-y)/(y1-y0))); return GAIN_LO+f*(GAIN_HI-GAIN_LO); }
 const hash01=n=>{ n=(n^61)^(n>>>16); n=Math.imul(n,9); n^=n>>>4; n=Math.imul(n,0x27d4eb2d); n^=n>>>15; return (n>>>0)/4294967296; };
 // MIDI regions live with each alternate; events inside a region move with it
 let regSeq=1, pick=null, CB=null;
 function regsOf(s,t){ const a=curAlt(s,t); if(!a.regions){ const bars=[...new Set(a.events.map(e=>e.bar))].sort((x,y)=>x-y); a.regions=bars.map((b,i)=>({id:'r'+regSeq++,bar:b,bars:Math.max(1,(bars[i+1]||Math.min(b+8,s.total+1))-b)})); } return a.regions; }
 const evIn=(evs,r)=>evs.filter(e=>e.bar>=r.bar&&e.bar<r.bar+r.bars);
+// 13 §3: a MIDI clip copied where it is (⌥-drag: the copy stays, the clip moves), with copies of its events
+function copyRegion(s,t,r){ const L=regsOf(s,t), n={...JSON.parse(JSON.stringify(r)),id:'r'+regSeq++}; evIn(s.midi[t]||[],r).forEach(e=>{ (s.midi[t]||(s.midi[t]=[])).push({...e,id:evId++}); }); L.push(n); L.sort((a,b)=>a.bar-b.bar); return n; }
+// 13 §3: dropped on another MIDI track (same kind): the clip and its events move there, where it fits
+function moveRegionTo(s,t,r,ev){ if(!ev||!isFinite(ev.clientX)||!isFinite(ev.clientY)) return false; const el=document.elementFromPoint(ev.clientX,ev.clientY), cv2=el&&el.closest&&el.closest('canvas[data-t]'); if(!cv2||cv2.dataset.song!==s.id) return false; const t2=s.tracks[+cv2.dataset.t];
+  if(!t2||t2===t||!isMidiTrack(s,t2)||(window.MODUI&&MODUI.dev(s,t2))) return false; const L2=regsOf(s,t2); if(L2.some(q=>q.bar<r.bar+r.bars&&q.bar+q.bars>r.bar)){ toast(`No room on “${t2}” there: the clip stays on “${t}”`); return false; }
+  const A1=s.midi[t]||[], evs=evIn(A1,r); A1.splice(0,A1.length,...A1.filter(e=>!evs.includes(e))); // (in place: it is also the track's current alternate)
+  const L=regsOf(s,t); L.splice(L.indexOf(r),1); (s.midi[t2]||(s.midi[t2]=curAlt(s,t2).events)).push(...evs); L2.push(r); L2.sort((a,b)=>a.bar-b.bar);
+  setPick({kind:'mreg',song:s.id,track:t2,id:r.id}); refresh(); toast(`Moved a MIDI clip to “${t2}”`,undo); return true; }
+// 13 §3: rename a MIDI clip in place, on its label
+function renameRegion(s,t,r,cv){ renameAt({lane:cv.parentElement,x:s.bars[r.bar-1].t*PXS+5,y:3,w:Math.max(60,Math.min(220,(s.bars[Math.min(r.bar+r.bars,s.total+1)-1].t-s.bars[r.bar-1].t)*PXS-10)),h:15,font:'600 10.5px -apple-system, "SF Pro Text", Inter, sans-serif'},r.name||'',v=>{ const n=(v||'').trim().slice(0,60); if(n===(r.name||'')) return; snap(); if(n) r.name=n; else delete r.name; drawLane(cv); toast(n?`Renamed the MIDI clip “${n}”`:'Clip name cleared',undo); },{label:'Clip'}); }
 // Click clips per click track: "Click" (the main one) in s.ck, any other ("Click (drums)") in s.cks[name]. A click
 // track other than "Click" is marked with s.troles[name]='Click', so it has the click role everywhere (regRoles).
 function ckOf(s,t){ if(!t||t==='Click') return s.ck||(s.ck=[]); const m=s.cks||(s.cks={}); return m[t]||(m[t]=[]); }
@@ -2427,6 +2449,7 @@ function barIdx(s,time){ let lo=0,hi=Math.min(s.bars.length,s.total+1)-1; while(
 // 12 (conventions §8): a click in a lane sets the insert marker (where ⌘V pastes and ⌘E splits); the playhead
 // moves only with Settings › General › "Click in a lane moves the playhead"
 function laneClick(s,t){ if(window.SL12&&SL12.laneClick) return SL12.laneClick(s,t); locate(s,t); }
+const typingIn=a=>!!a&&(a.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName));
 const freeKey=e=>!!e&&(/Mac/.test(navigator.platform)?!!e.metaKey:!!e.ctrlKey);
 // Snapped time: the nearest grid point (or the song's end); free (⌘) or Snap off: as is, to the millisecond.
 function snapT(s,time,free){ return TX.snap(s,time,free); }
@@ -2498,7 +2521,7 @@ function wireRegLane(cv){ const s=songs.find(x=>x.id===cv.dataset.song), t=s.tra
       if(e.shiftKey||e.ctrlKey||e.metaKey){ toggleSel('cue',s,t,c); return; }
       if(multiOn()&&isMulti('cue',s.id,t,c.id)){ groupDrag(e,s,cv,{kind:'cue',t,o:c}); return; }
       setPick({kind:'cue',song:s.id,track:t,id:c.id}); const sx=e.clientX, x00=lx(cv,e), ot=cueT(s,c), pre=ser(); let mv=false;
-      try{ cv.setPointerCapture(e.pointerId); }catch(x){} cv.onpointermove=m=>{ if(Math.abs(m.clientX-sx)<3&&!mv) return; mv=true; const p=cueAt(s,snapT(s,ot+(lx(cv,m)-x00)/PXS,freeKey(m))); c.bar=p.bar; c.beat=p.beat; drawLane(cv); showTip(`“${c.text}” at ${cuePos(c)}${freeKey(m)?' · free':''}`,m); };
+      try{ cv.setPointerCapture(e.pointerId); }catch(x){} cv.onpointermove=m=>{ if(Math.abs(m.clientX-sx)<3&&!mv) return; mv=true; const p=cueAt(s,snapT(s,ot+(lx(cv,m)-x00)/PXS,freeKey(m))); c.bar=p.bar; c.beat=p.beat; drawLane(cv); if(window.SL12&&SL12.ghost) SL12.ghost(s,cueT(s,c)); showTip(`“${c.text}” at ${cuePos(c)}${freeKey(m)?' · free':''}`,m); };
       cv.onpointerup=()=>{ cv.onpointermove=null; hideTip(); if(mv){ undoS.push(pre); redoS=[]; } }; };
     cv.ondblclick=e=>{ const c=hit(lx(cv,e)), r=cv.getBoundingClientRect(); if(c){ const L=(cv._cues||[]).find(o=>o.t===c.text&&Math.abs(o.x0+2-cueT(s,c)*PXS)<1), X=cueT(s,c)*PXS; renameAt({lane:cv.parentElement,x:X,y:L?L.y:cv.height/2-10,w:L&&L.w?L.w:110,h:L?L.h:20,font:'600 10.5px Inter, sans-serif'},c.text,v=>{ if(v){ snap(); c.text=v; drawLane(cv); } },{label:'Cue'}); return; }
       const p=cueAt(s,snapT(s,lx(cv,e)/PXS,freeKey(e))); cuePicker(s,t,p,e.clientX,e.clientY+6); }; // the phrase picker (6d)
@@ -2512,16 +2535,17 @@ function wireRegLane(cv){ const s=songs.find(x=>x.id===cv.dataset.song), t=s.tra
     if(e.shiftKey||e.ctrlKey||e.metaKey){ toggleSel(k,s,t,r); return; }
     if(tool!=='split'&&multiOn()&&isMulti(k,s.id,t,r.id)){ groupDrag(e,s,cv,{kind:k,t,o:r}); return; }
     if(tool==='split'){ const b=nearestBoundary(s,lx(cv,e)/PXS); if(b>r.bar&&b<r.bar+r.bars){ snap(); const nr={...JSON.parse(JSON.stringify(r)),id:'r'+regSeq++,bar:b,bars:r.bar+r.bars-b}; if(k==='ck'){ nr.notes=r.notes.filter(n=>n.b>=b-r.bar).map(n=>({...n,b:n.b-(b-r.bar)})); r.notes=r.notes.filter(n=>n.b<b-r.bar); } r.bars=b-r.bar; list().push(nr); list().sort((a,b)=>a.bar-b.bar); redrawSong(s); } return; }
-    setPick({kind:k,song:s.id,track:t,id:r.id}); const x0=xOf(r.bar),x1=xOf(r.bar+r.bars), mode=x1-lx(cv,e)<7?'r':lx(cv,e)-x0<7?'l':'m', o={bar:r.bar,bars:r.bars}, sx=e.clientX, x00=lx(cv,e), pre=ser(); let mv=false;
+    setPick({kind:k,song:s.id,track:t,id:r.id}); const x0=xOf(r.bar),x1=xOf(r.bar+r.bars), mode=x1-lx(cv,e)<7?'r':lx(cv,e)-x0<7?'l':'m', o={bar:r.bar,bars:r.bars}, sx=e.clientX, x00=lx(cv,e), pre=ser(); let mv=false, rcopy=null;
     const others=list().filter(q=>q!==r), lo=Math.max(1,...others.filter(q=>q.bar<r.bar).map(q=>q.bar+q.bars)), hi=Math.min(s.total+1,...others.filter(q=>q.bar>r.bar).map(q=>q.bar));
     const evs=k==='mreg'?evIn(s.midi[t],r).map(ev=>[ev,ev.bar]):[];
     try{ cv.setPointerCapture(e.pointerId); }catch(x){}
-    cv.onpointermove=m=>{ if(Math.abs(m.clientX-sx)<3&&!mv) return; mv=true; const dx=lx(cv,m)-x00;
+    cv.onpointermove=m=>{ if(Math.abs(m.clientX-sx)<3&&(k!=="mreg"||Math.abs(m.clientY-e.clientY)<4)&&!mv) return; mv=true; const dx=lx(cv,m)-x00;
+      if(k==='mreg'&&mode==='m'&&e.altKey&&!rcopy) rcopy=copyRegion(s,t,r); // 13 §3: ⌥ copies (the copy stays)
       if(mode==='m'){ const nb=Math.max(lo,Math.min(hi-o.bars,nearestBoundary(s,(xOf(o.bar)+dx)/PXS))); r.bar=nb; evs.forEach(([ev,b0])=>{ ev.bar=b0+(nb-o.bar); ev.anchor='free'; }); }
       else if(mode==='r'){ r.bars=Math.max(1,Math.min(hi,nearestBoundary(s,(xOf(o.bar+o.bars)+dx)/PXS))-o.bar); }
       else { const nb=Math.max(lo,Math.min(o.bar+o.bars-1,nearestBoundary(s,(x0+dx)/PXS))); if(k==='ck'){ const d=nb-r.bar; r.notes=r.notes.map(n=>({...n,b:n.b-d})).filter(n=>n.b>=0); } r.bar=nb; r.bars=o.bar+o.bars-nb; }
-      drawLane(cv); showTip(`bars ${r.bar}–${r.bar+r.bars-1} (${r.bars})`,m); };
-    cv.onpointerup=()=>{ cv.onpointermove=null; hideTip(); if(mv){ undoS.push(pre); redoS=[]; if(k==='ck'&&mode==='r'&&r.bars>o.bars){ const extra={...r,notes:[]}; fillCk(s,extra,1); r.notes=[...r.notes,...extra.notes.filter(n=>n.b>=o.bars)]; drawLane(cv); } } }; };
+      drawLane(cv); showTip(`bars ${r.bar}–${r.bar+r.bars-1} (${r.bars})`,m); if(window.SL12&&SL12.ghost) SL12.ghost(s,s.bars[Math.min(mode==='r'?r.bar+r.bars:r.bar,s.total+1)-1].t); };
+    cv.onpointerup=(u)=>{ cv.onpointermove=null; hideTip(); if(mv&&k==='mreg'&&mode==='m'&&u&&u.clientX!=null) moveRegionTo(s,t,r,u); if(mv&&rcopy) toast(`Copied a MIDI clip on “${t}”`,undo); if(mv){ undoS.push(pre); redoS=[]; if(k==='ck'&&mode==='r'&&r.bars>o.bars){ const extra={...r,notes:[]}; fillCk(s,extra,1); r.notes=[...r.notes,...extra.notes.filter(n=>n.b>=o.bars)]; drawLane(cv); } } }; };
   cv.ondblclick=e=>{ const r=at(lx(cv,e)); if(r){ if(k==='mreg') openMidi(s.id,t); else openCkEd(s,r,t); return; }
     const b=barAtTime(s,lx(cv,e)/PXS), others=list(), nx=Math.min(s.total+1,...others.filter(q=>q.bar>b).map(q=>q.bar)); if(others.some(q=>b>=q.bar&&b<q.bar+q.bars)) return; snap();
     const r2={id:'r'+regSeq++,bar:b,bars:Math.max(1,Math.min(k==='ck'?1:4,nx-b))}; /* a new click clip is one bar: Repeat… or drag its edge for more */ if(k==='ck') fillCk(s,r2,1); list().push(r2); list().sort((a,b)=>a.bar-b.bar); setPick({kind:k,song:s.id,track:t,id:r2.id}); };
@@ -2828,28 +2852,40 @@ function wireClipLane(cv){ const s=songs.find(x=>x.id===cv.dataset.song), t=s.tr
     cv.style.cursor=tool==='split'?'crosshair':(e.offsetY<20&&(Math.abs(x-(x0+cl.fi*PXS))<7||Math.abs(x-(x1-cl.fo*PXS))<7))?'ew-resize':(x-x0<7||x1-x<7)?'col-resize':'grab'; };
   cv.onpointerdown=e=>{ if(e.button!==0) return; const x=lx(cv,e), time=x/PXS, cl=clipAt(s,t,time);
     if(!cl){ const alt=freeKey(e); boxOrClick(e,s,()=>{ selectClip(s,t,null); laneClick(s,snapT(s,time,alt)); }); return; }
-    if(e.shiftKey||e.ctrlKey||e.metaKey){ toggleSel('audio',s,t,cl); return; }
-    if(tool!=='split'&&multiOn()&&isMulti('audio',s.id,t,cl.id)){ groupDrag(e,s,cv,{kind:'audio',t,o:cl}); return; }
+    if(e.shiftKey){ toggleSel('audio',s,t,cl); return; }
+    const cmdDown=freeKey(e); // 13: ⌘-click toggles the clip in the selection; ⌘-drag moves it freely (no snap)
+    if(tool!=='split'&&multiOn()&&isMulti('audio',s.id,t,cl.id)&&!cmdDown){ groupDrag(e,s,cv,{kind:'audio',t,o:cl}); return; }
     if(tool==='split'){ splitClip(s,t,cl,snapT(s,time,freeKey(e))); return; }
-    const x0=cl.start*PXS, x1=cl.end*PXS; let mode='move';
-    if(e.offsetY<20&&Math.abs(x-(x0+cl.fi*PXS))<7) mode='fi'; else if(e.offsetY<20&&Math.abs(x-(x1-cl.fo*PXS))<7) mode='fo'; else if(x-x0<7) mode='l'; else if(x1-x<7) mode='r';
-    selectClip(s,t,cl); const pre=ser(), o={...cl}, list=clipsOf(s,t), i=list.indexOf(cl), prevEnd=i>0?list[i-1].end:0, nextStart=i<list.length-1?list[i+1].start:1e9, sx=e.clientX; let moved=false;
+    const x0=cl.start*PXS, x1=cl.end*PXS, oy=TX.localY(e,cv); let mode='move';
+    const fz=Math.min(20,cv.height*0.3); // the fade handles' zone (a short lane keeps most of its height for moving)
+    if(oy<fz&&Math.abs(x-(x0+cl.fi*PXS))<7) mode='fi'; else if(oy<fz&&Math.abs(x-(x1-cl.fo*PXS))<7) mode='fo'; else if(x-x0<7) mode='l'; else if(x1-x<7) mode='r'; else if(selClip&&selClip.id===cl.id&&selClip.track===t&&Math.abs(oy-clipGainY(cl,cv.height))<=3) mode='gain'; /* the selected clip's level line (a plain drag elsewhere moves the clip) */
+    if(!cmdDown) selectClip(s,t,cl); const pre=ser(), o={...cl}, list=clipsOf(s,t), i=list.indexOf(cl), prevEnd=i>0?list[i-1].end:0, nextStart=i<list.length-1?list[i+1].start:1e9, sx=e.clientX; let moved=false;
     try{ cv.setPointerCapture(e.pointerId); }catch(x){}
     let copied=null;
-    cv.onpointermove=m=>{ const dx=(lx(cv,m)-x)/PXS; if(Math.abs(m.clientX-sx)>2) moved=true; if(!moved) return; const free=freeKey(m);
+    const sy=e.clientY; cv.onpointermove=m=>{ const dx=(lx(cv,m)-x)/PXS; if(Math.abs(m.clientX-sx)>2||((mode==='gain'||mode==='move')&&Math.abs(m.clientY-sy)>3)) moved=true; /* 13: up or down counts too (the gain line, another track) */ if(!moved) return; const free=freeKey(m);
       if(mode==='move'&&e.altKey&&!copied){ copied={...o,id:clipSeq++}; list.push(copied); } // ⌥: the copy stays, the clip moves
-      if(mode==='move'){ let ns=snapT(s,o.start+dx,free); const len=o.end-o.start; ns=Math.max(prevEnd,Math.min(nextStart===1e9?s.len+60:nextStart-len,ns)); if(copied) ns=ns>=o.start?Math.max(ns,o.end):Math.min(ns,o.start-len); cl.start=ns; cl.end=ns+len; showTip(`${t} · starts ${posTxt(s,cl.start)} (${fmtMs(cl.start)})${free?' · free':''}`,m); }
+      if(mode==='move'){ let ns=snapT(s,o.start+dx,free); const len=o.end-o.start; ns=Math.max(prevEnd,Math.min(nextStart===1e9?s.len+60:nextStart-len,ns)); if(copied) ns=ns>=o.start?Math.max(ns,o.end):Math.min(ns,o.start-len); cl.start=ns; cl.end=ns+len; showTip(`${t} · starts ${posTxt(s,cl.start)} (${fmtMs(cl.start)})${free?' · free':''}`,m); if(window.SL12&&SL12.ghost) SL12.ghost(s,ns); }
       else if(mode==='l'){ let ns=snapT(s,o.start+dx,free); ns=Math.max(prevEnd,o.start-o.off,Math.min(o.end-0.1,ns)); cl.off=o.off+(ns-o.start); cl.start=ns; cl.fi=Math.min(cl.fi,(cl.end-cl.start)/2); showTip(`Trim start · ${posTxt(s,cl.start)} · ${fmtMs(cl.end-cl.start)} long`,m); }
-      else if(mode==='r'){ let ne=snapT(s,o.end+dx,free); ne=Math.min(nextStart,o.start+(fileLen(s,t)-o.off),Math.max(o.start+0.1,ne)); cl.end=ne; cl.fo=Math.min(cl.fo,(cl.end-cl.start)/2); showTip(`Trim end · ${posTxt(s,cl.end)} · ${fmtMs(cl.end-cl.start)} long`,m); }
+      else if(mode==='r'){ let ne=snapT(s,o.end+dx,free); ne=Math.min(nextStart,o.start+(fileLen(clipSong(s,t,cl),t)-o.off),Math.max(o.start+0.1,ne)); cl.end=ne; cl.fo=Math.min(cl.fo,(cl.end-cl.start)/2); showTip(`Trim end · ${posTxt(s,cl.end)} · ${fmtMs(cl.end-cl.start)} long`,m); }
       else if(mode==='fi'){ cl.fi=Math.max(0,Math.min((cl.end-cl.start)/2,snapT(s,o.start+o.fi+dx,free)-cl.start)); showTip(`Fade in · ${Math.round(cl.fi*1000)} ms${free?' · free':''}`,m); }
       else if(mode==='fo'){ cl.fo=Math.max(0,Math.min((cl.end-cl.start)/2,cl.end-snapT(s,o.end-o.fo+dx,free))); showTip(`Fade out · ${Math.round(cl.fo*1000)} ms${free?' · free':''}`,m); }
+      else if(mode==='gain'){ const v=clipGainAt(TX.localY(m,cv),cv.height), st=free?0.1:0.5; cl.gain=Math.round(v/st)*st; if(Math.abs(cl.gain)<st/2) cl.gain=0; showTip(`Clip gain · ${cl.gain>0?'+':''}${cl.gain.toFixed(1)} dB${free?' · fine':''}`,m); if(window.SLE&&SLE.nextChanged) SLE.nextChanged(); }
+      if(mode==='move'){ const tgt=clipLaneAt(s,t,m); document.querySelectorAll('.lane.drop13').forEach(l=>l.classList.toggle('drop13',!!tgt&&l===tgt.cv.parentElement)); if(tgt&&!document.querySelector('.lane.drop13')) tgt.cv.parentElement.classList.add('drop13'); }
       drawLane(cv); };
     // A click without a drag on the waveform: the insert marker goes there (12; on the grid; ⌘: exactly), so ⌘E splits right there.
-    cv.onpointerup=u=>{ cv.onpointermove=null; hideTip(); if(copied) list.sort((a,b)=>a.start-b.start); if(moved){ undoS.push(pre); redoS=[]; renderInsp(); if(copied) toast(`Copied a clip on “${t}”`,undo); } else if(mode==='move') laneClick(s,snapT(s,time,!!(u&&freeKey(u))||freeKey(e))); }; };
+    cv.onpointerup=u=>{ cv.onpointermove=null; hideTip(); document.querySelectorAll('.lane.drop13').forEach(l=>l.classList.remove('drop13')); if(copied) list.sort((a,b)=>a.start-b.start);
+      // 13 §3: dropped on another audio track: the clip moves there (the copy, with ⌥), where it fits
+      const tgt=moved&&mode==='move'&&u?clipLaneAt(s,t,u):null; let moved2=false;
+      if(tgt){ const L2=clipsOf(s,tgt.t), fits=!L2.some(q=>q.start<cl.end-1e-6&&q.end>cl.start+1e-6); // (⌥: the copy stayed here; the clip itself goes)
+        if(fits){ list.splice(list.indexOf(cl),1); cl.file=cl.file||((s.files||{})[t]?{...s.files[t]}:null); if(cl.file&&(s.files||{})[tgt.t]&&s.files[tgt.t].path===cl.file.path) delete cl.file; L2.push(cl); L2.sort((a,b)=>a.start-b.start); selectClip(s,tgt.t,cl); moved2=true; refresh(); toast(`Moved a clip to “${tgt.t}”`,undo); }
+        else toast(`No room on “${tgt.t}” there: the clip stays on “${t}”`); }
+      if(moved){ undoS.push(pre); redoS=[]; renderInsp(); if(copied&&!moved2) toast(`Copied a clip on “${t}”`,undo); if(mode==='gain') toast(`Clip gain ${cl.gain>0?'+':''}${cl.gain.toFixed(1)} dB on “${t}”`,undo); } else if(mode==='move'&&cmdDown){ toggleSel('audio',s,t,cl); } else if(mode==='move') laneClick(s,snapT(s,time,!!(u&&freeKey(u))||freeKey(e))); }; };
   // Right-click a clip (6d: the scissors tool is gone): Split at playhead, copy, duplicate, delete.
   cv.oncontextmenu=e=>{ e.preventDefault(); const cl=clipAt(s,t,lx(cv,e)/PXS); if(!cl) return; if(!isMulti('audio',s.id,t,cl.id)) selectClip(s,t,cl);
     const here=playId===s.id&&pos>cl.start+0.05&&pos<cl.end-0.05;
     ctxMenu(e,[{label:'Split at playhead',icon:'✂',key:'S',dis:!here,act:()=>splitClip(s,t,cl,pos)},'-',{label:'Copy',icon:'⧉',key:'⌘C',act:()=>doCopy()},{label:'Duplicate',icon:'⊕',key:'⌘D',act:()=>doDup()},{label:'Delete',icon:'⌫',danger:true,act:()=>doDelete()}]); };
+  // 13 §3: double-click a clip's name (its label strip) to rename it in place
+  cv.ondblclick=d=>{ const c2=clipAt(s,t,lx(cv,d)/PXS); if(!c2) return; if(TX.localY(d,cv)<=Math.max(18,Math.min(20,cv.height*0.4))) { d.preventDefault(); d.stopPropagation(); renameClip(s,t,c2,cv); } };
   return true; }
 function clipPanel(s){ if(!selClip||selClip.song!==s.id) return ''; const t=selClip.track, list=clipsOf(s,t), cl=list.find(c=>c.id===selClip.id); if(!cl){ selClip=null; return ''; } const n=list.indexOf(cl)+1;
   return `<div class="secpanel"><div class="kicker">AUDIO CLIP ${n} OF ${list.length}</div>
@@ -3515,7 +3551,7 @@ function printSetBox(){ const L=curSetObj(); document.querySelectorAll('#printBo
   const draw=()=>{ bg.innerHTML=`<div class="cfbox printbox" role="dialog" aria-label="Print setlist"><b>Print “${esc(L.name)}”</b><p>Big, high-contrast text for the stage floor, saved as a PDF. ${L.order.length} songs.</p>
       <div class="kv"><label>Size</label>${segm('prSize',[['L','Large'],['XL','Extra large']],PRINT_OPT.size)}</div>
       <div class="kv"><label>Columns</label>${segm('prCols',[[1,'One'],[2,'Two']],PRINT_OPT.cols)}</div>
-      <div class="kv stack"><label>Song fields to include</label>${FIELDS.length?`<div class="prf">${FIELDS.map(f=>`<label><input type="checkbox" data-f="${f.id}" ${PRINT_OPT.fields.includes(f.id)?'checked':''}> ${esc(f.name)}</label>`).join('')}</div>`:'<p class="faint" style="font-size:12px;margin:0">No song fields yet (Settings › Band). Tuning, Guitar… can be printed per song.</p>'}</div>
+      <div class="kv stack"><label>Song fields to include</label>${FIELDS.length?`<div class="prf">${FIELDS.map(f=>`<label><input type="checkbox" data-f="${f.id}" ${PRINT_OPT.fields.includes(f.id)?'checked':''}> ${esc(f.name)}</label>`).join('')}</div>`:'<p class="faint" style="font-size:12px;margin:0">No song fields yet (Settings › Remote). Tuning, Guitar… can be printed per song.</p>'}</div>
       <p class="faint" style="font-size:11.5px;margin-top:8px">Each song: number, name, version, key, BPM, length, the fields above, and » segue / » auto-next into the next one.</p>
       <div class="cfa"><button class="btn line" id="prNo">Cancel</button><button class="btn pri" id="prGo">Export PDF…</button></div></div>`;
     bg.querySelectorAll('#prSize button').forEach(b=>b.onclick=()=>{ PRINT_OPT.size=b.dataset.v; draw(); });
@@ -3782,9 +3818,9 @@ function wireRig(){ const q=id=>$(id), re=()=>renderSettings();
   if(q('rigFmPort')){ q('rigFmPort').onchange=fm; q('rigFmText').onchange=fm; }
   document.querySelectorAll('#sbody .tog[id^="rigAlso_"]').forEach(b=>b.onclick=async()=>{ const p=decodeURIComponent(escape(atob(b.id.slice(8)))), cur=new Set(RIG.alsoSends||[]); cur.has(p)?cur.delete(p):cur.add(p); await opt({alsoSends:[...cur]}); RIG.alsoSends=[...cur]; re(); }); }
 
-// ======================= BAND (6g): song fields, curfew, MIDI sync point, Soundcheck, Vamp, the band's screens =======================
-// Song fields: definitions in the library (FIELDS, Settings › Band), values per song (s.fields) and per version
-// (v.fields: the version's value wins). The band's screens (BAND.screens): their layouts, also in the library.
+// ======================= BAND (6g): song fields, curfew, MIDI sync point, Soundcheck, Vamp, the remote screens =======================
+// Song fields: definitions in the library (FIELDS, Settings › Remote), values per song (s.fields) and per version
+// (v.fields: the version's value wins). The remote screens (BAND.screens): their layouts, also in the library.
 let BAND={network:'',pin:'',screens:[]};
 const fieldVal=(s,fid,v)=>{ const vv=v&&v.fields&&v.fields[fid]; if(vv!==undefined&&vv!==null&&vv!=='') return String(vv); const x=s&&s.fields&&s.fields[fid]; return x===undefined||x===null?'':String(x); };
 function setFieldVal(s,fid,val,v){ snap(); const o=v||s; o.fields=o.fields||{}; if(val==='') delete o.fields[fid]; else o.fields[fid]=val; if(!Object.keys(o.fields).length) delete o.fields; refresh(); }
@@ -3793,7 +3829,7 @@ function fieldInh(s,f){ if(!window.MODUI||!window.SLMod||typeof MODP==='undefine
 function fieldInput(f,val,attrs,blank){ if(f.type==='list') return `<select ${attrs}><option value="" ${val?'':'selected'}>${blank?esc(blank):'–'}</option>${(f.options||[]).map(o=>`<option ${o===val?'selected':''}>${esc(o)}</option>`).join('')}${val&&!(f.options||[]).includes(val)?`<option selected>${esc(val)}</option>`:''}</select>`;
   return `<input ${attrs} value="${esc(val)}" spellcheck="false">`; }
 function fieldsCard(s,V){ const vs=versOf(s);
-  if(!FIELDS.length) return rcard('Fields','<p class="rnote">Song fields (Tuning, Guitar, Click…) show on the band’s screens.</p><div class="racts"><button class="btn line" id="fEdit">Add song fields…</button></div>');
+  if(!FIELDS.length) return rcard('Fields','<p class="rnote">Song fields (Tuning, Guitar, Click…) show on the remote screens.</p><div class="racts"><button class="btn line" id="fEdit">Add song fields…</button></div>');
   return rcard('Fields',FIELDS.map(f=>{ const own=(s.fields||{})[f.id]??'', ih=own===''?fieldInh(s,f):null; return rrow(esc(f.name)+(ih?`<em class="inhn">from preset ${esc(ih.from)}</em>`:''),`<span style="display:flex;gap:4px;min-width:0">${fieldInput(f,own,`data-fs="${f.id}" ${ih?`class="inh9" placeholder="${esc(ih.v)}" title="From preset ${esc(ih.from)}. Type to give this song its own value."`:'title="This song"'} style="width:${vs.length>1?'92px':'150px'}"`,ih?ih.v:'')}${vs.length>1?fieldInput(f,(V.fields||{})[f.id]??'',`data-fv="${f.id}" title="Only in “${esc(V.name)}”: wins over the song’s value" placeholder="${esc(V.name)}" style="width:92px"`):''}</span>`); }).join('')
     +(vs.length>1?`<p class="rnote">Left: the song. Right: only in “${esc(V.name)}” (wins over the song’s).</p>`:'')+'<div class="racts"><button class="btn line" id="fTable">Song fields table…</button></div>'); }
 function wireFieldsCard(s,V){ if($('fEdit')) $('fEdit').onclick=()=>openSettings('band'); if($('fTable')) $('fTable').onclick=()=>fieldsTable();
@@ -3818,7 +3854,7 @@ function newField(name){ let id; do{ id='f'+Date.now().toString(36)+Math.floor(M
 
 // ---- curfew: each setlist has a "finish by" time ----
 function finishByBox(){ const L=curSetObj(); const bg=document.createElement('div'); bg.className='cfbg';
-  bg.innerHTML=`<div class="cfbox"><b>Finish “${esc(L.name)}” by</b><p>The Curfew clock on the band’s screens counts the rest of the set against it.</p><input id="fbT" type="time" value="${esc(L.finishBy||'')}" style="margin-top:10px;font-size:15px"><div class="cfa"><button class="btn line" data-a="clear" style="margin-right:auto">No curfew</button><button class="btn line" data-a="no">Cancel</button><button class="btn pri" data-a="ok">Set curfew</button></div></div>`;
+  bg.innerHTML=`<div class="cfbox"><b>Finish “${esc(L.name)}” by</b><p>The Curfew clock on the remote screens counts the rest of the set against it.</p><input id="fbT" type="time" value="${esc(L.finishBy||'')}" style="margin-top:10px;font-size:15px"><div class="cfa"><button class="btn line" data-a="clear" style="margin-right:auto">No curfew</button><button class="btn line" data-a="no">Cancel</button><button class="btn pri" data-a="ok">Set curfew</button></div></div>`;
   document.body.appendChild(bg); const close=()=>bg.remove(); bg.onclick=e=>{ if(e.target===bg) close(); };
   bg.querySelector('[data-a=no]').onclick=close; bg.querySelector('[data-a=clear]').onclick=()=>{ snap(); delete L.finishBy; close(); refresh(); };
   bg.querySelector('[data-a=ok]').onclick=()=>{ const v=$('fbT').value; snap(); if(v) L.finishBy=v; else delete L.finishBy; close(); refresh(); }; }
@@ -3865,7 +3901,7 @@ function vamp(){ const s=songs.find(x=>x.id===playId); if(VAMP){ VAMP=null; toas
   if(!playing||!s) return {ok:false,why:'Nothing is playing'}; const b=barAtTime(s,pos), p=s.secPos.find(x=>b>=x.start&&b<x.start+x.bars); if(!p) return {ok:false,why:'No section here'};
   VAMP={songId:s.id,secId:p.id}; loopExitId=null; toast(`Vamp: looping “${p.name}”`); renderPerform(); return {ok:true,on:true}; }
 
-// ---- what the band's screens are told about the setlist (the host sends it when it changes) ----
+// ---- what the remote screens are told about the setlist (the host sends it when it changes) ----
 function bandShow(){ const L=curSetObj(), out={t:'show',lib:'',setlist:{id:L.id,name:L.name,finishBy:L.finishBy||'',order:[]},songs:{},fields:FIELDS,screens:BAND.screens.map(x=>({id:x.id,name:x.name,col:x.col,device:x.device})),network:BAND.network||''};
   const add=(s,v)=>{ const doc={name:s.name,col:s.col,key:s.key,ver:versOf(s).length>1?v.name:'',vers:versOf(s).map(x=>({id:x.id,name:x.name})),len:verLen(s,v),bars:[],secs:[],cues:[],patches:{},fields:SLBandMerge(SLBandMerge(window.MODUI?MODUI.presetFields(s):{},s.fields),v&&v.fields)};
     const map=(!v||v.custom||isFullVer(s,v))?s.secPos.map(p=>({sb:p.start,bars:p.bars,secId:p.id,name:p.name,type:p.type})):verMap(s,v);
@@ -3911,8 +3947,8 @@ function renderBand(){ const el=$('bandV'); if(!el||!bandOn) return; const sc=cu
   const qr=url&&window.SLBand?SLBand.qrSVG(url):'';
   const left=`<div class="bl"><div class="blh"><b>Screens</b><button class="ibtn" id="bAdd" title="Add a screen">＋</button></div>
     ${BAND.screens.map(x=>`<div class="bscr ${x.id===BSEL?'on':''}" data-id="${x.id}"><span class="bav" style="background:${x.col}">${esc(x.name.slice(0,2).toUpperCase())}</span><span class="bt"><b>${esc(x.name)}</b><small>${DEVS[x.device]?DEVS[x.device][0]:'Device'}</small></span><i class="bdot ${BONLINE[x.id]?'on':''}" title="${BONLINE[x.id]?'Connected':'Not connected'}"></i></div>`).join('')||'<p class="faint" style="font-size:12px;padding:6px 8px">No screens yet. ＋ adds one; a device that joins can also make one.</p>'}
-    <div class="bjoin">${qr?`<div class="bqr">${qr}</div>`:''}<div class="bip">${esc(url||'No network')}</div><div class="faint" style="font-size:11px">${BINFO&&BINFO.mdns==='setline.local'?`or <b>http://setline.local:${BINFO.port}/</b>`:'Scan the code or type the address'}${BINFO&&!BINFO.running?' · <span style="color:var(--amber)">the server is off (Settings › Band)</span>':''}</div>
-      <label class="faint" style="font-size:11px;display:block;margin-top:8px">Band network <input id="bNet" value="${esc(BAND.network||'')}" placeholder="name (just a label)" style="width:100%;margin-top:3px"></label></div>
+    <div class="bjoin">${qr?`<div class="bqr">${qr}</div>`:''}<div class="bip">${esc(url||'No network')}</div><div class="faint" style="font-size:11px">${BINFO&&BINFO.mdns==='setline.local'?`or <b>http://setline.local:${BINFO.port}/</b>`:'Scan the code or type the address'}${BINFO&&!BINFO.running?' · <span style="color:var(--amber)">the server is off (Settings › Remote)</span>':''}</div>
+      <label class="faint" style="font-size:11px;display:block;margin-top:8px">Remote network <input id="bNet" value="${esc(BAND.network||'')}" placeholder="name (just a label)" style="width:100%;margin-top:3px"></label></div>
     ${BDEVS.length?`<div class="bfields"><span class="faint">Connected devices</span>${BDEVS.map(d=>`<div class="clkrow" style="margin-top:4px"><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(d.device||'')}">${esc(d.address)}</span><select data-dev="${d.id}" title="Which screen this device shows"><option value="">(asks)</option>${BAND.screens.map(x=>`<option value="${x.id}" ${x.id===d.screen?'selected':''}>${esc(x.name)}</option>`).join('')}</select></div>`).join('')}</div>`:''}
     <div class="bfields"><span class="faint">Song fields:</span> ${FIELDS.length?FIELDS.map(f=>esc(f.name)).join(', '):'none'}<div style="display:flex;gap:6px;margin-top:6px"><button class="btn line" id="bFields">Edit song fields…</button><button class="btn line" id="bTable">Table…</button></div></div></div>`;
   // 8a: no screens yet: a call to action in the middle, the widget library dimmed on the right (what a screen can hold)
@@ -4133,7 +4169,7 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
   // The interface's outputs (from the app): its name, how many, their names. Renames are kept per device.
   setOutputs(device,names){ OUTS.device=device||''; OUTS.names=names||[]; OUTS.count=(names||[]).length; if(device&&names&&names.length) try{ localStorage.setItem('setline.lastOuts',JSON.stringify({device,names})); }catch(e){} },
   setDirty(d){ const m=$('dirtyMk'); if(m) m.hidden=!d||LIBMODE; },
-  // 6g: the band's screens
+  // 6g: the remote screens
   band:{ show:()=>bandShow(), live:()=>bandLive(), get data(){ return BAND; }, set data(v){ BAND=v; }, screen:id=>BAND.screens.find(x=>x.id===id)||null, addScreen:(n,k)=>{ const s=addScreen(n,k); refresh(); return s; },
     online:(m,devs)=>{ BONLINE=m||{}; BDEVS=devs||[]; if(bandOn) renderBand(); }, info:i=>{ BINFO=i; if(bandOn) renderBand(); }, status:(from,label,on)=>bandStatus(from,label,on), clearStatus:()=>{ BSTATUS=[]; renderStatusBar(); },
     soundcheck:(id,v)=>soundcheck(id,v), endSoundcheck:()=>endSoundcheck(), vamp:()=>vamp(), jump:id=>queueJumpTo(id), cancelJump:()=>cancelQueuedJump(), syncMidi:()=>syncMidi(), fillSync:()=>fillSyncFromFirst(), syncLines:(t,c)=>syncLines(t,c),
@@ -4277,7 +4313,7 @@ async function queueJumpTo(secId){ const s=songs.find(x=>x.id===(playing?playId:
   else { jumpQueuedSec=secId; renderPerform(); } }
 function cancelQueuedJump(){ if(jumpQueuedSec===null) return false; if(NATIVE&&window.SLE&&SLE.cancelJump) SLE.cancelJump(); else { jumpQueuedSec=null; renderPerform(); } return true; }
 // ---- the action list: every live action in one place: keys, footswitches / MIDI controllers (7c, Settings ›
-// Controls), band screens. Nothing here changes outputs, levels, the audio device, or deletes anything (never mappable).
+// Controls), remote screens. Nothing here changes outputs, levels, the audio device, or deletes anything (never mappable).
 // run(arg, press): press false = a momentary pedal released (only Vamp uses it). ico: shown when a pedal triggers it.
 const perfPartsNow=()=>{ const s=songs.find(x=>x.id===(playing?playId:(playId||selId))); if(!s) return null; const st=perfState(s); return {s,st,src:st.parts.filter(p=>!p.extra)}; };
 function jumpSection(d){ const x=perfPartsNow(); if(!x) return toast('No song'); const {st,src}=x, i=st.cur?src.indexOf(st.cur):-1, t=src[Math.max(0,Math.min(src.length-1,(i<0?0:i)+d))]; if(t&&t!==st.cur) queueJumpTo(t.secId); }
@@ -4363,7 +4399,7 @@ $('syncBtn').onclick=()=>syncMidi();
 // ---- Perform (7a): a fixed layout for playing live (docs/design/perform). Now playing (song, version, time left, BPM /
 // meter / key / Then, the section timeline: tap a section to queue a jump), the current section (bars left, beat lights),
 // the next section + queued jump, MIDI now; the setlist on the right; the dock at the bottom. Custom canvases live on
-// the Band page only.
+// the Remote page only.
 let perfOn=false, NEXTST=null, autoLeft=0, LOCKED=false;
 const PICON={
   prev:'<svg viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="2.5" height="14" rx="1"/><path d="M19 5.5v13a1 1 0 0 1-1.5.9L9 13.2a1.4 1.4 0 0 1 0-2.4l8.5-6.2A1 1 0 0 1 19 5.5z"/></svg>',
@@ -4454,7 +4490,7 @@ function nextLoadText(n){ if(!NATIVE) return 'Loaded and ready'; const m=NEXTST;
 // ======================= SETTINGS (6d) =======================
 // One sheet: ⚙ in the top bar, File › Preferences…, Ctrl/⌘+,. These belong to this computer (the rig), not the show,
 // except where a row says so. The app module (window.SLE) answers the native calls; a plain browser shows the layout.
-const SET_TABS=[['audio','Audio'],['out','Outputs'],['midi','MIDI'],['controls','Controls'],['rig','Backup rig'],['voices','Voices'],['band','Band'],['general','General'],['look','Appearance'],['diag','Diagnostics']];
+const SET_TABS=[['audio','Audio'],['out','Outputs'],['midi','MIDI'],['controls','Controls'],['rig','Backup rig'],['voices','Voices'],['band','Remote'],['general','General'],['look','Appearance'],['diag','Diagnostics']];
 let SET_TAB='audio', setRenderSeq=0, LDEV={list:[],rate:0,busy:false};
 const ncall=(n,a)=>NATIVE&&window.SLE&&SLE.call?SLE.call(n,a):Promise.resolve(null);
 function openSettings(tab){ if(tab) SET_TAB=tab; let bg=$('setSheet');
@@ -4507,7 +4543,7 @@ async function settingsHTML(tab){
       ${sgrp(all.length?all.map(p=>sf(esc(p)+(outs.includes(p)?'':' <span style="color:var(--amber)">(not connected)</span>'),`<span style="color:var(--muted);font-size:12px">${used[p]?used[p].size+' track'+(used[p].size>1?'s':''):'not used'}</span>`)):[sf('No MIDI outputs found','')])}
       <h3 style="margin-top:6px">MIDI clock</h3><p class="d">24 ppqn on every MIDI output, following each song’s tempo map; while stopped it keeps running at the next song’s tempo. Start/Stop/Continue + Song Position is off by default (some loopers and drum machines start by themselves).</p>
       ${sgrp(((await ncall('midiPorts'))||[]).map(p=>sf(esc(p.name)+(p.connected?'':' <span style="color:var(--amber)">(not connected)</span>'),`<span class="clkrow"><span class="faint" style="font-size:11px">Clock</span>${tog('clk_'+btoa(unescape(encodeURIComponent(p.name))).replace(/=/g,''),p.clock)}<span class="faint" style="font-size:11px;margin-left:8px">Start/Stop + SPP</span>${tog('trn_'+btoa(unescape(encodeURIComponent(p.name))).replace(/=/g,''),p.transport)}</span>`)).concat(NATIVE?[]:[sf('MIDI outputs appear here in the app','')]))}
-      ${(()=>{ const L=curSetObj(), sy=syncOf(L); return `<h3 style="margin-top:6px">Sync point for “${esc(L.name)}”</h3><p class="d">Before the first song, every device should be on the right sound. Write what each one needs, one message per line. <b>Sync MIDI</b> (in the top bar, on a key or on a band screen) sends it all; after that the songs change sounds themselves. <button class="linkb" id="stFmt">Message formats</button></p>
+      ${(()=>{ const L=curSetObj(), sy=syncOf(L); return `<h3 style="margin-top:6px">Sync point for “${esc(L.name)}”</h3><p class="d">Before the first song, every device should be on the right sound. Write what each one needs, one message per line. <b>Sync MIDI</b> (in the top bar, on a key or on a remote screen) sends it all; after that the songs change sounds themselves. <button class="linkb" id="stFmt">Message formats</button></p>
         ${sgrp(sy.devices.map((d,i)=>{ const {msgs,bad}=syncLines(d.text,d.ch); return sf(`<span class="clkrow"><select data-sp="${i}">${[...new Set([...PORTS,d.port])].filter(Boolean).map(p=>`<option ${p===d.port?'selected':''}>${esc(p)}</option>`).join('')}</select><select data-sc="${i}">${[...Array(16)].map((_,k)=>`<option value="${k+1}" ${k+1===+d.ch?'selected':''}>ch ${k+1}</option>`).join('')}</select></span>`,
           `<span class="clkrow"><textarea data-st="${i}" rows="2" spellcheck="false" style="width:170px;font:12px var(--code,monospace)">${esc(d.text||'')}</textarea><span class="faint" style="font-size:11px;width:56px">${msgs.length} msg${bad.length?` · <span style="color:var(--amber)">${bad.length} not understood</span>`:''}</span><button class="sel2" style="min-width:0" data-sx="${i}" title="Remove">✕</button></span>`); }).concat(sy.devices.length?[]:[sf('No devices yet','')]))}
         <div class="racts"><button class="btn line" id="stSadd">＋ Add device</button><button class="btn line" id="stSfill">Fill from first song</button><button class="btn pri" id="stSall" ${sy.devices.length?'':'disabled'}>Sync MIDI</button></div>`; })()}
@@ -4525,13 +4561,13 @@ async function settingsHTML(tab){
       <p class="d">A song can use its own voice: select its Cues track and turn off “Same voice for every song”.</p>`; }
   if(tab==='band'){ const st=(await ncall('bandInfo'))||{running:false,port:8080,addresses:[],mdns:'off',clients:0}; BINFO=st; const ip=(st.addresses||[])[0]||'', url=ip?`http://${ip}:${st.port}/`:'';
     const win=navigator.platform.startsWith('Win');
-    return `<h3>Band</h3><p class="d">Phones and tablets on the band’s own network open this address (or scan the code). Nothing to install. They show what their screen’s layout shows and can only do what its buttons do; they never change levels.</p>
+    return `<h3>Remote</h3><p class="d">Phones and tablets on the band’s own network open this address (or scan the code). Nothing to install. They show what their screen’s layout shows and can only do what its buttons do; they never change levels.</p>
       <div style="display:flex;gap:18px;align-items:center;margin:4px 0 12px">${url&&window.SLBand?`<div class="qrbox">${SLBand.qrSVG(url)}</div>`:''}<div><div style="font:600 24px var(--mono,monospace)">${esc(url||'No network')}</div>${st.mdns==='setline.local'?`<div class="faint">or http://setline.local:${st.port}/</div>`:`<div class="faint">setline.local: ${esc(st.mdns||'off')}</div>`}<div class="faint" style="margin-top:4px">${st.running?`Server on · ${st.clients} device${st.clients===1?'':'s'} connected`:'<span style="color:var(--amber)">Server off</span>'}</div></div></div>
       ${sgrp([sf('Port',`<span class="rsl"><input type="number" id="stBport" min="1024" max="65535" value="${st.port}" style="width:80px"><button class="sel2" style="min-width:0" id="stBrestart">${st.running?'Restart':'Start'}</button></span>`),
         sf('Join PIN',`<input id="stBpin" value="${esc(BAND.pin||'')}" placeholder="off" style="width:90px" title="Optional: a device asks for it once">`),
-        sf('Band network',`<input id="stBnet" value="${esc(BAND.network||'')}" placeholder="a name, just a label" style="width:180px">`)])}
+        sf('Remote network',`<input id="stBnet" value="${esc(BAND.network||'')}" placeholder="a name, just a label" style="width:180px">`)])}
       ${win?'<p class="d">The first time, Windows asks whether set.Line may use the network: allow it on private networks. If devices can’t connect, check Windows Security › Firewall › Allow an app: set.Line (Private).</p>':''}
-      <h3 style="margin-top:6px">Song fields</h3><p class="d">Your own fields per song (Tuning, Guitar, Click…): set in each song’s panel, overridable per version, shown on the band’s screens.</p>
+      <h3 style="margin-top:6px">Song fields</h3><p class="d">Your own fields per song (Tuning, Guitar, Click…): set in each song’s panel, overridable per version, shown on the remote screens.</p>
       ${sgrp(FIELDS.length?FIELDS.map((f,i)=>sf(`<input data-fn="${i}" value="${esc(f.name)}" style="width:130px">`,`<span class="clkrow"><select data-ft="${i}"><option value="text" ${f.type!=='list'?'selected':''}>Text</option><option value="list" ${f.type==='list'?'selected':''}>List of choices</option></select>${f.type==='list'?`<input data-fo="${i}" value="${esc((f.options||[]).join(', '))}" placeholder="E Standard, Drop D…" style="width:180px" title="Comma between choices">`:''}<button class="sel2" style="min-width:0" data-fu="${i}" ${i?'':'disabled'} title="Move up">↑</button><button class="sel2" style="min-width:0" data-fd="${i}" title="Delete">✕</button></span>`)):[sf('No song fields yet','')])}
       <div class="racts"><button class="btn line" id="stFadd">＋ Add a field</button><button class="btn line" id="stFtable">Song fields table…</button></div>`; }
   if(tab==='general'){ const st=(await ncall('libraryState'))||{name:'My Library',root:'Documents/set.Line/Libraries/My Library',onLaunch:'last'}; UPD.info=(await ncall('updateInfo'))||UPD.info||{current:'(browser preview)',daily:true};
@@ -4679,7 +4715,7 @@ document.addEventListener('keydown',e=>{ if(/INPUT|SELECT|TEXTAREA/.test(documen
     if((e.key==='Delete'||e.key==='Backspace')&&!first){ e.preventDefault(); s.tmap.splice(s.tmap.indexOf(ev),1); closeTpop(); buildBars(s); tempoRefresh(); return; }
     if(e.key==='Escape'){ closeTpop(); return; } } }
   if(songSel.size>1&&e.key==='Escape'){ songSel.clear(); markSongSel(); return; }
-  if((e.key==='Delete'||e.key==='Backspace')&&!selSec&&!selClip&&!tsel&&!ed.song&&selId&&document.activeElement===document.body&&!document.querySelector('.cfbg')){ e.preventDefault(); if(songSel.size>1) deleteSongs([...songSel],songSelFrom); else if(songSelFrom==='set'&&setOrder.includes(selId)) deleteSongs([selId],'set'); else deleteSong(selId); return; }
+  if((e.key==='Delete'||e.key==='Backspace')&&!selSec&&!selClip&&!tsel&&!ed.song&&selId&&!typingIn(document.activeElement)&&!(document.activeElement&&document.activeElement.closest&&document.activeElement.closest('#clk10,#pe13,.pop13'))&&!document.querySelector('.cfbg')){ /* 13 §4: a focused list row counts (it isn't typing) */ e.preventDefault(); /* 13 §4 (conventions §2): no question for what undo brings back. In the setlist: out of the setlist; in the library: deleted */ const ids=songSel.size>1?[...songSel]:[selId]; if(songSelFrom==='set'&&ids.some(id=>setOrder.includes(id))) removeFromSet(ids); else deleteSongs(ids,'lib',true); return; }
   if(selClip && !selSec && !ed.song){ const s=songs.find(x=>x.id===selClip.song), t=selClip.track, cl=s&&clipsOf(s,t).find(c=>c.id===selClip.id);
     if(cl){ if(e.key==='Escape'){ selectClip(s,t,null); return; } if(e.key==='Backspace'||e.key==='Delete'){ e.preventDefault(); delClip(s,t,cl); return; }
       if(e.key==='s'||e.key==='S'){ if(playId===s.id) splitClip(s,t,cl,pos); return; } if(e.key==='ArrowLeft'||e.key==='ArrowRight'){ e.preventDefault(); nudgeClip(s,t,cl,e.key==='ArrowLeft'?-1:1,e.altKey); return; } } }
@@ -4725,5 +4761,7 @@ try{ const q=new URLSearchParams(location.search).get('settings'); if(q) setTime
 <script src="secs10.js"></script>
 <script src="fix11.js"></script>
 <script src="fix12.js"></script>
+<script src="fix13.js"></script>
+<script src="pe13.js"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-// set.Line's words: one glossary for the menus, buttons, tooltips, ⌘K, the band screens and the docs (10b).
+// set.Line's words: one glossary for the menus, buttons, tooltips, ⌘K, the remote screens and the docs (10b).
 // The page's own scripts (ui/public/*.js) read it as window.SLWords. A visible string uses these words, never an
 // internal name ("pack", "pads", "lane id", "pool", "malt"…).
 export const WORDS = {

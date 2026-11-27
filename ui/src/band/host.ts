@@ -1,4 +1,4 @@
-// set.Line band screens (6g), the host side, in the desktop page: answers the screens (band.html) through the band
+// set.Line remote screens (6g), the host side, in the desktop page: answers the screens (band.html) through the band
 // server (app-gui/BandServer.h). A screen says hello (and its join PIN, if one is set), picks or is given a screen
 // layout, then gets the setlist ("show", when it changes) and the live state (15 times a second, stamped by the app
 // with its clock and the engine's transport). Its buttons send commands; each is checked against that screen's layout
@@ -107,14 +107,14 @@ export function startBandHost(SL: SetLineBridge, page: Page) {
       case "prevSong": act.run("prevSong"); return { ok: true };
       case "exitLoop": return { ok: act.run("exitLoop") };
       case "flipVersion": act.run("nextVersion"); return { ok: true };
-      case "soundcheck": return cfg.song ? B().soundcheck(cfg.song, cfg.ver) : { ok: false, why: "No song chosen for this button (Band page)" };
+      case "soundcheck": return cfg.song ? B().soundcheck(cfg.song, cfg.ver) : { ok: false, why: "No song chosen for this button (Remote page)" };
       case "vamp": return B().vamp();
       case "jump": B().jump(+arg); return { ok: true };
       case "cancelJump": B().cancelJump(); return { ok: true };
       case "syncMidi": B().syncMidi(); return { ok: true };
       case "midi": {
         const { msgs } = B().syncLines(cfg.text || "", cfg.ch || 1);
-        if (!cfg.port || !msgs.length) return { ok: false, why: "This button has no MIDI messages (Band page)" };
+        if (!cfg.port || !msgs.length) return { ok: false, why: "This button has no MIDI messages (Remote page)" };
         SL.call("sendMidiNow", { port: cfg.port, msgs }).catch(() => {});
         return { ok: true };
       }
@@ -139,7 +139,7 @@ export function startBandHost(SL: SetLineBridge, page: Page) {
   }, 1000);
 
   return {
-    // a layout was edited (Band page): every device showing that screen redraws at once
+    // a layout was edited (Remote page): every device showing that screen redraws at once
     layoutChanged() {
       for (const [id, c] of clients) if (c.screen) send(id, { t: "layout", screen: B().screen(c.screen) });
       bcast({ t: "screens", screens: screenList(), network: B().data.network || "" });

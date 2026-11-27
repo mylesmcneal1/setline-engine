@@ -10,7 +10,7 @@ import "../words"; // 10b: the glossary (window.SLWords)
 interface Bar { bar: number; t: number; dur: number; sig: [number, number]; beatT: number[] }
 interface Song { id: string; name: string; tracks: string[]; bars: Bar[]; total: number; audio: number; [k: string]: any }
 interface Page {
-  // 6g: the band's screens (see 1-arrange.html, BAND)
+  // 6g: the remote screens (see 1-arrange.html, BAND)
   band: any; midiReconnected(names: string[]): void; setlistOpened(): void;
   // 6f: the Library
   setlistCmd(cmd: "new" | "dup"): void; curSetId(): string; setSaveState(st: "saving" | "saved" | "error", why?: string): void;
@@ -1670,7 +1670,7 @@ async function main() {
     p.PORTS.splice(0, p.PORTS.length, ...real, ...[...used].filter((u) => !real.includes(u)));
   } catch (e) { console.warn("set.Line: MIDI outputs", e); }
   // The loading window (app start): show, waveforms, cues; then the main window appears. Tests don't wait for it.
-  // 6g: the band's screens (tests start the server themselves, on their own port: hooks.bandStart)
+  // 6g: the remote screens (tests start the server themselves, on their own port: hooks.bandStart)
   bandHost = startBandHost(SL, page);
   (window as any).SLBandHost = bandHost;
   SL.on("midiReconnected", (m: { reconnected: string[] }) => page().midiReconnected(m.reconnected || []));
@@ -1690,7 +1690,7 @@ async function main() {
   SL.on("midiIn", (m: any) => (page() as any).midiIn(m));
   SL.on("midiLearned", (m: any) => (page() as any).midiLearned(m));
   SL.call<{ list: any[]; inputs: string[] }>("midiMappings").then((r) => (page() as any).setMidiMap(r.list, r.inputs)).catch(() => {});
-  if (!info.testScript) SL.call<{ error?: string }>("bandStart", {}).then((r) => { if (r && r.error) SL.call("logLine", { text: "Band server: " + r.error }); page().band.info(r); }).catch(() => {});
+  if (!info.testScript) SL.call<{ error?: string }>("bandStart", {}).then((r) => { if (r && r.error) SL.call("logLine", { text: "Remote server: " + r.error }); page().band.info(r); }).catch(() => {});
   await reportLoading(showProblem, !!info.testScript);
   if (!info.testScript && lib) offerMigration().catch((e) => console.warn("set.Line: migration", e));
   // 8d: set.Line closed unexpectedly while playing last time: offer to resume where it was (tests call it themselves)

@@ -58,15 +58,36 @@
     const dir = g.k >= 1 ? "in" : "out", t0 = performance.now();
     g.lanes.forEach((l) => { l.style.willChange = ""; l.style.transformOrigin = ""; });
     g.ph.forEach((p) => { p.style.visibility = ""; });
+    const fade = Math.abs(g.k - 1) > 1e-4 ? stretchedShot(g) : null; // 13 §9: the stretched picture, over the lanes
     if (Math.abs(g.k - 1) > 1e-4) SL9.zoomNow(g.z0 * g.k, g.ax);
     else if (window.TL9) { const t = `translateX(${-sc.scrollLeft}px)`; g.lanes.forEach((l) => { l.style.transform = t; }); }
     const redraw = performance.now() - t0;
+    if (fade) fadeOut(fade);
     if (g.frames.length) { const f = g.frames.slice().sort((a, b) => a - b); timing(`pinch ${dir} frame`, f[Math.floor(f.length / 2)]); }
     timing(`pinch ${dir} redraw`, redraw);
     LASTG = { dir, frames: g.frames.slice(), redraw, k: g.k };
     prefetch();
     const w = GWAIT; GWAIT = []; w.forEach((f) => f());
   }
+  // 13 §9: a picture of the lanes as stretched now (their canvases, drawn where they are on screen), laid over them
+  // while the sharp redraw happens underneath; then it fades out (about 80 ms) instead of a swap
+  function stretchedShot(g) {
+    if (document.body.classList.contains("calm")) return null;
+    try {
+      const R = sc.getBoundingClientRect(), Z = TX.zoomOf(sc), dpr = window.devicePixelRatio || 1;
+      const screenUnits = !sc.offsetWidth || Math.abs(R.width - sc.offsetWidth * Z) <= Math.abs(R.width - sc.offsetWidth); // (macOS 12 WebKit: element units under zoom)
+      const S = (v) => (screenUnits ? v : v * Z), box = { l: S(R.left), t: S(R.top), w: S(R.width), h: S(R.height) };
+      const c = document.createElement("canvas"); c.className = "fade13"; c.width = Math.round(box.w * dpr); c.height = Math.round(box.h * dpr);
+      Object.assign(c.style, { left: box.l + "px", top: box.t + "px", width: box.w + "px", height: box.h + "px" });
+      const x = c.getContext("2d"); x.setTransform(dpr, 0, 0, dpr, 0, 0); let n = 0;
+      for (const l of g.lanes) for (const cv of l.querySelectorAll("canvas")) {
+        if (!cv.width || !cv.height) continue; const r = cv.getBoundingClientRect(); if (r.right < R.left || r.left > R.right || r.bottom < R.top || r.top > R.bottom) continue;
+        x.drawImage(cv, S(r.left) - box.l, S(r.top) - box.t, S(r.width), S(r.height)); n++;
+      }
+      if (!n) return null; document.body.appendChild(c); return c;
+    } catch (e) { return null; }
+  }
+  function fadeOut(c) { requestAnimationFrame(() => { c.style.opacity = "0"; setTimeout(() => c.remove(), 110); }); }
   let LASTG = null, GWAIT = [];
   // the end of the current gesture, then of any glide (tests; Fit all's back)
   if (window.SL9) { const ST = SL9.settled; SL9.settled = () => (GS ? new Promise((r) => GWAIT.push(r)) : Promise.resolve()).then(() => ST()); }
@@ -77,8 +98,8 @@
   function pinch(m) {
     if (!m || !openSongs().length) return;
     const ph = String(m.phase || "");
-    if (ph === "begin" || !NP) { NP = { acc: 0, base: 0 }; gStart((m.x != null ? m.x : laneLeft() + 200) - laneLeft()); }
-    else if (!GS) { NP.base = NP.acc; gStart((m.x != null ? m.x : laneLeft() + 200) - laneLeft()); } // it went on after a redraw: from here
+    if (ph === "begin" || !NP) { NP = { acc: 0, base: 0 }; gStart(m.x != null ? TX.laneX(m.x) : 200); }
+    else if (!GS) { NP.base = NP.acc; gStart(m.x != null ? TX.laneX(m.x) : 200); } // it went on after a redraw: from here
     if (ph === "end" || ph === "cancel") { NP = null; if (GS) { clearTimeout(GS.timer); gEnd(); } return; }
     NP.acc += +m.m || 0;
     gSet(Math.exp((NP.acc - NP.base) * speed()), true);
@@ -89,14 +110,14 @@
     if (!(e.altKey || e.ctrlKey || e.metaKey) || !sc.contains(e.target) || !openSongs().length) return;
     e.preventDefault(); e.stopImmediatePropagation();
     if (WK || NP) return; // the pinch is already coming in as gesture events
-    if (!GS) { WG = { acc: 0 }; gStart(e.clientX - laneLeft()); }
+    if (!GS) { WG = { acc: 0 }; gStart(TX.laneX(e.clientX)); }
     const d = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
     WG.acc += -d * (e.ctrlKey && !e.altKey ? 0.02 * (speed() / SPEED.normal) : 0.0025);
     gSet(Math.exp(WG.acc));
   }, { capture: true, passive: false });
   // WebKit's own pinch events (Safari, the page in a browser): the same, from their scale
   let WK = null;
-  document.addEventListener("gesturestart", (e) => { if (!openSongs().length || !inLanes(e.clientX == null ? laneLeft() + 10 : e.clientX, e.clientY == null ? sc.getBoundingClientRect().top + 10 : e.clientY)) return; e.preventDefault(); e.stopImmediatePropagation(); WK = 1; gStart((e.clientX == null ? laneLeft() + 200 : e.clientX) - laneLeft()); }, { capture: true, passive: false });
+  document.addEventListener("gesturestart", (e) => { if (!openSongs().length || !inLanes(e.clientX == null ? laneLeft() + 10 : e.clientX, e.clientY == null ? sc.getBoundingClientRect().top + 10 : e.clientY)) return; e.preventDefault(); e.stopImmediatePropagation(); WK = 1; gStart(e.clientX == null ? 200 : TX.laneX(e.clientX)); }, { capture: true, passive: false });
   document.addEventListener("gesturechange", (e) => { if (!WK) return; e.preventDefault(); e.stopImmediatePropagation(); if (e.scale > 0) gSet(Math.pow(e.scale, speed() / SPEED.normal), true); }, { capture: true, passive: false });
   document.addEventListener("gestureend", (e) => { if (!WK) return; e.preventDefault(); e.stopImmediatePropagation(); WK = null; if (GS) { clearTimeout(GS.timer); gEnd(); } }, { capture: true, passive: false });
   // waveform detail for the song(s) on screen, every level, ahead of the zoom (fetched in the background)
@@ -173,7 +194,7 @@
     if ((el = t.closest("#songs .brk9[data-b]"))) { LAST = { kind: "break", id: el.dataset.b }; return; }
     if ((el = t.closest("#songs .song[data-id], .card9[data-id], .row9 .r9h, .r9h[data-id], #pool .ps[data-id], .folder .fh"))) { LAST = { kind: "song" }; return; }
     if ((el = t.closest(".vstrip .vr[data-v]"))) { LAST = { kind: "version" }; return; }
-    if (t.closest("#clk10")) { LAST = { kind: "editor" }; return; }
+    if (t.closest("#clk10, #pe13")) { LAST = { kind: "editor" }; return; } // (13: the patch change editor too)
     if ((el = t.closest("canvas[data-t]"))) { // a lane: what the page selected (a clip, a cue, a MIDI clip), else nothing
       setTimeout(() => { LAST = typeof multiOn === "function" && multiOn() ? { kind: "multi" } : typeof pick !== "undefined" && pick ? { kind: "pick" } : typeof selClip !== "undefined" && selClip ? { kind: "clip" } : { kind: "none" }; }, 0); return; }
     if (t === sc || t.closest(".fbody") && !t.closest(".lh, .lane, button")) LAST = { kind: "none" };
@@ -188,7 +209,7 @@
     if (L.kind === "break") { if (window.SLBreaks) SLBreaks.del(L.id); LAST = { kind: "none" }; return true; }
     if (L.kind === "tracks") { const list = TSEL.slice(), n0 = undoS.length; list.forEach((x) => { const so = songOf(x.s); if (so && so.tracks.includes(x.t)) SL9.deleteTrack(so, x.t, false); }); if (undoS.length > n0 + 1) undoS.splice(n0 + 1); TSEL = []; LAST = { kind: "none" }; toast(`Deleted ${list.length} tracks`, undo); return true; }
     if (L.kind === "none") { // nothing selected: nothing happens (unless something was selected another way since)
-      const other = (typeof songSel !== "undefined" && songSel.size > 1) || (typeof multiOn === "function" && multiOn()) || (typeof pick !== "undefined" && pick) || (typeof selClip !== "undefined" && selClip) || (typeof selSec !== "undefined" && selSec) || (typeof tsel !== "undefined" && tsel) || (typeof document !== "undefined" && document.querySelector("#songs .brk9.on"));
+      const other = (typeof songSel !== "undefined" && songSel.size > 1) || (typeof multiOn === "function" && multiOn()) || (typeof pick !== "undefined" && pick) || (typeof selClip !== "undefined" && selClip) || (typeof selSec !== "undefined" && selSec) || (typeof tsel !== "undefined" && tsel) || (typeof document !== "undefined" && document.querySelector("#songs .brk9.on")) || (window.MODUI && MODUI.sel() && MODUI.sel().ids && MODUI.sel().ids.length); // (13: scene / footswitch changes on a modeler lane)
       return !other; }
     if (L.kind === "editor") return true; // the clip editor has its own ⌫
     return false; // a song, a clip, a cue, a group: the page's own (they act on their own selection)

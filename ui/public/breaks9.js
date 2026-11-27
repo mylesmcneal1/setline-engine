@@ -2,7 +2,7 @@
 // A setlist keeps its breaks beside its songs (L.breaks: each after a song, or at the start), so the song order
 // stays a list of songs everywhere else. A break: {id, after, label, len (s), note, runout: wait|start,
 // during: silence|loop, loop: {song, sec, db}, send}. Playing: when a song ends (or Next), its break becomes
-// current: a countdown in the transport, Perform and the band screens; Play starts the next song.
+// current: a countdown in the transport, Perform and the remote screens; Play starts the next song.
 (() => {
   "use strict";
   const $ = (id) => document.getElementById(id);
@@ -254,7 +254,7 @@
   // "Skip break": a learnable control (7c), and the setlist's + Break
   if (typeof ACTIONS !== "undefined") ACTIONS.push({ id: "skipBreak", name: "Skip break", key: "", ico: "⏭", run: () => { if (BRK) skip(); else toast("No break now"); } });
 
-  // ---------------------------------------------------------------- band screens, the show document, print
+  // ---------------------------------------------------------------- remote screens, the show document, print
   const BL = window.bandLive;
   window.bandLive = function () {
     const o = BL.apply(this, arguments); if (!BRK) return o;

@@ -192,7 +192,7 @@
       <p class="rnote">Click a scene to rename it or change its colour. Saved with preset ${M.presetLabel(d, pn)}, so every song using it shows the same names and colours.</p>`);
     if (typeof FIELDS !== "undefined" && FIELDS.length)
       h += rcard("Preset fields", FIELDS.map((f) => rrow(esc(f.name), fieldInput(f, pi.fields[f.id] ?? "", `data-pf="${f.id}" style="width:150px"`))).join("")
-        + `<p class="rnote">Every song using ${M.presetLabel(d, pn)} gets these (a song or version can override one). Band screens and “Until next change” use them.</p>`);
+        + `<p class="rnote">Every song using ${M.presetLabel(d, pn)} gets these (a song or version can override one). Remote screens and “Until next change” use them.</p>`);
     else h += rcard("Preset fields", `<p class="rnote">Add song fields (Tuning, Guitar…) and a preset can fill them in for every song that uses it.</p><div class="racts"><button class="btn line" id="mFields">Add fields…</button></div>`);
     return h;
   }
@@ -260,6 +260,8 @@
   // Ableton import (8c): a Live MIDI track named like QC / QUAD / AXE / FX3 -> the matching profile
   const suggest = (name) => { const n = String(name || "").toUpperCase(); return /\bQC\b|QUAD|CORTEX/.test(n) ? "qc" : /AXE|FX ?3|FX-?III|FRACTAL/.test(n) ? "axe" : ""; };
 
-  window.MODUI = { dev, badge, status, devLine, draw, wire, panel, wirePanel, label, presetsUsed, presetFields, suggest, norm, sel: () => SEL };
+  window.MODUI = { dev, badge, status, devLine, draw, wire, panel, wirePanel, label, presetsUsed, presetFields, suggest, norm, sel: () => SEL,
+    // 13 §6: the patch change editor (pe13.js) works on the same model
+    evsOf, cfgOf, presetsOf, presetAt, info, setEvents, newId, picker, LIB, SCENE_PAL, setSel: (x) => { SEL = x; } };
   if (typeof refresh === "function") try { refresh(); } catch (e) {}
 })();

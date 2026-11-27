@@ -15,6 +15,9 @@ struct TrackLevel { float db = 0; bool mute = false, solo = false; };
 struct MappedSong {
     SongDef def;
     std::vector<std::string> warnings;
+    // 13: a clip moved onto a track from another one plays its own file as an extra engine stem, named
+    // "<track><n>": it follows that track's level, mute and solo (trackOf gives the track).
+    static juce::String trackOf(const juce::String& engineName) { const int i = engineName.indexOfChar((juce::juce_wchar) 1); return i < 0 ? engineName : engineName.substring(0, i); }
     std::map<juce::String, int> engineTrack;   // Edit-page track name -> Engine track (ClickTrack, CueTrack, stem index)
     std::map<juce::String, TrackLevel> levels; // per track, from the song's mixer (gain / mute / solo)
 };

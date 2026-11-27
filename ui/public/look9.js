@@ -169,7 +169,7 @@
       <label class="lk-l">Interface font</label>${seg("ui", UI_FONTS.map((x) => [x, `<span style="font-family:'${x}'">${x}</span>`]), f.ui)}
       <label class="lk-l">Title font</label>${seg("title", TITLE_FONTS.map((x) => [x, `<span style="font-family:'${x}';font-weight:${SINGLE.has(x) ? 400 : 700}">${x}</span>`]), f.title)}
       <label class="lk-l">Numbers font</label>${seg("nums", NUM_FONTS.map((x) => [x, `<span style="font-family:'${x}';font-variant-numeric:tabular-nums">${x} 37.2.1</span>`]), f.nums)}
-      <label class="lk-l">Accent colour</label><div class="lk-acc">${ACCENTS.map(([n, c]) => `<button data-acc="${c}" title="${n}" style="background:${c}" class="${LOOK.accent.toLowerCase() === c ? "on" : ""}"></button>`).join("")}<label class="lk-custom" title="Your own colour"><input type="color" id="lkAcc" value="${LOOK.accent}"><span>Custom</span></label></div>
+      <label class="lk-l">Accent colour</label><div class="lk-acc">${ACCENTS.map(([n, c]) => `<button data-acc="${c}" title="${n}" style="background:${c}" class="${LOOK.accent.toLowerCase() === c ? "on" : ""}"></button>`).join("")}<button class="lk-custom" id="lkAcc" title="Your own colour: a colour wheel" style="--c:${LOOK.accent}"><i></i><span>Custom…</span></button></div>
       <label class="lk-l">Text size · ${LOOK.size}%</label><input type="range" id="lkSize" min="90" max="130" step="5" value="${LOOK.size}">
       <label class="lk-l">Track height · ${TRACKS[LOOK.track][0]} <span class="faint">(songs without their own size)</span></label><input type="range" id="lkTrack" min="0" max="4" step="1" value="${LOOK.track}">
       <label class="lk-l">Transport style</label>${seg("transport", [["console", "Console"], ["hardware", "Hardware"], ["minimal", "Minimal"]], LOOK.transport)}
@@ -184,7 +184,7 @@
     }));
     box.querySelectorAll("[data-pair]").forEach((b) => b.onclick = () => set({ pair: b.dataset.pair, ui: "", title: "", nums: "" }));
     box.querySelectorAll("[data-acc]").forEach((b) => b.onclick = () => set({ accent: b.dataset.acc }));
-    $("lkAcc").oninput = (e) => set({ accent: e.target.value });
+    $("lkAcc").onclick = (e) => swatchPop(e.currentTarget, LOOK.accent, (c) => set({ accent: c })); // 13 §10: the colour wheel
     $("lkSize").oninput = (e) => set({ size: +e.target.value });
     $("lkTrack").oninput = (e) => set({ track: +e.target.value });
   }

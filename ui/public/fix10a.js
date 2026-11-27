@@ -11,7 +11,7 @@
 // - setlist items, songs and breaks, within the setlist (orange line; a selection moves as a group)
 // - track headers within their song, in Folders and in one song (blue line)
 // - the older HTML5 drags (version sections, presets onto the MIDI timeline, Quad Cortex / Axe-Fx presets and scenes
-//   onto a lane, band screen widgets): elements marked data-drag10 get the same pointer drag, and their existing
+//   onto a lane, remote screen widgets): elements marked data-drag10 get the same pointer drag, and their existing
 //   dragstart / dragover / drop handlers are called with a stand-in dataTransfer
 (() => {
   "use strict";
@@ -69,10 +69,10 @@
     try { const s = getSelection(); if (s) s.removeAllRanges(); } catch (x) {}
     document.body.classList.add("drag10");
     (D.srcEls || [el]).forEach((x) => x.classList.add("drag10src"));
-    ghost = document.createElement("div"); ghost.className = "ghost10";
-    ghost.textContent = D.label || (el.textContent || "").trim().replace(/\s+/g, " ").slice(0, 40);
-    if (D.color) ghost.style.setProperty("--c", D.color);
-    document.body.appendChild(ghost);
+    // 13 §8: a compact, solid chip (a song: its colour bar, name and length), at the page's text size
+    const label = D.label || (el.textContent || "").trim().replace(/\s+/g, " ").slice(0, 40);
+    ghost = window.SL13 && SL13.chipFor ? SL13.chipFor({ label, color: D.color, sub: D.sub, el }) : null;
+    if (!ghost) { ghost = document.createElement("div"); ghost.className = "ghost10"; ghost.textContent = label; if (D.color) ghost.style.setProperty("--c", D.color); document.body.appendChild(ghost); }
     line = document.createElement("div"); line.className = "line10"; line.hidden = true; document.body.appendChild(line);
     place();
     tick();
@@ -80,11 +80,13 @@
   // what's under the pointer, the landing line, the ghost
   function place() {
     if (!D) return;
-    ghost.style.left = D.x + "px"; ghost.style.top = D.y + "px";
+    if (window.SL13 && SL13.chipMove && ghost.classList.contains("chip13")) SL13.chipMove(ghost, D); else { ghost.style.left = D.x + "px"; ghost.style.top = D.y + "px"; }
     D.under = document.elementFromPoint(D.x, D.y);
-    D.at = null; line.hidden = true;
+    D.at = null; line.hidden = true; const gap0 = D.gap; D.gap = null;
     if (D.def.move) D.def.move(D);
-    if (D.line) { const L = D.line; line.hidden = false; line.className = "line10 " + (L.cls || ""); Object.assign(line.style, { left: L.left + "px", top: L.top - 1.5 + "px", width: L.width + "px" }); D.line = null; }
+    if (D.line) { const L = D.line; line.hidden = false; line.className = "line10 " + (L.cls || ""); Object.assign(line.style, { left: L.left + "px", top: L.top - 1.5 + "px", width: L.width + "px" }); D.lastLine = L; D.line = null; }
+    // 13 §8: lists open a gap where the item will land
+    if (window.SL13 && SL13.gap) SL13.gap(D.gap, gap0);
     ghost.classList.toggle("no", !D.at && !D.def.anywhere);
   }
   // auto-scroll: near the top or bottom edge of the list under the pointer (and the sides of the timeline)
@@ -111,8 +113,12 @@
   function finish(drop) {
     const d = D; D = null;
     document.body.classList.remove("drag10");
-    document.querySelectorAll(".drag10src").forEach((x) => x.classList.remove("drag10src"));
-    if (ghost) ghost.remove(); if (line) line.remove(); ghost = line = null;
+    const src = d.srcEls ? d.srcEls[0] : d.el, landed = drop && (d.at || d.def.anywhere);
+    if (window.SL13 && SL13.gap) SL13.gap(null, d.gap);
+    // 13 §8: dropping slides the chip into place; cancelling (Esc, nowhere to land) slides it back
+    if (ghost && window.SL13 && SL13.chipEnd && ghost.classList.contains("chip13")) SL13.chipEnd(ghost, landed ? d.lastLine : null, landed ? null : src, () => document.querySelectorAll(".drag10src").forEach((x) => x.classList.remove("drag10src")));
+    else { document.querySelectorAll(".drag10src").forEach((x) => x.classList.remove("drag10src")); if (ghost) ghost.remove(); }
+    if (line) line.remove(); ghost = line = null;
     eat = { t: performance.now() + 120, x: d.x, y: d.y };
     try { if (drop && d.def.drop) d.def.drop(d); else if (d.def.cancel) d.def.cancel(d); }
     catch (e) { console.error("set.Line drag", e); }
@@ -202,6 +208,7 @@
     const ref = rows[at] || rows[rows.length - 1];
     const rr = ref ? ref.getBoundingClientRect() : { left: r0.left + 8, right: r0.right - 8, top: r0.top + 6, bottom: r0.top + 6 };
     d.line = { left: rr.left, width: rr.right - rr.left, top: rows[at] ? rr.top - 1 : rr.bottom + 1, cls: "" };
+    d.gap = { rows, at, h: 26 }; // 13 §8: the rows from the landing point move down to open a gap
     return at;
   }
   // a song dragged from the cards, a Folders row or the library list (several when they're selected)
@@ -210,7 +217,7 @@
     sel: ".card9[data-id], .r9h[data-id], #pool .ps[data-id]", skip: ".r9x, .addx, .ck9, input, button, select",
     start(d) {
       const id = d.el.dataset.id, s = songOf(id); if (!s) return false;
-      d.ids = libIds(id); d.label = d.ids.length > 1 ? `${d.ids.length} songs` : s.name; d.color = s.col;
+      d.ids = libIds(id); d.label = d.ids.length > 1 ? `${d.ids.length} songs` : s.name; d.color = s.col; d.sub = d.ids.length > 1 ? "" : fmt(s.audio);
       d.srcEls = d.ids.map((x) => document.querySelector(`.card9[data-id="${x}"], .row9[data-row="${x}"], #pool .ps[data-id="${x}"]`)).filter(Boolean);
     },
     move(d) { const at = setSlot(d); if (at != null) { d.at = $("songs"); d.slot = at; } },
@@ -223,7 +230,7 @@
       const el = d.el;
       if (el.dataset.b) { d.keys = ["b:" + el.dataset.b]; d.label = (el.querySelector(".bt") || el).textContent; }
       else { const id = el.dataset.id; const sel = typeof songSel !== "undefined" && songSel.size > 1 && songSel.has(id) ? setOrder.filter((x) => songSel.has(x)) : [id];
-        d.keys = sel.map((x) => "s:" + x); const s = songOf(id); d.label = sel.length > 1 ? `${sel.length} songs` : s.name; d.color = s.col; }
+        d.keys = sel.map((x) => "s:" + x); const s = songOf(id); d.label = sel.length > 1 ? `${sel.length} songs` : s.name; d.color = s.col; d.sub = sel.length > 1 ? "" : fmt(s.audio); }
       d.srcEls = d.keys.map((k) => document.querySelector(k[0] === "s" ? `#songs .song[data-id="${k.slice(2)}"]` : `#songs .brk9[data-b="${k.slice(2)}"]`)).filter(Boolean);
     },
     move(d) { const at = setSlot(d); if (at != null) { d.at = $("songs"); d.slot = at; } },
@@ -246,7 +253,7 @@
       for (let i = 0; i < rows.length; i++) { const r = rows[i].parentElement.getBoundingClientRect(); if (d.y < r.top + r.height / 2) { at = i; break; } }
       const ref = (rows[at] || rows[rows.length - 1]).parentElement.getBoundingClientRect();
       d.line = { left: Math.max(sc.left, ref.left), width: Math.min(sc.right, ref.right) - Math.max(sc.left, ref.left), top: rows[at] ? ref.top : ref.bottom, cls: "blue" };
-      d.at = d.el; d.slot = at; d.rows = rows;
+      d.at = d.el; d.slot = at; d.rows = rows; d.gap = { rows: rows.map((x) => x.parentElement), at, h: 18 };
     },
     drop(d) {
       if (d.slot == null || !d.at) return;

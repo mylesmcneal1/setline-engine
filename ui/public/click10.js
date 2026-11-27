@@ -201,6 +201,7 @@
   const store = { get: (k, d) => { try { const v = localStorage.getItem("setline." + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }, set: (k, v) => { try { localStorage.setItem("setline." + k, JSON.stringify(v)); } catch (e) {} } };
   function open(s, t, restore) {
     t = t || clickTracksOf(s)[0];
+    if (window.PE13 && t) PE13.close(); // 13 §6: one bottom panel
     if (!t) { if (typeof toast === "function") toast(`“${s.name}” has no click track: Track › Add click track`); return; }
     const same = ED && ED.s === s && ED.t === t;
     if (window.ED13) ED13.open(VID, s, restore); // 13 §5: opening frames what the timeline shows (§7: reopening the song: as it was)

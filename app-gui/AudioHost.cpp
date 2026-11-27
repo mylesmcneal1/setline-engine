@@ -665,7 +665,7 @@ juce::var AudioHost::queueNext(const juce::var& payload)
     bool anySolo = false;
     for (auto& [name, lv] : nextLevels) anySolo |= lv.solo;
     for (auto& [name, id] : nextTrackIds) {
-        const auto& lv = nextLevels[name];
+        const auto& lv = nextLevels[MappedSong::trackOf(name)];
         eng.setTrackLevel(id, lv.db, id <= -200 ? lv.mute : lv.mute || (anySolo && ! lv.solo) || lv.db <= -60.0f, true);
     }
     eng.setSegue((bool) payload["segue"]);
@@ -819,7 +819,7 @@ void AudioHost::applyLevels()
     bool anySolo = false;
     for (auto& [name, lv] : levels) anySolo |= lv.solo;
     for (auto& [name, id] : trackIds) {
-        const auto& lv = levels[name];
+        const auto& lv = levels[MappedSong::trackOf(name)]; // (13: a clip moved from another track plays with this one)
         // a MIDI track has M only: soloing audio never stops the MIDI (a guitar rig, lights)
         const bool off = id <= -200 ? lv.mute : lv.mute || (anySolo && ! lv.solo) || lv.db <= -60.0f;
         eng.setTrackLevel(id, lv.db, off);
@@ -906,7 +906,7 @@ void AudioHost::timerCallback()
         o->setProperty("peaks", peaks);
         // each track after its fader (the header meters), by track name
         auto* tr = new juce::DynamicObject();
-        for (auto& [name, id] : trackIds) if (id > -200 && name.isNotEmpty()) { const float p = eng.takeTrackPeak(id); any |= p > 0.0f; tr->setProperty(name, p); }
+        for (auto& [name, id] : trackIds) if (id > -200 && name.isNotEmpty()) { const float p = eng.takeTrackPeak(id); any |= p > 0.0f; const auto tn = MappedSong::trackOf(name); tr->setProperty(tn, juce::jmax(p, (float) (double) tr->getProperty(tn))); }
         o->setProperty("tracks", juce::var(tr));
         emit("meters", juce::var(o));
         metersLive = any || playing;
@@ -1002,7 +1002,7 @@ juce::var AudioHost::renderOffline(const juce::var& payload, const juce::var& op
     Engine::Config cfg; cfg.sampleRate = sr; cfg.numOutputs = numOut; cfg.offline = true;
     std::vector<std::string> warnings = mapped.warnings;
     if (auto err = e.load(mapped.def, cfg, warnings); ! err.empty()) { auto* o = new juce::DynamicObject(); o->setProperty("error", juce::String(err)); return juce::var(o); }
-    for (auto& [name, id] : mapped.engineTrack) { const auto& lv = mapped.levels[name]; e.setTrackLevel(id, lv.db, lv.mute || lv.db <= -60.0f); }
+    for (auto& [name, id] : mapped.engineTrack) { const auto& lv = mapped.levels[MappedSong::trackOf(name)]; e.setTrackLevel(id, lv.db, lv.mute || lv.db <= -60.0f); }
     const auto& tm = e.tempoMap();
     if (opts["loop"].isObject()) e.setLoop(tm.sampleAt((int) opts["loop"]["fromBar"], 1), tm.sampleAt((int) opts["loop"]["toBar"], 1));
     const int64_t from = tm.sampleAt(juce::jmax(1, (int) opts.getProperty("fromBar", 1)), 1);

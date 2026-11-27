@@ -51,7 +51,7 @@
   const colourSong = (s, at) => swatchPop({ left: at.clientX, right: at.clientX, top: at.clientY, bottom: at.clientY }, s.col, (c) => { snap(); s.col = c; refresh(); toast(`Changed the colour of “${s.name}”`, undo); });
   const colourTrack = (s, t, at) => swatchPop({ left: at.clientX, right: at.clientX, top: at.clientY, bottom: at.clientY }, trackCol(s, t), (c) => { snap(); (s.tcol || (s.tcol = {}))[t] = c; refresh(); toast(`Changed the colour of “${t}”`, undo); });
   const PAL_NAMES = () => (typeof PAL !== "undefined" ? PAL : []);
-  const colourItems = (cur, set, pre) => PAL_NAMES().map((c, i) => it(pre + i, "● " + c, () => set(c), { check: String(cur || "").toLowerCase() === String(c).toLowerCase() }));
+  const colourItems = (cur, set, pre) => [...PAL_NAMES().map((c, i) => it(pre + i, "● " + c, () => set(c), { check: String(cur || "").toLowerCase() === String(c).toLowerCase() })), sep(), it(pre + "w", "Colour wheel…", () => swatchPop({ left: innerWidth / 2 - 140, right: innerWidth / 2 - 140, top: 140 }, cur, set))]; // 13 §10
   const addToSet = (ids) => { ids = ids.filter((id) => !setOrder.includes(id)); if (!ids.length) { toast("Already in " + curSetObj().name); return; } snap(); ids.forEach((id) => setOrder.push(id)); refresh(); toast(`Added ${ids.length > 1 ? ids.length + " songs" : "“" + songOf(ids[0]).name + "”"} to ${curSetObj().name}`, undo); };
   const remFromSet = (ids) => { ids = ids.filter((id) => setOrder.includes(id)); if (!ids.length) return; if (typeof removeFromSet === "function") removeFromSet(ids); };
   // Make sections from cues (10c makes it a preview with ghost sections; until then: replace or fill, with Undo)
@@ -168,7 +168,7 @@
     const view = [
       it("tabShow", "Show", () => tab("show"), { key: "cmd+1", check: !(typeof perfOn !== "undefined" && perfOn) && !(typeof bandOn !== "undefined" && bandOn) }),
       it("tabPerform", "Perform", () => tab("perform"), { key: "cmd+2", check: typeof perfOn !== "undefined" && perfOn }),
-      it("tabBand", "Band", () => tab("band"), { key: "cmd+3", check: typeof bandOn !== "undefined" && bandOn }), sep(),
+      it("tabBand", "Remote", () => tab("band"), { key: "cmd+3", check: typeof bandOn !== "undefined" && bandOn }), sep(),
       it("cards", "Cards", () => SL9.setMode("cards"), { key: "cmd+alt+1", check: v === "cards" }),
       it("folders", "Folders", () => SL9.setMode("folders"), { key: "cmd+alt+2", check: v === "folders" }),
       it("collapseAll", "Collapse all", () => SL9.collapseAll(), { key: "cmd+alt+left" }), sep(),

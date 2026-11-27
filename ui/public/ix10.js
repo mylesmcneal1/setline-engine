@@ -161,7 +161,7 @@
   document.addEventListener("keyup", () => setTimeout(syncBar, 0), true);
 
   // ================================================================ 1. ⌘K: search or do anything
-  const HELP = [["How sections work", "click-versions-sections"], ["How the click works", "click-versions-sections"], ["Versions of a song", "click-versions-sections"], ["Setlists and breaks", "breaks"], ["Band screens", "phase6g-satellites"],
+  const HELP = [["How sections work", "click-versions-sections"], ["How the click works", "click-versions-sections"], ["Versions of a song", "click-versions-sections"], ["Setlists and breaks", "breaks"], ["Remote screens", "phase6g-satellites"],
     ["Importing from Ableton Live", "ableton-import"], ["Menus and shortcuts", "menus"], ["Keyboard shortcuts", "__sheet"], ["Quick start", "__qs"], ["Drag, zoom and rename", "drag-zoom-rename"], ["The song timeline", "timeline"]];
   const SETTINGS = () => (typeof SET_TABS !== "undefined" ? SET_TABS : []).map(([k, l]) => [l, k]).concat([["Click & cues › Count-in sections", "general"], ["Audio › Interface and buffer", "audio"], ["Outputs › Rename outputs", "out"], ["Controls › Pedals and MIDI controllers", "controls"]]);
   // a fuzzy score: the typed text anywhere scores best; otherwise every letter in order, each one continuing a run
@@ -258,7 +258,7 @@
     { id: "songs", t: "Bring in your songs", d: "Import an Ableton project, or drop audio files here", done: songs.length > 0, b: "Import Ableton…", go: () => SLMenus.run("m:importAbleton"), pri: true },
     { id: "click", t: "Check the click and cues", d: "Play one song and listen; adjust the click in its lanes", done: !!store.get("qsPlayed", false), b: "Show me", go: () => { const s = songs[0]; if (s) { openSong(s.id); note("Press Space to play “" + s.name + "” and listen to the click and cues"); } else note("Bring in a song first"); } },
     { id: "set", t: "Build a setlist", d: "Drag songs into the setlist on the left, then add breaks", done: (typeof setlists !== "undefined" ? setlists : []).some((l) => (l.order || []).some((id) => songs.some((x) => x.id === id))), b: "Show me", go: () => { if (typeof setPanel === "function") setPanel("L", true); const el = $("songs"); if (el) { el.classList.add("flash10"); setTimeout(() => el.classList.remove("flash10"), 1600); } note("Drag a card onto the setlist on the left, or right-click a song › Add to setlist"); } },
-    { id: "band", t: "Connect the band's screens", d: "Scan the QR code with the drummer's iPad", done: typeof BDEVS !== "undefined" && BDEVS.length > 0, b: "Show QR", go: () => { const a = document.querySelector('.tabs a[data-tab="band"]'); if (a) a.click(); } },
+    { id: "band", t: "Connect the remote screens", d: "Scan the QR code with the drummer's iPad", done: typeof BDEVS !== "undefined" && BDEVS.length > 0, b: "Show QR", go: () => { const a = document.querySelector('.tabs a[data-tab="band"]'); if (a) a.click(); } },
   ];
   // the first Play ticks "Check the click and cues"
   const TG = window.toggle; if (TG) window.toggle = function () { const r = TG.apply(this, arguments); if (typeof playing !== "undefined" && playing) store.set("qsPlayed", true); return r; };

@@ -1,4 +1,4 @@
-// set.Line band screens (6g): the web app on the band's phones and tablets (band.html, served by set.Line).
+// set.Line remote screens (6g): the web app on the band's phones and tablets (band.html, served by set.Line).
 // One WebSocket to the host; reconnects by itself (backoff); the clock is synced every few seconds (NTP-style, the
 // median of the last 8); between the host's updates (15 a second) everything that moves (beat lights, bars left,
 // countdowns) is predicted from the synced clock and the setlist's bars, so a laggy Wi-Fi device still flashes on
@@ -18,7 +18,7 @@ let confirmAsk: { w: string; until: number } | null = null;
 let pinNeeded = false;
 const store = { get screen() { return localStorage.getItem("setline.band.screen") || ""; }, set screen(v: string) { localStorage.setItem("setline.band.screen", v || ""); },
   get pin() { return localStorage.getItem("setline.band.pin") || ""; }, set pin(v: string) { localStorage.setItem("setline.band.pin", v || ""); } };
-// ?screen=<id> picks the screen (a link per device from the Band page)
+// ?screen=<id> picks the screen (a link per device from the Remote page)
 { const q = new URLSearchParams(location.search).get("screen"); if (q) store.screen = q; }
 const now = () => performance.timeOrigin + performance.now();
 const hostNow = () => clock.hostNow(now());
@@ -84,7 +84,7 @@ function overlay(msg = "") {
   document.body.style.filter = "";
   if (pinNeeded) {
     o.className = "show";
-    o.innerHTML = `<h1>Join PIN</h1><p>${esc(msg) || "This band’s screens need a PIN (Settings › Band on the host)."}</p><div class="pick"><input id="pinIn" inputmode="numeric" autocomplete="off" placeholder="PIN"><button id="pinGo">Join</button></div>`;
+    o.innerHTML = `<h1>Join PIN</h1><p>${esc(msg) || "This remote screens need a PIN (Settings › Remote on the host)."}</p><div class="pick"><input id="pinIn" inputmode="numeric" autocomplete="off" placeholder="PIN"><button id="pinGo">Join</button></div>`;
     const go = () => { store.pin = (document.getElementById("pinIn") as HTMLInputElement).value.trim(); send({ t: "hello", screen: store.screen, pin: store.pin }); };
     $("pinGo").onclick = go; (document.getElementById("pinIn") as HTMLInputElement).onkeydown = (e) => { if (e.key === "Enter") go(); };
     return;
@@ -112,7 +112,7 @@ function layout() {
   if (key === built) return;
   built = key;
   g.innerHTML = list.map((w: any) => `<div class="w" data-w="${esc(w.id)}" style="left:${(w.x / 12) * 100}%;top:${(w.y / 9) * 100}%;width:${(w.w / 12) * 100}%;height:${(w.h / 9) * 100}%"><div class="wi"></div></div>`).join("")
-    || `<div style="display:flex;height:100%;align-items:center;justify-content:center;color:var(--muted)">“${esc(screen.name)}” has no widgets yet: add some on the Band page.</div>`;
+    || `<div style="display:flex;height:100%;align-items:center;justify-content:center;color:var(--muted)">“${esc(screen.name)}” has no widgets yet: add some on the Remote page.</div>`;
   g.querySelectorAll<HTMLElement>(".w").forEach((el) => { el.addEventListener("click", (e) => tap(el.dataset.w!, e)); });
   cache.clear();
 }
@@ -173,7 +173,7 @@ function frame() {
           <div style="font:500 3vh system-ui;color:#aaa">${b.next ? `Next: <b style="color:#fff;font-family:var(--title,inherit)">${esc(b.next.name)}</b> · ${esc(b.next.bpm)} BPM${b.next.tun ? " · " + esc(b.next.tun) : ""} · ${b.auto && l > 0 ? "starts automatically" : "when ready"}` : "The end of the set"}</div>`);
       }
     } }
-  // 9c: the band screens use the app's title font for song names (their own look otherwise)
+  // 9c: the remote screens use the app's title font for song names (their own look otherwise)
   { const tf = (st as any).tf as string | undefined; if (tf && document.documentElement.dataset.tf !== tf) { document.documentElement.dataset.tf = tf; document.documentElement.style.setProperty("--title", `"${tf}", -apple-system, sans-serif`); } }
   // 9c: the show is playing on the host computer's own outputs: a small red chip on every screen
   { let c = document.getElementById("pcChip"); const on = !!(st as any).pc; if (on && !c) { c = document.createElement("div"); c.id = "pcChip"; c.textContent = "computer outputs"; c.style.cssText = "position:fixed;top:6px;right:8px;z-index:50;padding:2px 8px;border-radius:7px;border:1px solid #ff453a;background:rgba(255,69,58,.18);color:#ff8a82;font:600 12px system-ui,sans-serif;pointer-events:none"; document.body.appendChild(c); } if (c) c.style.display = on ? "" : "none"; }

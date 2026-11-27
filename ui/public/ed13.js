@@ -142,10 +142,14 @@
     return !!document.querySelector('.folder.open[data-id="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]');
   }
   function closePops() { document.querySelectorAll('.ipop, .xm.ctx, .pop13').forEach((x) => x.remove()); if (typeof closeTpop === 'function') try { closeTpop(); } catch (e) {} const mp = document.getElementById('mpop'); if (mp) mp.style.display = 'none'; }
+  const WAS = new Map(); // kind -> "song|track" while its song is on screen (only a song that goes away closes it)
   function watch() {
     for (const [kind, o] of KINDS) {
-      const cur = o.current(); if (!cur) continue;
-      if (!songShown(cur.song)) { PEND[cur.song] = { kind, track: cur.track }; o.close(true); closePops(); }
+      const cur = o.current(); if (!cur) { WAS.delete(kind); continue; }
+      const key = cur.song + "|" + cur.track, shown = songShown(cur.song);
+      if (shown) { WAS.set(kind, key); continue; }
+      if (WAS.get(kind) !== key) continue; // opened while its song wasn't on screen (a menu, the cards): it stays
+      WAS.delete(kind); PEND[cur.song] = { kind, track: cur.track }; o.close(true); closePops();
     }
     for (const id of Object.keys(PEND)) {
       if (!songShown(id)) continue; const p = PEND[id]; delete PEND[id];
