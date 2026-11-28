@@ -167,9 +167,13 @@ const measure = (text, px, weight, fam) => {
   try { if (!MC && typeof document !== "undefined") MC = document.createElement("canvas").getContext("2d"); } catch (e) { MC = null; }
   if (!MC) return String(text).length * px * 0.6;
   const k = `${weight}|${fam || ""}|${text}`; let w = MCACHE.get(k);
-  if (w === undefined) { MC.font = `${weight || 700} 100px ${famCss(fam)}`; w = MC.measureText(String(text)).width / 100 * calib(weight, fam); if (MCACHE.size > 4000) MCACHE.clear(); MCACHE.set(k, w); }
+  // the system font (SF on the Mac) has optical sizes: it's wider at text sizes than at 100 px, so it's measured at
+  // 12 px (the widest; a big size then comes out a little small, never too big)
+  const ref = refOf(fam);
+  if (w === undefined) { MC.font = `${weight || 700} ${ref}px ${famCss(fam)}`; w = MC.measureText(String(text)).width / ref * calib(weight, fam); if (MCACHE.size > 4000) MCACHE.clear(); MCACHE.set(k, w); }
   return w * px;
 };
+const refOf = (fam) => (!fam || fam === "System" ? 12 : 100);
 // the canvas and the page don't always draw a font alike (Chrome on macOS: the system font): each font is measured
 // once both ways and the canvas's widths corrected (never made smaller: that's the safe side)
 const CAL = new Map();
@@ -177,8 +181,8 @@ function calib(weight, fam) {
   const k = `${weight}|${fam || ""}`; let c = CAL.get(k); if (c !== undefined) return c;
   c = 1;
   try { if (document.body) { const s = document.createElement("span"), t = "Mercy Dies With You · 0123456789 hold to press";
-    s.style.cssText = `position:absolute;left:-9999px;top:0;white-space:nowrap;font:${weight || 700} 100px ${famCss(fam)};letter-spacing:0`; s.textContent = t; document.body.appendChild(s);
-    MC.font = `${weight || 700} 100px ${famCss(fam)}`; const cw = MC.measureText(t).width, dw = s.getBoundingClientRect().width; s.remove(); if (cw > 0 && dw > 0) c = Math.max(1, dw / cw); } } catch (e) { c = 1; }
+    s.style.cssText = `position:absolute;left:-9999px;top:0;white-space:nowrap;font:${weight || 700} ${refOf(fam)}px ${famCss(fam)};letter-spacing:0`; s.textContent = t; document.body.appendChild(s);
+    MC.font = `${weight || 700} ${refOf(fam)}px ${famCss(fam)}`; const cw = MC.measureText(t).width, dw = s.getBoundingClientRect().width; s.remove(); if (cw > 0 && dw > 0) c = Math.max(1, dw / cw); } } catch (e) { c = 1; }
   CAL.set(k, c); return c;
 }
 // the fonts arrive after the first frames: the sizes are measured again then
