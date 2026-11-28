@@ -1,0 +1,175 @@
+/* set.Line 15: styles for rm15.js (the Remote page's editor), te15.js (track editors), ac15.js (click accents),
+   cs15.js (cue speed), the Key Commands grid, Folders' play group and the import review. */
+
+/* ---------------------------------------------------------------- §3-§5, §7 the Remote page */
+.bandv { grid-template-columns: 210px minmax(0, 1fr) 256px; }
+.rm15m { padding: 10px 14px 8px; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.rm15bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+.rm15bar .btn { white-space: nowrap; }
+.rm15name { width: 150px; font-weight: 600; }
+.rm15bar2 { gap: 5px; }
+.rm15st, .rm15tg { display: inline-flex; align-items: center; gap: 3px; padding: 3px 6px; border-radius: 8px; background: rgba(255, 255, 255, .05); border: 1px solid rgba(255, 255, 255, .06); height: 28px; box-sizing: border-box; }
+.rm15st b, .rm15tg b { font: 700 9.5px var(--ui, Inter), sans-serif; letter-spacing: .1em; text-transform: uppercase; color: #8b90a0; margin-right: 2px; }
+.rm15st b:empty { display: none; }
+.rm15st button { all: unset; width: 20px; height: 20px; border-radius: 6px; background: rgba(255, 255, 255, .08); text-align: center; line-height: 19px; cursor: pointer; color: #d7dae0; font-size: 13px; }
+.rm15st button:hover { background: rgba(255, 255, 255, .16); }
+.rm15st input { width: 30px; text-align: center; background: transparent; border: 0; color: #fff; font: 600 13px var(--nums, ui-monospace, monospace); padding: 0; -moz-appearance: textfield; }
+.rm15st input::-webkit-inner-spin-button, .rm15st input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.rm15st em { font-style: normal; color: #7d838e; font-size: 11px; }
+.rm15x { color: #7d838e; font-size: 12px; margin: 0 -2px; }
+.rm15tg { cursor: pointer; color: inherit; font: inherit; }
+.rm15tg i { width: 26px; height: 15px; border-radius: 8px; background: #3a3a40; position: relative; transition: background .12s; }
+.rm15tg i::after { content: ""; position: absolute; left: 2px; top: 2px; width: 11px; height: 11px; border-radius: 50%; background: #fff; transition: transform .12s; }
+.rm15tg.on i { background: #30d158; } .rm15tg.on i::after { transform: translateX(11px); }
+.rm15al { display: inline-flex; gap: 1px; padding: 2px; border-radius: 8px; background: rgba(255, 255, 255, .05); }
+.rm15al .ibtn { width: 24px; height: 24px; color: #c9ccd3; } .rm15al .ibtn:disabled { opacity: .3; }
+.rm15sw { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; box-shadow: 0 0 0 1px rgba(255, 255, 255, .2); }
+.rm15wrap { flex: 1; min-height: 0; display: flex; justify-content: center; align-items: flex-start; padding: 8px 0 4px; }
+.rm15frame { position: relative; border-radius: 16px; box-shadow: 0 0 0 6px #2a2a2e, 0 12px 40px rgba(0, 0, 0, .5); overflow: hidden; background: #000; flex: none; }
+.rm15frame.phone { border-radius: 26px; box-shadow: 0 0 0 8px #2a2a2e, 0 12px 40px rgba(0, 0, 0, .5); }
+.rm15dev { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.rm15grid { position: absolute; left: 0; right: 0; pointer-events: none; background-image: linear-gradient(to right, rgba(255, 255, 255, .07) 1px, transparent 1px), linear-gradient(to bottom, rgba(255, 255, 255, .07) 1px, transparent 1px); }
+.rm15safe { position: absolute; left: 0; right: 0; background: repeating-linear-gradient(135deg, rgba(255, 255, 255, .045) 0 6px, transparent 6px 12px); pointer-events: none; display: flex; align-items: center; justify-content: center; }
+.rm15safe.t { top: 0; } .rm15safe.b { bottom: 0; }
+.rm15safe span { font: 600 11px var(--ui, Inter), sans-serif; color: rgba(255, 255, 255, .25); letter-spacing: .1em; text-transform: uppercase; }
+.rm15area { position: absolute; left: 0; right: 0; outline: none; }
+.rm15area .s5w { cursor: grab; touch-action: none; }
+.rm15area .s5w > .s5wi { pointer-events: none; }
+.rm15area .s5w.sel > .s5wi { outline: 3px solid #0a84ff; outline-offset: 1px; }
+.rm15area .s5w:hover:not(.sel) > .s5wi { outline: 2px solid rgba(255, 255, 255, .28); outline-offset: 1px; }
+.rm15rs { position: absolute; right: 2px; bottom: 2px; width: 22px; height: 22px; cursor: nwse-resize; background: linear-gradient(135deg, transparent 50%, #0a84ff 50%); border-bottom-right-radius: 10px; z-index: 2; }
+.rm15more { position: absolute; right: 6px; top: 6px; z-index: 2; width: 34px; height: 26px; border-radius: 8px; border: 0; background: rgba(0, 0, 0, .65); color: #fff; font-size: 18px; line-height: 20px; cursor: pointer; opacity: 0; transition: opacity .1s; }
+.rm15area .s5w:hover .rm15more, .rm15area .s5w.sel .rm15more { opacity: 1; }
+.rm15gl { position: absolute; background: #ff453a; pointer-events: none; z-index: 3; }
+.rm15gl.v { top: 0; bottom: 0; width: 2px; margin-left: -1px; } .rm15gl.h { left: 0; right: 0; height: 2px; margin-top: -1px; }
+.rm15box { position: absolute; border: 2px solid #0a84ff; background: rgba(10, 132, 255, .14); pointer-events: none; z-index: 4; }
+.rm15hint { font-size: 11px; margin: 6px 0 0; }
+.rm15r { padding: 10px 10px 16px; display: flex; flex-direction: column; gap: 8px; }
+.rm15lib h4, .rm15insp h4 { font: 700 10px var(--ui, Inter), sans-serif; letter-spacing: .1em; text-transform: uppercase; color: #8b90a0; margin: 2px 0 6px; }
+.rm15g { font-size: 10.5px; color: #7d838e; margin: 8px 0 3px; }
+.rm15lib .bwl { padding: 5px 9px; margin-bottom: 3px; font-size: 12px; }
+.rm15insp { border-top: 1px solid var(--line, rgba(255, 255, 255, .08)); padding-top: 10px; font-size: 12.5px; }
+.rm15pos { color: #c9ccd3; margin-bottom: 6px; }
+.rm15xy { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-bottom: 8px; }
+.rm15xy label { display: flex; flex-direction: column; gap: 2px; font: 600 10.5px var(--nums, ui-monospace, monospace); color: #8b90a0; }
+.rm15xy input { width: 100%; box-sizing: border-box; padding: 3px 4px; }
+.rm15stl { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; color: #c9ccd3; }
+.rm15stl .btn { margin-left: auto; }
+.rm15set .rf { margin-bottom: 6px; }
+.rm15pop { width: 300px; }
+.rm15sp b { display: block; font-size: 14px; margin-bottom: 8px; }
+.rm15sp h5 { font: 700 10px var(--ui, Inter), sans-serif; letter-spacing: .1em; text-transform: uppercase; color: #8b90a0; margin: 10px 0 5px; }
+.rm15sp .segm { display: flex; } .rm15sp .segm button { flex: 1; }
+.rm15sp input[type=range] { width: 100%; }
+.rm15alg { display: flex; gap: 12px; align-items: center; }
+.rm15alg span { font-size: 11.5px; color: #8b90a0; line-height: 1.35; } .rm15alg span b { display: inline; font-size: 12.5px; color: #e9ebef; margin: 0; }
+.rm15g3 { display: grid; grid-template-columns: repeat(3, 26px); gap: 4px; }
+.rm15g3 button { all: unset; width: 26px; height: 22px; border-radius: 6px; background: rgba(255, 255, 255, .07); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.rm15g3 button i { width: 5px; height: 5px; border-radius: 50%; background: #8b90a0; }
+.rm15g3 button.on { background: #0a84ff; } .rm15g3 button.on i { background: #fff; }
+.rm15row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 8px 0 0; font-size: 13px; }
+.rm15sp p { font-size: 11px; margin: 10px 0 0; line-height: 1.4; }
+.rm15name { width: 118px; }
+.bandv .bl .bfields .btn { font-size: 11.5px; padding: 4px 7px; white-space: nowrap; }
+.bandv .bl .bfields > div { flex-wrap: wrap; }
+
+/* ---------------------------------------------------------------- §11 Key Commands: one grid, sticky headers */
+.kc13 { width: min(760px, 94vw); }
+.kc13l { position: relative; padding-top: 0; }
+.kc15h, .kc13r { display: grid; grid-template-columns: minmax(0, 1fr) 118px 150px 30px; align-items: center; gap: 10px; }
+.kc15h { position: sticky; top: 0; z-index: 3; padding: 8px 8px 6px; background: #2b2b2d; border-bottom: 1px solid rgba(255, 255, 255, .08); font: 700 10px var(--ui, Inter), sans-serif; letter-spacing: .1em; text-transform: uppercase; color: #8b90a0; }
+.kc13g { position: sticky; top: 29px; z-index: 2; background: #2b2b2d; margin: 0; padding: 10px 8px 4px; }
+.kc13r { padding: 3px 8px; min-height: 0; }
+.kc13n { min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.kc13n b, .kc13n small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.kc13n b { font-weight: 500; font-size: 13px; }
+.kc13n small { color: #7d838e; font-size: 10.5px; }
+.kc13k { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kc13r.kc15fx { cursor: default; } .kc13r.kc15fx .kc13n b, .kc13r.kc15fx .kc13k { opacity: .6; }
+.kc15lock { display: flex; justify-content: center; color: #7d838e; }
+.kc13r .ibtn[data-a="rs"] { justify-self: center; }
+.kc13n b { margin: 0; }
+.kc13 .si13h > span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------------------------------------------------------------- §8 the import review: several rows at once */
+.abtable tr[data-row] { cursor: default; }
+.abtable tr.absel td { background: rgba(10, 132, 255, .16); }
+.abtable tr.absel td:first-child { box-shadow: inset 3px 0 0 #0a84ff; }
+.ablelist:focus { outline: none; }
+
+/* ---------------------------------------------------------------- §1 Cues › Speed… */
+.cs15pop { width: 300px; }
+.cs15h { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; } .cs15h b { font-size: 15px; } .cs15v { font-size: 15px; color: #fff; }
+.cs15r { width: 100%; }
+.cs15t { display: flex; justify-content: space-between; font-size: 11px; color: #8b90a0; margin: 2px 0 10px; }
+.cs15m { display: flex; } .cs15m button { flex: 1; }
+.cs15p { font-size: 12px; color: #a5aab4; line-height: 1.45; margin: 10px 0; }
+#cs15chip { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 9000; padding: 6px 12px; border-radius: 9px; background: rgba(28, 28, 31, .95); border: 1px solid rgba(255, 255, 255, .12); color: #d7dae0; font: 500 12px var(--ui, Inter), sans-serif; box-shadow: 0 8px 24px rgba(0, 0, 0, .4); }
+#cs15chip.done { color: #5fe08a; }
+
+/* ---------------------------------------------------------------- §12 click accents (ac.png) */
+.ac15h { display: inline-flex; align-items: center; gap: 6px; }
+.ac15b { border-color: rgba(245, 197, 24, .7) !important; color: #f5c518 !important; font-weight: 600; white-space: nowrap; }
+.ac15pop { width: 560px; max-width: 92vw; padding: 14px 16px !important; }
+.ac15 h5 { font: 700 10.5px var(--ui, Inter), sans-serif; letter-spacing: .12em; text-transform: uppercase; color: #8b90a0; margin: 2px 0 8px; display: flex; align-items: center; gap: 10px; }
+.ac15 h5 + .ac15m { margin-top: 0; }
+.ac15m { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px 10px; border-radius: 9px; cursor: pointer; font-size: 14px; color: #e9ebef; }
+.ac15m:hover { background: rgba(255, 255, 255, .04); } .ac15m.on { background: rgba(255, 255, 255, .07); }
+.ac15m i { width: 15px; height: 15px; border-radius: 50%; box-shadow: inset 0 0 0 2px #8b90a0; flex: none; }
+.ac15m.on i { box-shadow: inset 0 0 0 2px #ff9f0a, inset 0 0 0 5px #2c2c2e; background: #ff9f0a; }
+.ac15m span { flex: 1; } .ac15m em { font: 13px var(--nums, ui-monospace, monospace); font-style: normal; color: #8b90a0; letter-spacing: .08em; }
+.ac15 h5:nth-of-type(2) { margin-top: 14px; }
+.ac15fill { margin-left: auto; display: inline-flex; text-transform: none; letter-spacing: 0; }
+.ac15fill button { font-size: 11px; padding: 2px 8px; }
+.ac15steps { display: grid; gap: 4px; }
+.ac15s { all: unset; box-sizing: border-box; height: 52px; border-radius: 7px; background: rgba(255, 255, 255, .05); display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; padding: 5px 0 4px; cursor: pointer; min-width: 0; }
+.ac15s i { width: 70%; border-radius: 3px; }
+.ac15s.A1 i { height: 26px; background: #ff9f0a; } .ac15s.A i { height: 22px; background: #ffbf6b; } .ac15s.C i { height: 10px; background: #f5c518; } .ac15s.off i { height: 3px; background: rgba(255, 255, 255, .15); }
+.ac15s span { font: 11px var(--nums, ui-monospace, monospace); color: #a5aab4; }
+.ac15s:hover { background: rgba(255, 255, 255, .1); }
+.ac15lv { display: flex; gap: 18px; margin: 14px 0 12px; font-size: 13.5px; color: #c9ccd3; flex-wrap: wrap; }
+.ac15lv label { display: inline-flex; align-items: center; gap: 4px; }
+.ac15lv input { width: 46px; font-weight: 700; text-align: right; padding: 2px 4px; }
+.ac15lv b { font-weight: 700; color: #fff; }
+.ac15a { display: flex; gap: 8px; align-items: center; }
+#clk10 .ch10 .cbars10 { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#clk10 .ch10 .seg10 button { padding-left: 7px; padding-right: 7px; }
+#clk10, #pe13, #ate15 { min-width: 0; max-width: 100%; box-sizing: border-box; }
+#clk10 .ch10, #pe13 .ch10 { min-width: 0; }
+#clk10 .ch10 { gap: 4px; }
+#clk10 .ch10 .clab10 { margin-left: 2px; }
+.ac15lv input { width: 52px; -moz-appearance: textfield; } .ac15lv input::-webkit-inner-spin-button, .ac15lv input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* ---------------------------------------------------------------- §2 the audio track editor (te1.png) */
+#ate15 { position: relative; flex: none; display: flex; flex-direction: column; border-top: 1px solid rgba(255, 255, 255, .1); background: #121317; outline: none; min-height: 190px; }
+#ate15 .crz10 { position: absolute; left: 0; right: 0; top: -3px; height: 6px; cursor: ns-resize; z-index: 2; }
+#ate15 .ch10 { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid rgba(255, 255, 255, .06); font-size: 12.5px; flex-wrap: nowrap; overflow: hidden; min-width: 0; }
+#ate15 .ch10 > b { font-size: 14px; color: #fff; white-space: nowrap; }
+#ate15 .ate15ic { display: inline-flex; } #ate15 .ate15k { color: #8b90a0; white-space: nowrap; }
+#ate15 .ch10 .btn { height: 26px; padding: 0 10px; font-size: 12px; white-space: nowrap; }
+#ate15 .ate15b { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+#ate15 .ate15l { position: absolute; left: 0; top: 0; bottom: 0; width: var(--head, 230px); max-width: 260px; padding: 14px 18px 10px 16px; box-sizing: border-box; border-right: 1px solid rgba(255, 255, 255, .06); overflow: auto; }
+#ate15 .ate15c { position: absolute; top: 0; display: block; touch-action: none; }
+#ate15 h6 { font: 700 10.5px var(--ui, Inter), sans-serif; letter-spacing: .12em; text-transform: uppercase; color: #8b90a0; margin: 4px 0 8px; }
+#ate15 .ate15v { display: flex; align-items: center; gap: 8px; } #ate15 .ate15v input { flex: 1; min-width: 0; } #ate15 .ate15db { font: 600 12px var(--nums, ui-monospace, monospace); min-width: 40px; text-align: right; color: #d7dae0; }
+#ate15 .ate15ms { display: flex; align-items: center; gap: 6px; margin: 12px 0 16px; }
+#ate15 .ate15ms button { all: unset; box-sizing: border-box; width: 26px; height: 22px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, .22); text-align: center; font: 700 11px var(--ui, Inter), sans-serif; line-height: 20px; color: #c9ccd3; cursor: pointer; }
+#ate15 .ate15ms button.on.ate15m { background: #ffb340; color: #000; border-color: #ffb340; } #ate15 .ate15ms button.on.ate15s { background: #0a84ff; color: #fff; border-color: #0a84ff; }
+#ate15 .ate15ms canvas { margin-left: auto; width: 110px; height: 6px; border-radius: 3px; }
+#ate15 .ate15sel { font-size: 13px; color: #d7dae0; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+#ate15 .ate15sel label { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+#ate15 .ate15sel input { width: 52px; padding: 2px 4px; font-weight: 700; text-align: right; }
+#ate15 .ate15nm { width: 100%; margin: 2px 0 0; font-size: 11.5px; }
+#ate15 .ate15sel input { -moz-appearance: textfield; } #ate15 .ate15sel input::-webkit-inner-spin-button, #ate15 .ate15sel input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* ---------------------------------------------------------------- §10 Folders: play / restart on every row */
+.row9 > .r9h .tr13.fo15 { margin: 0 4px 0 8px; opacity: 0; transition: opacity .1s; }
+.row9 > .r9h:hover .tr13.fo15, .row9 > .r9h:focus-within .tr13.fo15, .row9 > .r9h .tr13.fo15.on { opacity: 1; }
+.row9 > .r9h .tr13.fo15:not(.on) .tr13b { display: none; }
+.row9 > .r9h .tr13.fo15.on .tr13p { color: #fff; background: #30d158; box-shadow: none; }
+.row9 > .r9h:focus-visible { outline: 2px solid var(--accent, #f5a524); outline-offset: -2px; }
+/* the play group gets its own column, before ⋯ */
+.row9 .r9h { grid-template-columns: auto 16px minmax(120px, 1.4fr) minmax(150px, auto) minmax(90px, 1fr) minmax(120px, 1.6fr) auto 26px; }
+body:not(.sel9) .row9 .r9h { grid-template-columns: 16px minmax(120px, 1.4fr) minmax(150px, auto) minmax(90px, 1fr) minmax(120px, 1.6fr) auto 26px; }
+@media (max-width: 1400px) { body:not(.sel9) .row9 .r9h { grid-template-columns: 16px minmax(110px, 1.4fr) auto minmax(60px, .8fr) minmax(90px, 1.2fr) auto 26px; gap: 10px; } }
+.row9 > .r9h .tr13.fo15 { margin: 0; gap: 6px; }

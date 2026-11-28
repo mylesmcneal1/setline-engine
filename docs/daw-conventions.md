@@ -130,4 +130,9 @@
 - **Add section on a bar inside a section splits it** (Phase 14), as adding a locator splits an arrangement section;
   on a section's first bar it splits that section in half, since sections never overlap.
 
+- **A single click on a track header opens that track's editor at the bottom** (Phase 15; Ableton opens the detail
+  view from a clip). A set.Line track is one clip or one lane, so its header is the quickest way in; the same header
+  again or Esc closes it, and ⇧ / ⌘-click still select several tracks without opening anything.
+- **⇧⌘A is Deselect All** (Phase 15, as in Logic); Add to setlist moved to ⌥⌘A.
+
 (Add to this list, with a reason, whenever set.Line deliberately departs from a convention.)

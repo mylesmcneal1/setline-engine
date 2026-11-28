@@ -5,6 +5,7 @@
 #include "Package.h"
 #include "AbletonImport.h"
 #include "Updater.h"
+#include "Secrets.h"
 #include "Media.h"
 #include "WebUi.h"
 #include <set>
@@ -80,7 +81,7 @@ Bridge::Bridge(AudioHost& host, juce::PropertiesFile& settings) : audio(host), s
         juce::String err;
         bool fellBack = false;
         auto a = cues.cached(text, c, rate, fellBack); // rendered before the load (loadSong below)
-        if (! a && pendingCues.contains(text)) return a; // 14 §3: rendering in the background; it joins when ready
+        if (! a && pendingCues.contains(text)) return cues.cachedAnySpeed(text, c, rate); // 14 §3: rendering in the background; it joins when ready (15 §1: meanwhile the same word at its old speed)
         if (! a) { auto it = cueErrors.find(text); err = it != cueErrors.end() && it->second.isNotEmpty() ? it->second : juce::String("not ready"); }
         const juce::String q = juce::String::fromUTF8("\xe2\x80\x9c"), qq = juce::String::fromUTF8("\xe2\x80\x9d");
         if (fellBack) {
@@ -781,28 +782,30 @@ Bridge::Options Bridge::addTo(Options o)
         r->setProperty("cant", updater::cantInstall(app, appVersion()));
         r->setProperty("daily", settings.getBoolValue("updateDaily", true));
         r->setProperty("lastCheck", settings.getDoubleValue("updateLastCheck", 0));
-        r->setProperty("hasToken", settings.getValue("updateToken").isNotEmpty());
+        r->setProperty("hasToken", updToken().isNotEmpty());
         r->setProperty("staged", updStaged.exists());
         return juce::var(r);
     });
     o = add(o, "updatePrefs", [this](const juce::var& a) {
         if (a.hasProperty("daily")) settings.setValue("updateDaily", (bool) a["daily"]);
-        if (a.hasProperty("token")) settings.setValue("updateToken", a["token"].toString().trim());
+        if (a.hasProperty("token")) secrets::set("github-token", a["token"].toString().trim()); // 15 §13: the Keychain / Credential Manager, never the settings or the log
         settings.saveIfNeeded();
         auto* r = new juce::DynamicObject(); r->setProperty("ok", true); return juce::var(r);
     });
     o = addAsync(o, "updateCheck", [this, appVersion](const juce::var&, auto done) {
-        const auto token = settings.getValue("updateToken"), cur = appVersion();
+        const auto token = updToken(), cur = appVersion();
         settings.setValue("updateLastCheck", (double) juce::Time::currentTimeMillis());
         auto alive_ = alive;
         std::thread([token, cur, done, alive_] {
             juce::String err;
-            auto rel = updater::fetchLatest(token, err);
-            juce::MessageManager::callAsync([rel, err, cur, done, alive_] {
+            int status = 0;
+            auto rel = updater::fetchLatest(token, err, &status);
+            juce::MessageManager::callAsync([rel, err, cur, done, alive_, status, hadToken = token.isNotEmpty()] {
                 if (*alive_ == nullptr) return;
                 auto* r = new juce::DynamicObject(); juce::var rv(r);
                 r->setProperty("current", cur);
-                if (err.isNotEmpty()) { r->setProperty("error", err); done(rv); return; }
+                // 15 §13: a private repository: ask for a token (or a better one)
+                if (err.isNotEmpty()) { r->setProperty("error", err); if (status == 401 || status == 403 || status == 404) { r->setProperty("needToken", true); r->setProperty("badToken", hadToken); r->setProperty("status", status); } done(rv); return; }
                 for (auto& [k, v] : rel.getDynamicObject()->getProperties()) r->setProperty(k, v);
                 r->setProperty("latest", rel["version"]);
                 r->setProperty("newer", updater::compareVersions(rel["version"].toString(), cur) > 0);
@@ -814,7 +817,7 @@ Bridge::Options Bridge::addTo(Options o)
         const auto app = updater::currentApp();
         const auto why = updater::cantInstall(app, appVersion());
         if (why.isNotEmpty()) { auto* r = new juce::DynamicObject(); r->setProperty("error", why); done(juce::var(r)); return; }
-        const auto token = settings.getValue("updateToken"), url = a["asset"]["url"].toString(), sums = a["sums"]["url"].toString(), name = updater::assetName();
+        const auto token = updToken(), url = a["asset"]["url"].toString(), sums = a["sums"]["url"].toString(), name = updater::assetName();
         const auto work = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("setline-update");
         auto alive_ = alive;
         std::thread([this, token, url, sums, name, work, app, done, alive_] {
@@ -991,6 +994,15 @@ void Bridge::withCues(const juce::var& a, std::function<void()> then, bool wait)
             auto* o = new juce::DynamicObject(); o->setProperty("songId", songId); emit("cuesReady", juce::var(o));
         }
     });
+}
+
+// 15 §13: the update token lives in the Keychain / Credential Manager; a token an older set.Line kept in its settings
+// moves there once (and leaves the settings file). Never logged.
+juce::String Bridge::updToken()
+{
+    const auto old = settings.getValue("updateToken");
+    if (old.isNotEmpty()) { if (secrets::set("github-token", old)) { settings.removeValue("updateToken"); settings.saveIfNeeded(); } return old; }
+    return secrets::get("github-token");
 }
 
 Bridge::Options Bridge::addRest(Options o)

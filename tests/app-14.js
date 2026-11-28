@@ -61,6 +61,12 @@ try {
     await playAfter("audio clip trimmed", () => { const t = s.tracks.find((x) => P.ROLE[x] !== "click" && P.ROLE[x] !== "cues" && !isMidiTrack(s, x)); const c = clipsOf(s, t)[0]; c.end = Math.max(c.start + 2, c.end - 1.5); });
     await playAfter("click edited", () => { const c = SLClick.keep(s, "Click"); if (c.notes[5]) c.notes[5].v = 70; });
     await playAfter("MIDI edited", () => { s.midi[mt].push({ id: "m" + Date.now(), kind: "cc", cc: 7, val: 90, bar: 2, beat: 1 }); });
+    // 15 §1: Cues › Speed: the words are made again in the background; Play doesn't wait (the old ones play meanwhile)
+    const sp = 1.3 + (+RUN % 7) * 0.01; // a speed this computer hasn't rendered yet
+    await playAfter("cue speed changed (Cues › Speed)", () => { CUEV.speed = +sp.toFixed(2); });
+    if (natural && hooks.SLE.cueProgress) { let pr = null; const t0 = performance.now(); for (let i = 0; i < 240; i++) { pr = await hooks.SLE.cueProgress(i === 0); if (pr && pr.total && pr.ready >= pr.total) break; await wait(500); }
+      res.speedWords = pr; check(`15 §1 the words at the new speed are made in the background (${pr && pr.ready} of ${pr && pr.total} after ${Math.round((performance.now() - t0) / 1000)} s)`, !!pr && pr.total > 0 && pr.ready >= pr.total, pr); }
+    CUEV.speed = 1;
     const base = res.times["Play, nothing edited"].slice().sort((a, b) => a - b)[1];
     res.baselineMs = base;
     // the words that weren't ready at Play: rendered in the background, then they join the song (Diagnostics says so)

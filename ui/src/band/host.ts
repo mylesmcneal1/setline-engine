@@ -5,6 +5,7 @@
 // (logic.allowed) and then run exactly like the keyboard actions. Nothing here touches the audio: a screen that
 // disappears is just a client less.
 import * as logic from "./logic.js";
+import * as widgets from "./widgets.js";
 import qrcode from "qrcode-generator";
 import type { SetLineBridge } from "../bridge";
 
@@ -14,7 +15,8 @@ export function qrSVG(text: string): string {
   q.make();
   return q.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
 }
-(window as any).SLBand = { ...logic, qrSVG };
+// 15: the widgets' look and the screen grid / devices / stacked phone layout, for the Remote page's editor (rm15.js)
+(window as any).SLBand = { ...logic, ...widgets, qrSVG };
 
 interface Client { screen: string | null; address: string; ok: boolean; device: string }
 type Page = () => any;

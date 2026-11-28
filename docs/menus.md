@@ -118,3 +118,20 @@ page's single keys (Space, N, P, V, C, K, L, [, ], = −, ⌥ scroll, ↩, ⌫, 
   Edit…, ⌘K).
 - **Sync MIDI** (top bar, a pedal, a remote screen): the setlist's first song's bar-1 MIDI and the clock; hover for
   the preview, ⌥-click for the selected song. Settings › MIDI no longer has a sync point.
+
+## Phase 15
+- **Edit:** Select All ⌘A · Deselect All ⇧⌘A (and Esc) act on the area clicked last: the song's clips, the click
+  editor's notes, the patch editor's changes, the audio editor's clips, the setlist, the library, the import review's
+  rows, the Remote page's widgets; a text field's own text. Greyed out when nothing can be selected / is selected.
+- **Song:** Add to setlist moves to **⌥⌘A** (⇧⌘A is Deselect All now).
+- **Cues:** Speed… (0.75×–1.5×, Fixed or Follow tempo; natural voices only), between Count-in and Output.
+- **File** (Windows) / **set.Line** (Mac): Change update token… under Check for updates…; Settings › General ›
+  Update token.
+- **Track headers:** a single click opens the track's editor at the bottom (click → click editor, MIDI / modeler →
+  patch change editor, audio → the audio track editor); the open one's header again, or Esc, closes it.
+- **Click editor header:** Fill ¼ ⅛ 1/16 Triplets · Accents ▾ (also on a selection's right-click); Fill from time
+  signature, Half-time and Clear moved to its ⋯.
+- **Folders rows and Cards:** ⋯ / right-click start with Play (Stop) and Restart from bar 1; the row shows ⟲ ▶ on
+  hover and ⟲ ■ bar while it plays.
+- **Remote page:** ⌘A every widget, ⇧⌘A none, ⌫ removes, ⌘D duplicates, ⌘C / ⌘V, ← → ↑ ↓ nudge a cell (⇧ two, ⌥ a
+  quarter); ⌘-drag ignores the grid; right-click or ⋯ on a widget: Style….

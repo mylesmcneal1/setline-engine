@@ -70,6 +70,7 @@ private:
     AudioHost& audio;
     juce::WebBrowserComponent* browser = nullptr;
     juce::PropertiesFile& settings; // (Preferences: the Shows folder)
+    juce::String updToken(); // 15 §13: the GitHub token for a private repository (Keychain / Credential Manager)
     juce::File updStaged;            // 8d: an update downloaded, verified and unpacked next to the app
     juce::var pedalArmV;             // 8d: what a pedal can do natively right now (the page keeps it current: pedalArm)
     int fastCount = 0; double fastMax = 0, fastSum = 0; juce::String fastWorst;

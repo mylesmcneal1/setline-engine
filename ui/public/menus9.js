@@ -98,7 +98,9 @@
       it("duplicate", "Duplicate", dupAny, { key: "cmd+d" }), it("split", "Split", () => window.SL12 && SL12.split(), { key: "cmd+e", help: "Split the selected clip at the insert marker (or the playhead)" }), it("delete", "Delete", delAny, { key: "backspace", dis: st }), sep(),
       it("rename", "Rename…", renameAny, { key: "return", dis: !s && !T && !(window.SL11 && SL11.current()) }),
       it("editObj", "Edit…", editAny, { dis: !s && !T && !(window.SL11 && SL11.current()), help: "Edit what’s selected" }),
-      it("selectAll", "Select all", () => { const x = song(); if (x && typeof selectAllIn === "function") selectAllIn(x); }, { key: "cmd+a", dis: !s }),
+      // 15 §9: whatever area was clicked last (SL15S); greyed out when there is nothing to select / selected
+      it("selectAll", "Select All", () => (window.SL15S ? SL15S.all() : song() && selectAllIn(song())), { key: "cmd+a", dis: !!window.SL15S && !SL15S.countAll() }),
+      it("deselectAll", "Deselect All", () => window.SL15S && SL15S.none(), { key: "cmd+shift+a", dis: !!window.SL15S && !SL15S.countSel() }),
       it("selectMode", "Select songs", () => window.SL9 && SL9.select(!SL9.state.sel), { key: "cmd+shift+s", check: !!(window.SL9 && SL9.state.sel) }),
       sep(), it("palette", "Search or do anything…", () => window.SLix && SLix.palette(), { key: "cmd+k" }),
       it("keyCommands", "Key Commands…", () => window.SLKeys && SLKeys.open(), { key: "cmd+alt+k" }),
@@ -143,7 +145,7 @@
         it("fieldsTable", "Song fields table…", () => typeof fieldsTable === "function" && fieldsTable()), it("fieldsEdit", "Add or edit fields…", () => openSettings("band"))] : [], !s),
       it("songNotes", "Notes for the band…", () => D13 && D13.songInfo(s && s.id, "notes"), { dis: !s }),
       sep(),
-      it("addToSet", "Add to setlist", () => addToSet(many.length ? many : [s.id]), { key: "cmd+shift+a", dis: !s && !many.length }),
+      it("addToSet", "Add to setlist", () => addToSet(many.length ? many : [s.id]), { key: "cmd+alt+a", dis: !s && !many.length }),
       it("deleteSong", "Delete song…", () => deleteSong(s.id), { dis: !s || st, danger: true }),
       sep(),
       it("dupSong", "Duplicate song", () => dupSong(s.id), { dis: !s || st }),
@@ -239,12 +241,12 @@
       it("diag", "Diagnostics", () => openSettings("diag")),
       it("copyDiag", "Copy diagnostics", () => SLE && SLE.diagnostics && SLE.diagnostics("copy")),
       it("report", "Report a problem…", () => { if (SLE && SLE.diagnostics) SLE.diagnostics("save"); if (native()) ncall("openUrl", { url: "https://github.com/mylesmcneal1/setline-engine/issues/new" }); }),
-      ...(MAC ? [] : [sep(), it("checkUpdates", "Check for updates…", () => window.SLUpd && SLUpd.check(true)), it("aboutWin", "About set.Line", () => mod().about && mod().about())]),
+      ...(MAC ? [] : [sep(), it("checkUpdates", "Check for updates…", () => window.SLUpd && SLUpd.check(true)), it("updToken", "Change update token…", () => window.SLUpd && SLUpd.token()), it("aboutWin", "About set.Line", () => mod().about && mod().about())]),
     ];
     // the macOS app menu (About / Check for updates / Settings are answered by the module: about, checkUpdates, prefs)
-    const app = [{ id: "about", label: "About set.Line" }, { id: "checkUpdates", label: "Check for updates…" }, sep(), { id: "prefs", label: "Settings…", key: "cmd+comma" },
+    const app = [{ id: "about", label: "About set.Line" }, { id: "checkUpdates", label: "Check for updates…" }, { id: "updToken", label: "Change update token…" }, sep(), { id: "prefs", label: "Settings…", key: "cmd+comma" },
       it("prefsAudio", "Audio & outputs…", () => openSettings("audio")), it("prefsMidi", "MIDI & controllers…", () => openSettings("midi"))];
-    ACT.about = () => mod().about && mod().about(); ACT.prefs = () => openSettings(); ACT.checkUpdates = () => window.SLUpd && SLUpd.check(true);
+    ACT.about = () => mod().about && mod().about(); ACT.prefs = () => openSettings(); ACT.checkUpdates = () => window.SLUpd && SLUpd.check(true); ACT.updToken = () => window.SLUpd && SLUpd.token();
     const cues = window.SL13E ? SL13E.menu(it, sub, sep, head) : [];
     return { menus: [{ name: "File", items: file }, { name: "Edit", items: edit }, { name: "View", items: view }, { name: "Library", items: library }, { name: "Song", items: songM }, { name: "Track", items: trackM },
       { name: "Setlist", items: setM }, ...(cues.length ? [{ name: "Cues", items: cues }] : []), { name: "Customize", items: cust }, { name: "Window", items: win }, { name: "Help", items: help }], app: MAC ? app : [] };
@@ -283,13 +285,15 @@
         it("oDelMany", `Delete ${many.length} songs…`, () => deleteSongs(many, "menu"), { dis: st, danger: true })];
       const i = setOrder.indexOf(s.id);
       return [
+        // 15 §10: play / stop and restart from here too (Folders rows, Cards)
+        it("oPlay", typeof playing !== "undefined" && playing && playId === s.id ? "Stop" : "Play", () => window.SL15F && SL15F.play(s.id), { key: "space" }), it("oRestart", "Restart from bar 1", () => window.SL15F && SL15F.restart(s.id), { key: "alt+space" }), sep(),
         it("oOpen", "Open", () => { if (window.SL9 && SL9.mode() === "folders" && !focusSong()) SL9.toggleRow(s.id, true); else openSong(s.id); }),
         it("oRename", "Rename…", () => renameSong(s.id), { key: "return" }),
         sub("Colour", colourItems(s.col, (c) => { snap(); s.col = c; refresh(); toast(`Changed the colour of “${s.name}”`, undo); }, "oc")),
         it("oDup", "Duplicate", () => dupSong(s.id), { dis: st }),
         sub("Versions", verItems(s, "ov")),
         sep(),
-        inSet ? it("oRem1", `Remove from ${curSetObj().name}`, () => remFromSet([s.id])) : it("oAdd1", `Add to ${curSetObj().name}`, () => addToSet([s.id]), { key: "cmd+shift+a" }),
+        inSet ? it("oRem1", `Remove from ${curSetObj().name}`, () => remFromSet([s.id])) : it("oAdd1", `Add to ${curSetObj().name}`, () => addToSet([s.id]), { key: "cmd+alt+a" }),
         ...(inSet ? [it("oUp", "Move up", () => { select(s.id, false); SLDrag.stepSet(-1); }, { key: "alt+up", dis: i === 0 }), it("oDown", "Move down", () => { select(s.id, false); SLDrag.stepSet(1); }, { key: "alt+down", dis: i === setOrder.length - 1 }),
           it("oAfter", "After this song…", () => afterMenu(b || at0(), s))] : []),
         it("oSecs1", "Make sections from cues", () => secsFromCuesAct([s.id]), { dis: !(s.cues || []).length }),

@@ -73,15 +73,16 @@ juce::String headers(const juce::String& token, const juce::String& accept)
 }
 }
 
-juce::var fetchLatest(const juce::String& token, juce::String& error)
+juce::var fetchLatest(const juce::String& token, juce::String& error, int* statusOut)
 {
     int status = 0;
     auto in = api("/releases/tags/latest").createInputStream(juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
         .withExtraHeaders(headers(token, "application/vnd.github+json")).withConnectionTimeoutMs(10000).withStatusCode(&status).withNumRedirectsToFollow(5));
     if (! in) { error = "Can't reach GitHub. Check the internet connection."; return {}; }
     const auto text = in->readEntireStreamAsString();
-    if (status == 404) { error = token.isEmpty() ? "No release found. If the repository is private, add an access token in Settings › General." : "No \"latest\" release found."; return {}; }
-    if (status == 401 || status == 403) { error = "GitHub refused the request (" + juce::String(status) + "). Check the access token in Settings › General."; return {}; }
+    if (statusOut != nullptr) *statusOut = status;
+    if (status == 404) { error = token.isEmpty() ? "No release found: the repository may be private (set.Line asks for a GitHub token)." : "No \"latest\" release found."; return {}; }
+    if (status == 401 || status == 403) { error = "GitHub refused the request (" + juce::String(status) + ")" + juce::String(token.isNotEmpty() ? ": the token isn't valid for this repository (File › Change update token…)." : "."); return {}; }
     const auto j = juce::JSON::parse(text);
     if (! j.isObject()) { error = "GitHub's answer wasn't readable."; return {}; }
     auto* o = new juce::DynamicObject(); juce::var r(o);
@@ -107,8 +108,23 @@ bool download(const juce::String& url, const juce::String& token, const juce::Fi
 {
     int status = 0;
     juce::StringPairArray resp;
-    auto in = juce::URL(url).createInputStream(juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
-        .withExtraHeaders(headers(token, "application/octet-stream")).withConnectionTimeoutMs(15000).withStatusCode(&status).withNumRedirectsToFollow(8).withResponseHeaders(&resp));
+    std::unique_ptr<juce::InputStream> in;
+    if (token.isNotEmpty()) {
+        // 15 §13: the API answers with a redirect to a signed download; the token isn't sent there (it isn't needed,
+        // and the storage refuses a request carrying two kinds of authorisation)
+        in = juce::URL(url).createInputStream(juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
+            .withExtraHeaders(headers(token, "application/octet-stream")).withConnectionTimeoutMs(15000).withStatusCode(&status).withNumRedirectsToFollow(0).withResponseHeaders(&resp));
+        juce::String loc; for (auto& k : resp.getAllKeys()) if (k.equalsIgnoreCase("location")) loc = resp[k].upToFirstOccurrenceOf(",http", false, true).trim();
+        if (status >= 300 && status < 400 && loc.isNotEmpty()) {
+            in.reset(); status = 0; resp.clear();
+            in = juce::URL(loc).createInputStream(juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
+                .withExtraHeaders(headers({}, "application/octet-stream")).withConnectionTimeoutMs(15000).withStatusCode(&status).withNumRedirectsToFollow(8).withResponseHeaders(&resp));
+        }
+        if (status == 401 || status == 403 || status == 404) { error = "GitHub refused the download (" + juce::String(status) + "): the token can't read this repository (File › Change update token…)."; return false; }
+    } else {
+        in = juce::URL(url).createInputStream(juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
+            .withExtraHeaders(headers(token, "application/octet-stream")).withConnectionTimeoutMs(15000).withStatusCode(&status).withNumRedirectsToFollow(8).withResponseHeaders(&resp));
+    }
     if (! in || status >= 400) { error = "The download failed" + (status ? " (" + juce::String(status) + ")" : juce::String()) + ". Check the internet connection."; return false; }
     to.getParentDirectory().createDirectory();
     to.deleteFile();

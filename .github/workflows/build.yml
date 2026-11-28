@@ -90,6 +90,13 @@ jobs:
           "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install webkit
           PLAYWRIGHT="$RUNNER_TEMP/pw/node_modules/playwright" node tests/ui-webkit.mjs --require --shots ui-layout-shots
 
+      # 15: the remote screen on phones in WebKit (iPhone Safari): 390 x 844 and 375 x 667, an iPad screen stacked for
+      # the phone, the status line, the home-screen app (icon, manifest), and the network jitter test (no position jumps)
+      - name: Remote screens on phones (WebKit, with network jitter)
+        if: matrix.name == 'macos'
+        shell: bash
+        run: PLAYWRIGHT="$RUNNER_TEMP/pw/node_modules/playwright" node tests/ui-remote.mjs --require --shots ui-layout-shots
+
       - name: Upload UI layout screenshots
         if: always()
         uses: actions/upload-artifact@v7

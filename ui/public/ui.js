@@ -15,7 +15,7 @@
   .kv .xs,.tmap .xs,.grid2 .xs,.grid3 .xs,.op .row .xs{width:100%}
   .tmap .xs{font:11px var(--mono,inherit);padding:3px 5px;background:transparent;border-color:transparent} .tmap .xs:hover{border-color:var(--hair,#22262d)}
   .dhead .xs{background:var(--s2,#171a1f);border-color:transparent;font-weight:600}
-  .xm{position:fixed;z-index:10000;min-width:160px;max-width:320px;max-height:min(360px,70vh);overflow:auto;background:#191c21;border:1px solid #2a2f37;border-radius:10px;padding:5px;box-shadow:0 16px 40px rgba(0,0,0,.55);font:13px/1.35 Inter,system-ui,sans-serif;color:#e9ebef;animation:xmIn .09s ease-out}
+  .xm{position:fixed;z-index:40000;min-width:160px;max-width:320px;max-height:min(360px,70vh);overflow:auto;background:#191c21;border:1px solid #2a2f37;border-radius:10px;padding:5px;box-shadow:0 16px 40px rgba(0,0,0,.55);font:13px/1.35 Inter,system-ui,sans-serif;color:#e9ebef;animation:xmIn .09s ease-out}
   @keyframes xmIn{from{opacity:0;transform:translateY(-3px)}}
   .xm .it{display:flex;align-items:center;gap:8px;padding:7px 10px 7px 8px;border-radius:6px;cursor:pointer;white-space:nowrap}
   .xm .it i{width:14px;flex:none;font-style:normal;color:var(--accent,#f5a524);font-size:12px;text-align:center}

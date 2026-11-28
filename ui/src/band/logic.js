@@ -37,6 +37,24 @@ export function predictPos(state, hostNow) {
   if (state.tr.playing) return t + Math.max(0, (hostNow - state.h) / 1000);
   return state.tr.songId && state.cur && state.tr.songId !== state.cur ? 0 : t; // stopped: where it stopped (another song selected: its start)
 }
+// 15 §6: the position a screen SHOWS, frame by frame. The target (predictPos from the host's timestamped state and the
+// synced clock) can wobble by a few ms when a new state or a new clock estimate arrives; drawing it as it is would make
+// the playhead and the beat lights twitch. The shown position runs on the device's own clock and is steered towards the
+// target gently (at most `rate` faster or slower than real time, 20 %: under 4 ms per 60 fps frame), so a small error
+// disappears without a visible step. A big error (over `snapAt` s: a locate, a jump, another song, a stall) or a
+// stop / start goes straight to the target.
+export class PosSmoother {
+  constructor(rate = 0.2, snapAt = 0.25) { this.rate = rate; this.snapAt = snapAt; this.shown = null; this.at = 0; this.key = ""; this.jumps = 0; }
+  // target (s), playing, key (what a change of makes it jump: the song), now (ms, the device's clock) -> shown (s)
+  step(target, playing, key, now) {
+    if (this.shown === null || key !== this.key || !playing || !this.playing) { this.shown = target; this.key = key; this.at = now; this.playing = playing; return target; }
+    const dt = Math.max(0, Math.min(0.25, (now - this.at) / 1000)); this.at = now;
+    let next = this.shown + dt; const err = target - next;
+    if (Math.abs(err) > this.snapAt) { next = target; this.jumps++; }
+    else { const k = dt * this.rate; next += Math.max(-k, Math.min(k, err)); }
+    this.shown = next; return next;
+  }
+}
 // bars: [[t, num, den, bpm], ...] -> {bar (1-based), beat (1-based, fractional), num, den, bpm, barT, barLen}
 export function barBeatAt(song, t) {
   const bars = (song && song.bars) || [];
@@ -253,10 +271,10 @@ export function preset(kind) {
 }
 export const PRESETS = [["drummer", "Drummer"], ["tech", "Guitar tech"], ["md", "Music director"], ["vocals", "Vocals"], ["blank", "Blank"]];
 
-// Fits a widget inside the 12 x 9 grid.
-export function clampWidget(w) {
-  w.w = Math.max(1, Math.min(12, Math.round(w.w))); w.h = Math.max(1, Math.min(9, Math.round(w.h)));
-  w.x = Math.max(0, Math.min(12 - w.w, Math.round(w.x))); w.y = Math.max(0, Math.min(9 - w.h, Math.round(w.y)));
+// Fits a widget inside its screen's grid (12 x 9 unless the screen says otherwise, 15 §4).
+export function clampWidget(w, cols = 12, rows = 9) {
+  w.w = Math.max(1, Math.min(cols, Math.round(w.w))); w.h = Math.max(1, Math.min(rows, Math.round(w.h)));
+  w.x = Math.max(0, Math.min(cols - w.w, Math.round(w.x))); w.y = Math.max(0, Math.min(rows - w.h, Math.round(w.y)));
   return w;
 }
 export const fmtTime = (sec) => { if (sec == null || !isFinite(sec)) return "–"; const s = Math.max(0, Math.round(sec)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };

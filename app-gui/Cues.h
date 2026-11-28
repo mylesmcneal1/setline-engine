@@ -68,6 +68,9 @@ public:
     void ensure(std::vector<std::pair<juce::String, Choice>> list, double rate, std::function<void(std::map<juce::String, juce::String> errors)> done);
     // Already rendered audio (nullptr if not), without waiting. fellBack: the voice isn't installed here.
     Audio cached(const juce::String& text, const Choice& c, double rate, bool& fellBack);
+    // 15 §1: the same word in the same voice rendered at another speed (the cue speed changed and the new one isn't
+    // ready yet): it plays until the new one is, instead of nothing. nullptr if there's none (or it's a recording).
+    Audio cachedAnySpeed(const juce::String& text, const Choice& c, double rate);
     // Audio for one cue at `rate` (mono). Renders now if it isn't cached (waits up to 20 s; tests).
     Audio get(const juce::String& text, const Choice& c, double rate, juce::String& error, bool& fellBack);
     // Renders these in the background so they're ready before Play: [{text, voice, name, speed}].

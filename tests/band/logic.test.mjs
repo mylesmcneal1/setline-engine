@@ -1,5 +1,6 @@
 // Unit tests for the band screens' shared logic (ui/src/band/logic.js): node tests/band/logic.test.mjs
-import { ClockSync, untilNextChange, fieldValueAt, curfew, allowed, mergeFields, preset, WIDGETS, barBeatAt, changesAhead, predictPos, hitAt } from "../../ui/src/band/logic.js";
+import { ClockSync, untilNextChange, fieldValueAt, curfew, allowed, mergeFields, preset, WIDGETS, barBeatAt, changesAhead, predictPos, hitAt , PosSmoother, clampWidget } from "../../ui/src/band/logic.js";
+import { stackLayout, gridOf, regrid, clamp, deviceOf, deviceKey, canvasSize, isPhoneScreen, boxStyle, styleOf, render, sampleShow, sampleState } from "../../ui/src/band/widgets.js";
 
 let failed = 0, passed = 0;
 const check = (name, ok, detail) => { if (ok) passed++; else failed++; console.log((ok ? "ok   " : "FAIL ") + name + (ok || detail === undefined ? "" : "  " + JSON.stringify(detail))); };
@@ -109,6 +110,51 @@ const show = {
   const h = { ...s, hits: [[0, 1], [0.5, 0], [1.25, 0], [2, 1]] };
   check("hitAt: the last click note (an accent lights beat 1)", hitAt(h, 0.6)[0] === 0.5 && hitAt(h, 2.1)[1] === 1 && hitAt({ bars: s.bars }, 1) === null && hitAt(h, -0.1) === null, [hitAt(h, 0.6), hitAt(h, 2.1)]);
   check("position prediction between updates", near(predictPos({ h: 1000, tr: { playing: true, time: 10 } }, 1500), 10.5) && near(predictPos({ h: 1000, tr: { playing: false, time: 10 } }, 1500), 10));
+}
+
+// ---- 15 §6: the shown position: real time, steered gently, never a visible step for a small error
+{
+  // a target that wobbles by up to ±30 ms around the true position (new states, new clock estimates), 60 fps
+  const sm = new PosSmoother(); let t = 0, worst = 0, last = null, err = 0, n = 0; const truth = (ms) => ms / 1000;
+  for (let i = 0; i < 600; i++) { t += 1000 / 60; const target = truth(t) + 0.03 * Math.sin(i / 7) * (i % 13 === 0 ? 1 : 0.5); const p = sm.step(target, true, "s", t);
+    if (last !== null && i > 60) { worst = Math.max(worst, Math.abs((p - last) - 1 / 60)); err += Math.abs(p - truth(t)); n++; } last = p; }
+  check("§6 a wobbling target: no frame moves more than a frame against real time", worst < 1 / 60, worst);
+  check("§6 …and the shown position stays close to the real one", err / n < 0.03, err / n);
+  // a locate (a jump of 10 s) is followed at once
+  const before = sm.step(truth(t += 16.7) + 10, true, "s", t); check("§6 a locate: straight there", near(before, truth(t) + 10, 1e-6) && sm.jumps === 1, before);
+  // stopped: exactly the target; another song: exactly the target
+  check("§6 stopped: the host's position as it is", sm.step(42, false, "s", t += 16.7) === 42 && sm.step(5, true, "other", t += 16.7) === 5);
+  // a 100 ms error closes in under a second, never faster than 20 % of real time
+  const s2 = new PosSmoother(); let tt = 0; s2.step(0, true, "a", tt); let p = 0; for (let i = 0; i < 60; i++) { tt += 16.7; p = s2.step(tt / 1000 + 0.1, true, "a", tt); }
+  check("§6 a 100 ms error is gone within a second (20 % faster at most)", near(p, tt / 1000 + 0.1, 0.005), [p, tt / 1000 + 0.1]);
+}
+// ---- 15 §4 / §7: the grid, devices, the stacked phone layout
+{
+  check("§4 a screen's grid: 12 x 9 by default (screens made before 15)", JSON.stringify(gridOf({})) === JSON.stringify({ cols: 12, rows: 9, gap: 6, snap: true, guides: true }));
+  const L = preset("drummer").land.map((w) => ({ ...w })), g0 = { cols: 12, rows: 9 }, g1 = { cols: 24, rows: 18 };
+  const R = regrid(L.map((w) => ({ ...w })), g0, g1); check("§4 a finer grid keeps every widget in place", R.every((w, i) => w.x === L[i].x * 2 && w.y === L[i].y * 2 && w.w === L[i].w * 2 && w.h === L[i].h * 2));
+  check("§4 clamp: inside the grid; free (⌘) keeps fractions", JSON.stringify(clamp({ x: 11, y: 0, w: 4, h: 1 }, g0)) === JSON.stringify({ x: 8, y: 0, w: 4, h: 1 }) && clamp({ x: 2.37, y: 1.5, w: 3, h: 2 }, g0, true).x === 2.37);
+  check("clampWidget takes the screen's grid", clampWidget({ x: 20, y: 0, w: 4, h: 1 }, 24, 16).x === 20);
+  check("§7 devices: the old names still work (phone → iPhone, desktop → laptop)", deviceKey("phone") === "iphone" && deviceKey("desktop") === "laptop" && deviceKey("ipad") === "ipad" && isPhoneScreen({ device: "phone" }));
+  check("§7 an iPhone canvas: 390 x 844 portrait, 844 x 390 landscape; custom sizes", JSON.stringify(canvasSize({ device: "iphone" }, "port")) === '{"w":390,"h":844}' && canvasSize({ device: "iphone" }, "land").w === 844 && canvasSize({ device: "custom", size: { w: 500, h: 700 } }, "port").h === 700);
+  for (const kind of ["drummer", "tech", "md", "vocals"]) {
+    const src = preset(kind).land, st = stackLayout(src, 6);
+    const ok1 = st.list.length === src.length && st.list.every((w) => w.x >= 0 && w.w >= 1 && w.x + w.w <= 6);
+    let over = false; for (let i = 0; i < st.list.length; i++) for (let j = i + 1; j < st.list.length; j++) { const a = st.list[i], b = st.list[j]; if (a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y) over = true; }
+    const rows = new Map(); st.list.forEach((w) => rows.set(w.y, (rows.get(w.y) || 0) + w.w));
+    check(`§7 ${kind}: stacked for a phone (6 columns, nothing off the edge or on top of another, every row full)`, ok1 && !over && [...rows.values()].every((v) => v === 6), st.list.map((w) => w.type + "@" + w.x + "," + w.y + "+" + w.w));
+    check(`§7 ${kind}: reading order kept (the song first) and the same buttons (ids kept)`, st.list[0].type === "song" || src[0].type !== "song" ? st.list.every((w) => src.some((x) => x.id === w.id)) : false);
+  }
+  // §5 the box's style
+  check("§5 transparent: no background", /background:transparent/.test(boxStyle({ st: { bg: "none" } })) && boxStyle({ st: { bg: "#0a84ff", op: 50 } }).includes("rgba(10,132,255,0.5)"));
+  check("§5 border, text shadow, content top-left", /box-shadow/.test(boxStyle({ st: { border: true } })) && /text-shadow/.test(boxStyle({ st: { shadow: true } })) && /justify-content:flex-start/.test(boxStyle({ st: { al: "tl" } })) && /text-align:left/.test(boxStyle({ st: { al: "tl" } })));
+  check("§5 no style: the solid box as before", styleOf({}).bg === "solid" && styleOf({}).op === 100);
+  // §3 sample data: every widget draws something
+  const show = sampleShow(), st = sampleState(), song = show.songs[st.cur];
+  const empty = Object.keys(WIDGETS).filter((type) => { const out = render({ id: "x", type, cfg: {} }, { show, st, pos: 40, song, bb: barBeatAt(song, 40), sec: song.secs[1], nsec: song.secs[2], r: { width: 300, height: 120 }, now: Date.UTC(2026, 10, 28, 22, 24), connected: true, rtt: 12, statuses: [], myStatus: {}, checklist: {}, acks: {}, editor: true }); return !out.html.replace(/<[^>]+>/g, "").trim() && !/s5beats|s5tl|s5secbtns/.test(out.html); });
+  check("§3 sample data: no widget draws an empty box", !empty.length, empty);
+  const clk = render({ id: "c", type: "clock", cfg: {} }, { show, st, pos: 0, r: { width: 200, height: 100 }, now: new Date(2026, 10, 28, 22, 40, 36).getTime() });
+  check("§7 the clock: h:mm (no seconds unless asked)", clk.html.includes(">10:40<small>PM</small>"), clk.html.slice(0, 200));
 }
 
 console.log(failed ? `${failed} FAILED, ${passed} passed` : `all ${passed} passed`);

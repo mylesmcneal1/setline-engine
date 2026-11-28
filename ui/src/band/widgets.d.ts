@@ -1,0 +1,20 @@
+// Types for widgets.js (plain JavaScript, shared by the remote screens and the Remote page's editor).
+export const DEVICES: Record<string, { name: string; w: number; h: number; phone?: boolean; safe: { top: number; bottom: number }; grid: [number, number] }>;
+export function deviceKey(k: string): string;
+export function deviceOf(screen: any): { name: string; w: number; h: number; phone?: boolean; safe: { top: number; bottom: number }; grid: [number, number] };
+export function isPhoneScreen(screen: any): boolean;
+export function canvasSize(screen: any, ori: string): { w: number; h: number };
+export function gridOf(screen: any): { cols: number; rows: number; gap: number; snap: boolean; guides: boolean };
+export function regrid(list: any[], from: any, to: any): any[];
+export function clamp(w: any, g: any, free?: boolean): any;
+export const STYLE0: any;
+export function styleOf(w: any): any;
+export function boxStyle(w: any): string;
+export function stackLayout(list: any[], cols?: number): { list: any[]; rows: number };
+export function sampleShow(): any;
+export function sampleState(): any;
+export function fit(text: string, w: number, h: number, lines?: number, max?: number, weight?: number): number;
+export const LIVE: Set<string>;
+export function render(w: any, env: any): { html: string; flush?: boolean; top?: boolean };
+export const CSS: string;
+export function place(w: any, g: any): string;

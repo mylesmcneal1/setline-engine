@@ -1,56 +1,52 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" style="background:#000">
 <head>
 <meta charset="utf-8">
 <title>set.Line Remote</title>
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<!-- 15 §7: a full-screen app from the home screen: no Safari bars, no zoom, dark from the first frame -->
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="set.Line">
+<meta name="application-name" content="set.Line">
 <meta name="theme-color" content="#000000">
+<meta name="color-scheme" content="dark">
+<meta name="format-detection" content="telephone=no">
+<!-- the set.Line app icon (the same artwork as the Mac and Windows app: assets/brand/setline-icon.svg) -->
+<link rel="apple-touch-icon" sizes="180x180" href="./remote/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="./remote/favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="./remote/icon-192.png">
+<link rel="manifest" href="./manifest.webmanifest">
 <!-- set.Line remote screens (6g): served by set.Line itself (http://<this computer>:8080/), opened on the band's
-     phones and tablets. Each shows one screen's layout from the Remote page; its buttons can only do what they do. -->
-<link rel="stylesheet" href="./src/fonts.css">
+     phones and tablets. Each shows one screen's layout from the Remote page; its buttons can only do what they do.
+     The widgets' own look is in src/band/widgets.js (shared with the Remote page's editor). -->
 <style>
-  .stitle{font-family:var(--title,inherit)}
-  :root{--bg:#000;--s1:#121214;--s2:#1c1c1e;--s3:#2a2a2e;--text:#f2f2f4;--muted:#8e8e96;--faint:#5a5a62;--accent:#ff9f0a;--blue:#0a84ff;--green:#30d158;--red:#ff453a;--purple:#bf5af2}
-  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-  html,body{height:100%;background:var(--bg);color:var(--text);font:15px/1.25 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,sans-serif;overflow:hidden;-webkit-user-select:none;user-select:none;-webkit-font-smoothing:antialiased}
+  html,body{margin:0;height:100%;background:#000;color:#f2f2f4;font:15px/1.25 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,sans-serif;overflow:hidden;-webkit-user-select:none;user-select:none;-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%;touch-action:manipulation;overscroll-behavior:none;-webkit-tap-highlight-color:transparent}
+  body{position:fixed;inset:0}
+  *{box-sizing:border-box}
   button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
-  #grid{position:fixed;inset:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
-  .w{position:absolute;padding:3px}
-  .wi{position:relative;width:100%;height:100%;border-radius:12px;background:var(--s1);overflow:hidden;display:flex;flex-direction:column;justify-content:center;padding:6px 10px}
-  .cap{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .big{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.05}
-  .sub{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .btn{width:100%;height:100%;border-radius:14px;background:color-mix(in srgb,var(--c,#3a3a40) 55%,#111);border:2px solid var(--c,#3a3a40);font-weight:700;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;text-align:center;padding:4px}
-  .btn:active{filter:brightness(1.4)} .btn.on{background:var(--c,#3a3a40);color:#000} .btn.dis{opacity:.45} .btn.ask{animation:ask .6s infinite alternate}
-  .btn small{font-weight:500;font-size:12px;opacity:.8}
-  @keyframes ask{to{box-shadow:0 0 0 4px #fff inset}}
-  .tl{display:flex;gap:2px;height:100%;align-items:stretch}
-  .tl div{border-radius:6px;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:12px;overflow:hidden;white-space:nowrap;min-width:0;position:relative}
-  .tl div.on{background:var(--accent);color:#000;font-weight:700} .tl div.q{outline:2px dashed #fff}
-  .tl div i{position:absolute;left:0;top:0;bottom:0;background:rgba(0,0,0,.25)}
-  .beats{display:flex;gap:6px;height:100%;align-items:center;justify-content:center}
-  .beats i{flex:1;max-width:60px;height:70%;border-radius:10px;background:var(--s3)} .beats i.on{background:var(--green)} .beats i.on.one{background:var(--accent)}
-  .secbtns{display:grid;gap:4px;height:100%} .secbtns button{border-radius:10px;background:var(--s3);font-weight:600;font-size:13px;overflow:hidden;padding:2px} .secbtns button.on{background:var(--accent);color:#000} .secbtns button.q{outline:3px solid #fff}
-  .list{overflow:hidden;height:100%;display:flex;flex-direction:column;gap:2px;justify-content:flex-start;padding-top:4px}
-  .list div{display:flex;justify-content:space-between;gap:8px;font-size:14px;padding:3px 4px;border-radius:6px;white-space:nowrap} .list div.cur{font-weight:800;background:var(--s3)} .list div.chg{background:rgba(255,159,10,.22)} .list div span:last-child{color:var(--muted)}
-  .bar{height:6px;border-radius:3px;background:var(--s3);overflow:hidden;margin-top:6px} .bar i{display:block;height:100%;background:var(--accent)}
-  .ck label{display:flex;gap:10px;align-items:center;font-size:16px;padding:6px 2px} .ck input{width:24px;height:24px}
-  .stl{display:flex;gap:4px;height:100%} .stl button{flex:1;border-radius:10px;background:var(--s3);font-weight:700} .stl button.on{background:var(--accent);color:#000}
-  .light{width:14px;height:14px;border-radius:50%;background:var(--red);display:inline-block;vertical-align:-2px;margin-right:8px} .light.on{background:var(--green);box-shadow:0 0 8px var(--green)}
+  /* the status line: its own line at the top (inside the safe area), the widgets start under it */
+  #stat{position:fixed;left:0;right:0;top:env(safe-area-inset-top);height:28px;display:none;align-items:center;justify-content:center;gap:8px;z-index:5;padding:0 10px}
+  body.stat #stat{display:flex}
+  #stat .pc{padding:3px 10px;border-radius:9px;border:1px solid #ff453a;background:rgba(255,69,58,.16);color:#ff8a82;font:600 12.5px system-ui,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  #grid{position:fixed;top:calc(env(safe-area-inset-top) + 4px);right:calc(env(safe-area-inset-right) + 4px);bottom:calc(env(safe-area-inset-bottom) + 4px);left:calc(env(safe-area-inset-left) + 4px);overflow:hidden}
+  body.stat #grid{top:calc(env(safe-area-inset-top) + 32px)}
+  #grid.scroll{overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+  #gridIn{position:relative;width:100%;height:100%}
   #ovl{position:fixed;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;gap:14px;background:rgba(0,0,0,.72);z-index:20;text-align:center;padding:24px}
-  #ovl.show{display:flex} #ovl h1{font-size:28px} #ovl p{color:var(--muted)}
-  #count{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.9);z-index:15;font:800 40vmin/1 -apple-system,sans-serif;color:var(--accent)} #count.show{display:flex}
-  .pick{display:flex;flex-direction:column;gap:8px;width:min(420px,90vw)} .pick button{padding:14px;border-radius:12px;background:var(--s2);font-size:17px;font-weight:600;display:flex;align-items:center;gap:12px}
-  .pick input{padding:12px;border-radius:10px;border:0;background:var(--s3);color:var(--text);font-size:16px}
+  #ovl.show{display:flex} #ovl h1{font-size:28px;margin:0} #ovl p{color:#8e8e96;margin:0}
+  #count{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.9);z-index:15;font:800 40vmin/1 -apple-system,sans-serif;color:#ff9f0a} #count.show{display:flex}
+  .pick{display:flex;flex-direction:column;gap:8px;width:min(420px,90vw)} .pick button{padding:14px;border-radius:12px;background:#1c1c1e;font-size:17px;font-weight:600;display:flex;align-items:center;gap:12px}
+  .pick input{padding:12px;border-radius:10px;border:0;background:#2a2a2e;color:#f2f2f4;font-size:16px}
   .av{width:30px;height:30px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:#000;font-size:11px;font-weight:800}
-  #tip{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);background:var(--s2);color:var(--text);padding:10px 14px;border-radius:10px;font-size:13px;z-index:30;display:none;max-width:92vw} #tip.show{display:block}
-  .why{position:absolute;left:4px;right:4px;bottom:4px;background:#000c;color:#ffb340;font-size:11px;border-radius:6px;padding:2px 4px;text-align:center}
+  #tip{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 16px);transform:translateX(-50%);background:#1c1c1e;color:#f2f2f4;padding:10px 14px;border-radius:10px;font-size:13px;z-index:30;display:none;max-width:92vw} #tip.show{display:block}
 </style>
+<link rel="stylesheet" href="./src/fonts.css">
 </head>
 <body>
-<div id="grid"></div>
+<div id="stat"></div>
+<div id="grid" class="slw"><div id="gridIn"></div></div>
 <div id="count"></div>
 <div id="ovl"></div>
 <div id="tip"></div>

@@ -151,7 +151,7 @@ function payload(s: Song, v: any = page().ver.play(s)) {
   const w13 = (window as any).SL13E;
   if (w13 && w13.cuesFor) song.cues = w13.cuesFor(s, song.cues || []);
   for (const q of (song.cues || []) as { text?: string; rec?: string; norec?: boolean; voice?: Record<string, unknown> }[]) {
-    if (q.voice) q.voice = nz(q.voice);
+    if (q.voice) q.voice = nz({ ...q.voice, speed: cueSpeed(s, (q.voice as any).speed) });
     const rec = q.norec ? "" : p.recFor(s, q.text || ""); if (rec) q.rec = rec; // a recorded word plays instead of the voice
     delete q.norec;
   }
@@ -159,7 +159,7 @@ function payload(s: Song, v: any = page().ver.play(s)) {
   const clickTracks: Record<string, Record<string, unknown>> = {};
   song.tracks.forEach((t: string) => { if (p.ROLE[t] === "click" && t !== "Click") clickTracks[t] = p.clickCfg(s, t); });
   const version = p.ver.payload(s, v);
-  return { song, outs, roles, click: p.clickCfg(s), clickTracks, cueVoice: nz(p.cueVoiceAll()), ...(version ? { version } : {}), verId: v ? v.id : "" };
+  return { song, outs, roles, click: p.clickCfg(s), clickTracks, cueVoice: nz({ ...p.cueVoiceAll(), speed: cueSpeed(s, p.cueVoiceAll().speed) }), ...(version ? { version } : {}), verId: v ? v.id : "" };
 }
 // What forces a reload: everything except the mixer levels, which change live (setTrackLevel).
 function loadKey(body: ReturnType<typeof payload>): string {
@@ -197,11 +197,15 @@ async function ensureLoaded(s: Song): Promise<boolean> {
 // 14 §3: the same for cues and MIDI, playing or stopped: right after an edit the loaded song gets the new clicks / cues /
 // MIDI in place (Engine::updateLive), so Play finds it ready. Cue words not rendered yet join when they are. Any other
 // edit to the loaded song while stopped reloads it in the background a moment later, so Play doesn't wait for that.
+// 15 §1: the cue speed a song's words are rendered at (Cues › Speed…: Fixed, or Follow tempo); recordings aren't affected
+const cueSpeed = (s: Song, base?: number) => { const c = (window as any).SL15C; return c && c.speedFor ? c.speedFor(s, base) : base || 1; };
 const LIVE: Record<"clicks" | "cues" | "midi", string[]> = { clicks: ["ck", "cks"], cues: ["cues"], midi: ["midi"] };
 function liveDiff(a: string, b: string): { clicks: boolean; cues: boolean; midi: boolean } | null {
   try {
     const A = JSON.parse(a), B = JSON.parse(b), out = { clicks: false, cues: false, midi: false };
-    for (const [k, fields] of Object.entries(LIVE)) { (out as any)[k] = fields.some((f) => JSON.stringify(A.song[f]) !== JSON.stringify(B.song[f])); for (const f of fields) { delete A.song[f]; delete B.song[f]; } }
+    // 15 §1: a new cue speed is a cue edit (the words join the loaded song as they're rendered)
+    if (JSON.stringify(A.cueVoice) !== JSON.stringify(B.cueVoice)) { out.cues = true; delete A.cueVoice; delete B.cueVoice; }
+    for (const [k, fields] of Object.entries(LIVE)) { (out as any)[k] = (out as any)[k] || fields.some((f) => JSON.stringify(A.song[f]) !== JSON.stringify(B.song[f])); for (const f of fields) { delete A.song[f]; delete B.song[f]; } }
     return JSON.stringify(A) === JSON.stringify(B) && (out.clicks || out.cues || out.midi) ? out : null;
   } catch { return null; }
 }
@@ -408,6 +412,8 @@ function pedalArmNow() {
 }
 setInterval(() => { if (SL.native) pedalArmNow(); }, 250);
 const SLE = {
+  // 15 §1: how many of the cue words (as Play will send them) are rendered: {ready, total}; prepare: render the rest now
+  cueProgress: async (prepare?: boolean) => { if (prepare) { preparedKey = ""; prepareCues(); } return SL.call<{ ready: number; total: number }>("cuesReady", { cues: cueList() }); },
   edited: () => { setTimeout(() => liveClicks().catch(() => {}), 60); }, // 7a: after an edit (the page calls it from snap())
   flush: () => libSave().catch(() => {}), // 8d: the library on disk before an update restarts set.Line
   // 8d: a pedal's action was done natively (Bridge::pedalFast): the page catches up without sending it again
@@ -642,7 +648,7 @@ function cueList() {
     for (const q of qs) {
       if (!q.text || !q.text.trim()) continue;
       const v = q.voice || c; // a cue's own voice (count-in), else the set's
-      list.push({ text: q.text.trim(), voice: v.voice || "", name: v.name || "", speed: v.speed || c.speed || 1, pron, rec: q.norec ? "" : page().recFor(s, q.text) });
+      list.push({ text: q.text.trim(), voice: v.voice || "", name: v.name || "", speed: cueSpeed(s, v.speed || c.speed || 1), pron, rec: q.norec ? "" : page().recFor(s, q.text) });
     }
   }
   return list;

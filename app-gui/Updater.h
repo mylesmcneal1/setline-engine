@@ -24,8 +24,10 @@ juce::File previousApp(const juce::File& app);
 juce::String cantInstall(const juce::File& app, const juce::String& runningVersion);
 
 // {version, title, notes, asset: {name, url, size}, sums: {url}} of the latest release, or error set
-juce::var fetchLatest(const juce::String& token, juce::String& error);
-// Downloads url to file (progress 0..1); false + error on failure
+// 15 §13: status: GitHub's HTTP status (401 / 403 / 404: a private repository needs a token, or the token is wrong)
+juce::var fetchLatest(const juce::String& token, juce::String& error, int* status = nullptr);
+// Downloads url to file (progress 0..1); false + error on failure. With a token (a private repository's asset), the
+// token goes only to GitHub's API; the signed download it redirects to is fetched without it.
 bool download(const juce::String& url, const juce::String& token, const juce::File& to, std::function<void(double)> progress, juce::String& error);
 // The file's SHA-256 matches its line in SHA256SUMS.txt
 bool verify(const juce::File& file, const juce::String& sumsText, const juce::String& name, juce::String& error);

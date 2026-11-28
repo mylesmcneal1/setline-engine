@@ -542,6 +542,21 @@ Cues::Audio Cues::cached(const juce::String& text, const Choice& c, double rate,
     return it != memo.end() ? it->second : nullptr;
 }
 
+Cues::Audio Cues::cachedAnySpeed(const juce::String& text, const Choice& c, double rate)
+{
+    std::lock_guard<std::mutex> g(dataLock);
+    if (! listed || c.recording.isNotEmpty()) return nullptr;
+    bool fb = false;
+    const auto id = resolveLocked(c, fb);
+    // keyOf: text|voice|speed|rate|... ; the key with any speed: the same head and the same tail
+    const auto head = text + "|" + id + "|";
+    Choice z = c; z.speed = 0;
+    const auto tail = keyOf(text, id, z, rate).substring(head.length()).fromFirstOccurrenceOf("|", true, false);
+    for (auto it = memo.lower_bound(head); it != memo.end() && it->first.startsWith(head); ++it)
+        if (it->second && it->first.substring(head.length()).fromFirstOccurrenceOf("|", true, false) == tail) return it->second;
+    return nullptr;
+}
+
 void Cues::ensure(std::vector<std::pair<juce::String, Choice>> list, double rate, std::function<void(std::map<juce::String, juce::String>)> done)
 {
     auto alive_ = alive;

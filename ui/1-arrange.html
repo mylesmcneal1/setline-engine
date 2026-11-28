@@ -1158,7 +1158,7 @@
 <link rel="stylesheet" href="fix11.css">
 <link rel="stylesheet" href="fix12.css">
 <link rel="stylesheet" href="fix13.css">
-<link rel="stylesheet" href="p14.css">
+<link rel="stylesheet" href="p14.css"><link rel="stylesheet" href="p15.css">
 </head>
 <body>
 
@@ -2913,9 +2913,10 @@ function drawRuler(cv){ const s=songs.find(x=>x.id===cv.dataset.song), H=cv.heig
 // ---------- tempo editing on the timeline ----------
 // ---------- undo / redo ----------
 let undoS=[], redoS=[];
-function ser(){ return JSON.stringify({songs,setlists,curSet,p11:presets.filter(p=>!p.built),w11:CUEWORDS,m11:window.MODP||null},function(k,v){ return this&&this.tmap&&(k==='bars'||k==='secPos'||k==='_yy')?undefined:v; }); }
+// 15: undo covers the remote screens (b15) and the cue speed (c15) too
+function ser(){ return JSON.stringify({songs,setlists,curSet,p11:presets.filter(p=>!p.built),w11:CUEWORDS,m11:window.MODP||null,b15:(()=>{ try{ return BAND; }catch(e){ return null; } })(),c15:{speed:CUEV.speed,mode:CUEV.speedMode||''}},function(k,v){ return this&&this.tmap&&(k==='bars'||k==='secPos'||k==='_yy')?undefined:v; }); }
 function snap(){ undoS.push(ser()); if(undoS.length>80) undoS.shift(); redoS=[]; if(window.SLE&&SLE.edited) SLE.edited(); }
-function restore(str){ const o=JSON.parse(str); if(Array.isArray(o.p11)) presets=[...presets.filter(p=>p.built),...o.p11]; if(Array.isArray(o.w11)) CUEWORDS.splice(0,CUEWORDS.length,...o.w11); if(o.m11&&typeof o.m11==="object") window.MODP=o.m11; songs.length=0; o.songs.forEach(x=>songs.push(x)); setlists=o.setlists;
+function restore(str){ const o=JSON.parse(str); if(Array.isArray(o.p11)) presets=[...presets.filter(p=>p.built),...o.p11]; if(Array.isArray(o.w11)) CUEWORDS.splice(0,CUEWORDS.length,...o.w11); if(o.m11&&typeof o.m11==="object") window.MODP=o.m11; if(o.b15&&typeof o.b15==="object"&&Array.isArray(o.b15.screens)){ BAND=o.b15; if(!BAND.screens.some(x=>x.id===BSEL)) BSEL=BAND.screens[0]&&BAND.screens[0].id; if(typeof bandChanged==="function") setTimeout(bandChanged,0); if(bandOn&&typeof renderBand==="function") setTimeout(renderBand,0); } if(o.c15){ CUEV.speed=o.c15.speed||1; if(o.c15.mode) CUEV.speedMode=o.c15.mode; else delete CUEV.speedMode; } songs.length=0; o.songs.forEach(x=>songs.push(x)); setlists=o.setlists;
   // a setlist never points at a song that isn't there (a damaged song file, an older backup)
   const have=new Set(songs.map(x=>x.id)); setlists.forEach(l=>{ l.order=(l.order||[]).filter(id=>have.has(id)); }); if(!setlists.some(l=>l.id===o.curSet)) o.curSet=setlists[0]&&setlists[0].id; curSet=o.curSet; setOrder=curSetObj().order;
   songs.forEach(x=>{ Object.keys(x.malts||{}).forEach(t=>{ const a=x.malts[t].find(y=>y.id===x.muse[t])||x.malts[t][0]; x.midi[t]=a.events; }); buildBars(x); });
@@ -3438,8 +3439,23 @@ function secsFromCues(s){ const starts=[]; cuesOf(s).slice().sort((a,b)=>a.bar-b
 let UPD={info:null,rel:null,state:'',pct:0,waiting:false};
 async function updCheck(manual){ if(!NATIVE||!window.SLE){ if(manual) toast('In the app this checks GitHub for a newer set.Line'); return null; }
   UPD.info=await ncall('updateInfo'); const r=await ncall('updateCheck'); UPD.rel=r;
+  // 15 §13: a private repository: ask once for a read-only token (again whenever the check is asked for by hand)
+  if(r&&r.needToken&&(manual||!UPD.askedToken)){ UPD.askedToken=true; updTokenBox(r); return r; }
   if(manual) updBox(); else if(r&&r.newer) toast(`set.Line ${esc(r.latest)} is available · File › Check for updates…`,6000);
   return r; }
+// 15 §13: the GitHub token (fine-grained, read-only Contents on this repository), kept by the system's Keychain /
+// Credential Manager, never in the library or the logs
+function updTokenBox(r){ document.querySelectorAll('#updTok').forEach(x=>x.remove()); const bg=document.createElement('div'); bg.className='cfbg'; bg.id='updTok'; document.body.appendChild(bg); const i=UPD.info||{}, bad=r&&r.badToken;
+  bg.innerHTML=`<div class="cfbox updbox" role="dialog" aria-label="Update token"><b>${bad?'The update token doesn’t work':'Updates need a GitHub token'}</b>
+    <p>${bad?`GitHub refused it (${esc(String(r.status||''))}): it may have expired, or it can’t read this repository.`:'set.Line’s updates come from a private GitHub repository. Paste a token once; set.Line keeps it in this computer’s '+(/Mac/.test(navigator.platform)?'Keychain':'Credential Manager')+', never in the library.'}</p>
+    <p class="faint" style="font-size:12px;text-align:left;line-height:1.5">On github.com: Settings › Developer settings › Fine-grained tokens › Generate. Repository access: only <b>mylesmcneal1/setline-engine</b>; Permissions: <b>Contents: Read-only</b>.</p>
+    <input type="password" id="updTokIn" placeholder="${i.hasToken?'(a token is saved: paste a new one)':'github_pat_…'}" autocomplete="off" spellcheck="false" style="width:100%;box-sizing:border-box;margin:6px 0 4px">
+    <div class="cfa">${i.hasToken?'<button class="btn line" id="updTokDel">Remove token</button>':''}<span style="flex:1"></span><button class="btn line" id="updTokNo">Cancel</button><button class="btn pri" id="updTokGo">Save and check</button></div></div>`;
+  const inp=$('updTokIn'); setTimeout(()=>inp.focus(),0);
+  const go=async()=>{ const v=inp.value.trim(); if(!v){ inp.focus(); return; } $('updTokGo').disabled=true; $('updTokGo').textContent='Checking…'; await ncall('updatePrefs',{token:v}); bg.remove(); UPD.askedToken=true; await updCheck(true); };
+  $('updTokGo').onclick=go; inp.onkeydown=e=>{ if(e.key==='Enter') go(); if(e.key==='Escape') bg.remove(); };
+  $('updTokNo').onclick=()=>{ bg.remove(); if(r&&r.error){ UPD.rel=r; updBox(); } };
+  if($('updTokDel')) $('updTokDel').onclick=async()=>{ await ncall('updatePrefs',{token:''}); UPD.info=await ncall('updateInfo'); bg.remove(); toast('Update token removed'); }; }
 function updBox(){ document.querySelectorAll('#updBox').forEach(x=>x.remove()); const bg=document.createElement('div'); bg.className='cfbg'; bg.id='updBox'; document.body.appendChild(bg);
   const draw=()=>{ const r=UPD.rel||{}, i=UPD.info||{}, err=r.error, newer=!!r.newer, cant=i.cant;
     const notes=String(r.notes||'').split(/\r?\n/).filter(l=>l.trim()).slice(0,40).map(l=>`<div>${esc(l)}</div>`).join('');
@@ -3450,9 +3466,9 @@ function updBox(){ document.querySelectorAll('#updBox').forEach(x=>x.remove()); 
       ${cant&&newer?`<p class="abw">${esc(cant)}</p>`:''}
       ${UPD.state==='downloading'?`<div class="updbar"><i style="width:${UPD.pct}%"></i></div><p>Downloading and checking… ${UPD.pct}%</p>`:''}
       ${UPD.state==='ready'?`<p>Downloaded and verified (SHA-256). ${playing?'<b>It installs when you stop</b> (never while playing).':'set.Line restarts to finish.'}</p>`:''}
-      <div class="cfa">${i.previous?'<button class="btn line" id="updBack">Roll back to '+esc(i.previous)+'…</button>':''}<span style="flex:1"></span>
+      <div class="cfa">${i.previous?'<button class="btn line" id="updBack">Roll back to '+esc(i.previous)+'…</button>':''}${r.needToken||i.hasToken?'<button class="btn line" id="updTokBtn">Change token…</button>':''}<span style="flex:1"></span>
         <button class="btn line" id="updNo">${newer?'Later':'Close'}</button>${newer&&!cant?`<button class="btn pri" id="updGo" ${UPD.state==='downloading'?'disabled':''}>${UPD.state==='ready'?(playing?'Install when stopped':'Install and restart'):'Download and install'}</button>`:''}</div></div>`;
-    $('updNo').onclick=()=>{ bg.remove(); };
+    $('updNo').onclick=()=>{ bg.remove(); }; if($('updTokBtn')) $('updTokBtn').onclick=()=>{ bg.remove(); updTokenBox(r.needToken?r:null); };
     if($('updBack')) $('updBack').onclick=()=>confirmBox('Roll back?',`set.Line goes back to ${esc(i.previous)} and restarts. You can roll forward the same way.`,'Roll back',async()=>{ if(playing){ toast('Stop first: set.Line never changes builds while playing'); return; } await libFlush(); const x=await ncall('updateRollback'); if(x&&x.error) toast(x.error); });
     if($('updGo')) $('updGo').onclick=async()=>{ if(UPD.state==='ready'){ updInstall(); return; } UPD.state='downloading'; UPD.pct=0; draw();
       const x=await ncall('updateDownload',{asset:r.asset,sums:r.sums}); if(!x||x.error){ UPD.state=''; UPD.rel={...r,error:x&&x.error||'The download failed.'}; draw(); return; } UPD.state='ready'; draw(); if(!playing) updInstall(); }; };
@@ -3461,7 +3477,7 @@ function updBox(){ document.querySelectorAll('#updBox').forEach(x=>x.remove()); 
 async function updInstall(){ if(playing){ UPD.waiting=true; toast('The update installs when you stop'); if(UPD.draw) UPD.draw(); return; } UPD.waiting=false; await libFlush(); const x=await ncall('updateInstall'); if(x&&x.error) toast(x.error); else toast('Installing the update; set.Line restarts…',8000); }
 async function libFlush(){ try{ if(window.SLE&&SLE.flush) await SLE.flush(); }catch(e){} }
 setInterval(()=>{ if(UPD.waiting&&!playing) updInstall(); },1000);
-window.SLUpd={ check:updCheck, box:updBox, state:()=>UPD };
+window.SLUpd={ check:updCheck, box:updBox, state:()=>UPD, token:r=>{ if(!NATIVE||!window.SLE){ toast('In the app this asks for a GitHub token for updates'); return; } updTokenBox(r||null); } };
 // ======================= CRASH RECOVERY (8d) =======================
 // While playing, where we are (setlist, song, version, position) is saved every 2 s and on every start / stop (a small
 // file the app writes atomically). A normal quit marks it stopped; still "playing" on the next launch means set.Line
@@ -3642,19 +3658,35 @@ function ableWizard(data,ctx){ return new Promise(res=>{
   const steps=n=>{ $('abwSteps').innerHTML=[['Sort markers',1],['Options',2],['Tracks',3],['Import',4]].map(([l,k])=>`<span class="${k===n?'on':k<n?'done':''}">${k<n?'✓ ':k+' · '}${l}</span>`).join(''); };
   const head=(t,sub,n)=>{ $('abwT').textContent=t; $('abwS').textContent=sub; steps(n); W.step=n; };
   let local={}; // key -> choice value (this window's changes)
+  // 15 §8: several rows at once: click selects, ⇧-click a range, ⌘-click one more; a choice on a selected row goes to every selected row (that can take it); ↑ ↓ move, ⌘A all, S E M B I choose, Esc clears
+  let selK=new Set(), anchorK=null;
+  W.rows={ sel:()=>[...selK], local:()=>({...local}), select:k=>{ selK=new Set(k); step1(); } };
   (data.locators||[]).forEach(l=>{ local[l.key]=ableChVal(l); });
   const step1=()=>{ const L=data.locators||[]; head(`Import “${data.project}”`,'Step 1 of 4. Check what each Live locator should become; set.Line has guessed.',1);
     const kindOf=l=>ableChKind(local[l.key]||ableChVal(l));
     const songs=L.filter(l=>!l.clip&&kindOf(l)==='song'), secs=L.filter(l=>kindOf(l)==='section'), util=L.filter(l=>!songs.includes(l)&&!secs.includes(l));
     const row=l=>{ const v=local[l.key]||ableChVal(l), k=ableChKind(v), opts=l.clip?ABLE_CH.filter(o=>['section','marker','ignore'].includes(o[0])):ABLE_CH, changed=v!==ableChVal(l);
-      return `<tr class="ab-${k}"><td class="mono abbar">${Math.round(l.bar)}</td><td class="abnm">${l.name?esc(l.name):'<span class="faint">(unnamed)</span>'}</td>
+      return `<tr class="ab-${k} ${selK.has(l.key)?'absel':''}" data-row="${esc(l.key)}"><td class="mono abbar">${Math.round(l.bar)}</td><td class="abnm">${l.name?esc(l.name):'<span class="faint">(unnamed)</span>'}</td>
         <td><select class="abch ch-${k}" data-k="${esc(l.key)}" aria-label="What ${esc(l.name||'this locator')} becomes">${opts.map(([o,t])=>`<option value="${esc(o)}" ${o===v?'selected':''}>${t}</option>`).join('')}</select></td>
         <td class="faint abwhy">${changed?`your choice (guess: ${esc((ABLE_CH.find(o=>o[0]===ableChVal(l))||[0,l.guess])[1])})`:esc(l.reason||'')}</td></tr>`; };
     const grp=(t,list)=>list.length?`<tr class="abg"><td colspan="4">${t}</td></tr>${list.map(row).join('')}`:'';
     $('abwB').innerHTML=`<div class="ablemode"><span>Songs from</span><select id="abMode">${ABLE_MODES.map(([k,l])=>`<option value="${k}" ${k===(ctx.mode||'auto')?'selected':''}>${l}${k==='auto'?` (${(ABLE_MODES.find(x=>x[0]===data.mode)||[0,data.mode])[1]})`:''}</option>`).join('')}</select><span class="faint">${L.length} locator${L.length===1?'':'s'}</span></div>
       <div class="ablelist abtable">${L.length?`<table>${grp(`Songs · ${songs.length}`,songs)}${grp(`Utility · ${util.length} (not songs)`,util)}${grp(`Sections · ${secs.length}${secs.some(x=>x.clip)?' · incl. the Sections track':''}`,secs)}</table>`:'<p class="faint" style="padding:12px">No locators in this project: it comes in as one song.</p>'}</div>`;
     $('abwF').innerHTML=`<span class="faint abchoices">Choices: Song · Section · Marker · Break · Ignore</span><button class="btn line" id="abwX">Cancel</button><button class="btn pri" id="abwNext">Next</button>`;
-    bg.querySelectorAll('.abch').forEach(sl=>sl.onchange=()=>{ local[sl.dataset.k]=sl.value; const sc=$('abwB').querySelector('.ablelist').scrollTop; step1(); $('abwB').querySelector('.ablelist').scrollTop=sc; });
+    const redraw=()=>{ const sc=$('abwB').querySelector('.ablelist').scrollTop; step1(); const li=$('abwB').querySelector('.ablelist'); li.scrollTop=sc; li.focus({preventScroll:true}); };
+    const okFor=(l,v)=>!l.clip||['section','marker','ignore'].includes(ableChKind(v));
+    const setChoice=(key,v)=>{ const keys=selK.has(key)&&selK.size>1?[...selK]:[key]; let n=0; keys.forEach(kk=>{ const l=L.find(x=>x.key===kk); if(l&&okFor(l,v)){ local[kk]=v; n++; } }); if(keys.length>1) toast(`${n} locator${n===1?'':'s'}: ${(ABLE_CH.find(o=>o[0]===v)||[0,v])[1]}${n<keys.length?` (${keys.length-n} from the Sections track stay sections or markers)`:''}`); redraw(); };
+    bg.querySelectorAll('.abch').forEach(sl=>sl.onchange=()=>setChoice(sl.dataset.k,sl.value));
+    const order=()=>[...$('abwB').querySelectorAll('tr[data-row]')].map(t=>t.dataset.row);
+    bg.querySelectorAll('tr[data-row]').forEach(tr=>tr.onclick=e=>{ if(e.target.closest('button,select')) return; const k2=tr.dataset.row, o=order();
+      if(e.shiftKey&&anchorK&&o.includes(anchorK)){ const a=o.indexOf(anchorK), b=o.indexOf(k2); selK=new Set(o.slice(Math.min(a,b),Math.max(a,b)+1)); }
+      else if(e.metaKey||e.ctrlKey){ selK.has(k2)?selK.delete(k2):selK.add(k2); anchorK=k2; } else { selK=new Set([k2]); anchorK=k2; } redraw(); });
+    const li=$('abwB').querySelector('.ablelist'); if(li){ li.tabIndex=0; li.onkeydown=e=>{ const o=order(), cmd=e.metaKey||e.ctrlKey, key=e.key.toLowerCase();
+      if(cmd&&key==='a'){ e.preventDefault(); e.stopPropagation(); selK=new Set(o); redraw(); return; }
+      if(e.key==='Escape'&&selK.size){ e.preventDefault(); e.stopPropagation(); selK.clear(); redraw(); return; }
+      if(e.key==='ArrowDown'||e.key==='ArrowUp'){ e.preventDefault(); const cur=anchorK&&o.includes(anchorK)?o.indexOf(anchorK):-1, last=[...selK].map(x=>o.indexOf(x)).sort((a,b)=>a-b), from=e.key==='ArrowDown'?(last.length?last[last.length-1]:cur):(last.length?last[0]:cur), to=Math.max(0,Math.min(o.length-1,from+(e.key==='ArrowDown'?1:-1)));
+        if(e.shiftKey){ selK.add(o[to]); } else { selK=new Set([o[to]]); anchorK=o[to]; } redraw(); return; }
+      const ch={s:'song',e:'section',m:'marker',b:'break:Gear change',i:'ignore'}[key]; if(ch&&!cmd&&!e.altKey&&selK.size){ e.preventDefault(); setChoice([...selK][0],ch); } }; }
     $('abMode').onchange=async e=>{ busy(true); const d2=await ctx.resort({},e.target.value); busy(false); if(d2){ data=d2; W.data=d2; ctx.mode=e.target.value; local={}; (data.locators||[]).forEach(l=>{ local[l.key]=ableChVal(l); }); step1(); } };
     $('abwX').onclick=()=>{ close(); res(null); };
     $('abwNext').onclick=async()=>{ const diff={}; (data.locators||[]).forEach(l=>{ if(local[l.key]&&local[l.key]!==ableChVal(l)) diff[l.key]=local[l.key]; });
@@ -4104,7 +4136,7 @@ window.SLPage={ get songs(){ return songs; }, get playId(){ return playId; }, ge
   setPos(t){ pos=t; }, setPlayId(id){ playId=id; document.querySelectorAll('.folder').forEach(f=>f.classList.toggle('playing',f.dataset.id===playId)); }, setPlaying(b){ playing=b; $('playBtn').classList.toggle('on',b); last=performance.now(); requestAnimationFrame(tick); },
   redraw(){ lcd(); },
   // Everything a .setline session holds.
-  sessionData(){ const o=JSON.parse(ser()); delete o.p11; delete o.w11; delete o.m11; o.presets=presets.filter(p=>!p.built); o.click=CLICK; if(Object.keys(CLICKT).length) o.clickT=CLICKT; o.cueVoice=CUEV; if(Object.keys(PRON).length) o.pron=PRON; if(Object.keys(VNUDGE).length) o.voiceNudge=VNUDGE; if(CUEWORDS.length) o.cueWords=CUEWORDS;
+  sessionData(){ const o=JSON.parse(ser()); delete o.p11; delete o.w11; delete o.m11; delete o.b15; delete o.c15; o.presets=presets.filter(p=>!p.built); o.click=CLICK; if(Object.keys(CLICKT).length) o.clickT=CLICKT; o.cueVoice=CUEV; if(Object.keys(PRON).length) o.pron=PRON; if(Object.keys(VNUDGE).length) o.voiceNudge=VNUDGE; if(CUEWORDS.length) o.cueWords=CUEWORDS;
     if(LIBMODE){ if(PHRASES) o.phrases=PHRASES.list; if(USER_LISTS.length) o.patchLists=USER_LISTS; } if(FIELDS.length) o.fields=FIELDS; if(window.MODP&&(Object.keys(MODP.qc||{}).length||Object.keys(MODP.axe||{}).length)) o.modelerPresets=MODP; if(BAND.screens.length||BAND.network||BAND.pin) o.dashboards=BAND; return o; },
   loadSession(o){ ROUTE_LOG=[]; migrateRouting(o); migrateMidi(o); migrateVersions(o);
     window.MODP=o.modelerPresets&&typeof o.modelerPresets==='object'?{qc:o.modelerPresets.qc||{},axe:o.modelerPresets.axe||{}}:{qc:{},axe:{}}; // 8c
@@ -4541,7 +4573,7 @@ async function settingsHTML(tab){
         sf('Logs',`<button class="sel2" style="min-width:0" id="stLogs">Open logs folder</button>`)])}
       <h3 style="margin-top:14px">Updates</h3>${(()=>{ const u=UPD.info||{}; return sgrp([sf('set.Line '+esc(u.current||''),`<button class="sel2" style="min-width:0" id="stUpd">Check for updates…</button>`),
         sf('Check once a day<div class="sub">Quietly, a few seconds after launch; it only says when there’s something new.</div>',tog('stUpdDaily',u.daily!==false)),
-        sf('Access token<div class="sub">Only if the repository is private: a GitHub token that can read it. Kept on this computer.</div>',`<input class="tx" id="stUpdTok" type="password" placeholder="${u.hasToken?'(saved)':'none'}" style="width:170px" spellcheck="false">`)]); })()}`; }
+        sf('Update token<div class="sub">For a private repository: a read-only GitHub token, kept in this computer’s '+(/Mac/.test(navigator.platform)?'Keychain':'Credential Manager')+'.</div>',`<button class="sel2" style="min-width:0" id="stUpdTok">${u.hasToken?'Change token…':'Add token…'}</button>`)]); })()}`; }
   if(tab==='look'){ const ap=window.SLAppearance?SLAppearance.get():'dark';
     let cm='auto', rm=false; try{ cm=localStorage.getItem('setline.compact')||'auto'; rm=localStorage.getItem('setline.reduceMotion')==='1'; }catch(e){}
     return `<h3>Appearance</h3><p class="d">For this computer only.</p>${sgrp([sf('Theme<div class="sub">Darker suits dark stages.</div>',segm('stLook',[['dark','Dark'],['darker','Darker']],ap)),
@@ -4589,7 +4621,7 @@ function wireSettings(tab){ const q=id=>$(id), re=()=>renderSettings();
     q('stFtable').onclick=()=>{ closeSettings(); fieldsTable(); }; }
   if(tab==='general'){ q('stLaunch').querySelectorAll('button').forEach(b=>b.onclick=async()=>{ await ncall('libraryState',{onLaunch:b.dataset.v}); re(); });
     if(q('stUpd')) q('stUpd').onclick=()=>{ closeSettings&&closeSettings(); updCheck(true); }; if(q('stUpdDaily')) q('stUpdDaily').onclick=async()=>{ const u=UPD.info||{}; u.daily=!(u.daily!==false); UPD.info=u; await ncall('updatePrefs',{daily:u.daily}); re(); };
-    if(q('stUpdTok')) q('stUpdTok').onchange=async e=>{ await ncall('updatePrefs',{token:e.target.value}); UPD.info=await ncall('updateInfo'); toast(e.target.value?'Access token saved':'Access token removed'); };
+    if(q('stUpdTok')) q('stUpdTok').onclick=()=>{ if(typeof closeSettings==='function') closeSettings(); SLUpd.token(); };
     q('stLib').onclick=()=>ncall('libraryReveal'); q('stLogs').onclick=()=>ncall('revealFolder',{which:'logs'}); }
   if(tab==='look'){ q('stLook').querySelectorAll('button').forEach(b=>b.onclick=()=>{ if(window.SLAppearance) SLAppearance.set(b.dataset.v); re(); });
     q('stCompact').querySelectorAll('button').forEach(b=>b.onclick=()=>{ try{ localStorage.setItem('setline.compact',b.dataset.v); }catch(e){} applyCompact(); if(NARROW()) setPanel('R',false,true); re(); });
@@ -4718,5 +4750,11 @@ try{ const q=new URLSearchParams(location.search).get('settings'); if(q) setTime
 <script src="brk14.js"></script>
 <script src="sync14.js"></script>
 <script src="add14.js"></script>
+<script src="rm15.js"></script>
+<script src="cs15.js"></script>
+<script src="ac15.js"></script>
+<script src="te15.js"></script>
+<script src="sel15.js"></script>
+<script src="fo15.js"></script>
 </body>
 </html>

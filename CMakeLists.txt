@@ -179,6 +179,7 @@ if(SETLINE_WITH_JUCE)
       app-gui/LibraryStore.cpp
       app-gui/AbletonImport.cpp
       app-gui/Updater.cpp
+      app-gui/Secrets.cpp
       app-gui/AppMenus.cpp
       app-gui/Dialogs.cpp
       app-gui/MidiControl.cpp
@@ -188,6 +189,7 @@ if(SETLINE_WITH_JUCE)
       app-gui/BandServer.cpp)
     if(APPLE)
       target_sources(setline PRIVATE app-gui/MacDrop.mm)
+      target_link_libraries(setline PRIVATE "-framework Security") # 15 §13: the update token in the Keychain
       # Objective-C++ without changing how JUCE's own sources compile.
       set_source_files_properties(app-gui/MacDrop.mm PROPERTIES COMPILE_OPTIONS "-xobjective-c++")
     endif()

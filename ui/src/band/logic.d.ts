@@ -24,5 +24,6 @@ export const WIDGETS: Record<string, { group: string; name: string; w: number; h
 export function allowed(screen: any, cmd: string, widgetId: string): { ok: boolean; why?: string; widget?: any };
 export function preset(kind: string): { land: any[]; port: any[] };
 export const PRESETS: [string, string][];
-export function clampWidget(w: any): any;
+export function clampWidget(w: any, cols?: number, rows?: number): any;
+export class PosSmoother { constructor(rate?: number, snapAt?: number); shown: number | null; jumps: number; step(target: number, playing: boolean, key: string, now: number): number; }
 export function fmtTime(sec: number | null | undefined): string;
