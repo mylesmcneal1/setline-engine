@@ -18,6 +18,7 @@ export const SUITES = [
   { name: "13c", files: ["ui-13c.js"], call: "check13c()" },
   { name: "14", files: ["ui-14.js"], call: "check14()" },
   { name: "15", files: ["ui-15.js"], call: "check15()" },
+  { name: "16", files: ["ui-16.js"], call: "check16()" },
 ];
 export async function suiteCode(s) { return (await Promise.all(s.files.map((f) => readFile(resolve(here, f), "utf8")))).join("\n") + `\nreturn await ${s.call};`; }
 // --only a,b: just those suites

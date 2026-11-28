@@ -10,6 +10,8 @@
 // - §6 jitter: frame by frame, the shown position never jumps by more than one frame (1/60 s) against real time
 //   while the error is small; a locate on the host is followed at once; the shown position stays within 40 ms of
 //   the host's real position (median).
+// - 16: the widget styles on a phone (nothing cut off), Hold to stop (a tap does nothing, a hold stops), Play + Sync
+//   MIDI (each half does its own), and the styles' pictures (--shots).
 //   node tests/ui-remote.mjs [--shots <dir>]      (needs Playwright, as tests/ui-webkit.mjs)
 import { createServer } from "node:http";
 import { readFile, mkdir } from "node:fs/promises";
@@ -38,7 +40,7 @@ const HOST = (cfg) => {
   const H = (window.__host = { sent: 0, locates: 0, start: hostNow(), playing: true, pc: false, delay: cfg.delay, jumpAt: cfg.jumpAt || 0, songPos: () => (hostNow() - H.start) / 1000 });
   const bars = []; let t = 0; for (let i = 0; i < 64; i++) { bars.push([+t.toFixed(4), 4, 4, 120]); t += 2; }
   const secs = [["Intro", "intro", 1, 8], ["Verse A", "verse", 9, 16], ["Chorus", "chorus", 25, 16], ["Bridge", "bridge", 41, 8], ["Outro", "outro", 49, 16]].map(([name, type, b, n], i) => ({ id: i + 1, name, type, t0: bars[b - 1][0], t1: (bars[b - 1 + n] || [128])[0], bars: n, notes: {} }));
-  const song = { name: "Mercy Dies With You", len: 128, bars, secs, cues: [], patches: {}, fields: {} };
+  const song = { name: "Mercy Dies With You", len: 128, bars, secs, cues: secs.slice(1).map((x) => ({ t: x.t0, text: x.name.replace(/ A$/, "") })), patches: {}, fields: {} };
   const show = { t: "show", setlist: { id: "L", name: "Set", finishBy: "", order: [{ id: "s1", after: { mode: "stop" } }, { id: "s2", after: { mode: "stop" } }, { id: "s3", after: { mode: "stop" } }, { id: "s4", after: { mode: "stop" } }] },
     songs: { s1: song, s2: { ...song, name: "Phantom Enemy" }, s3: { ...song, name: "Seneca" }, s4: { ...song, name: "The End of Heartache" } }, fields: [] };
   H.show = show;
@@ -50,6 +52,7 @@ const HOST = (cfg) => {
       setTimeout(() => {
         if (m.t === "hello") this.deliver({ t: "welcome", screens: [{ id: cfg.screen.id, name: cfg.screen.name }], screen: cfg.screen, show, network: "" });
         if (m.t === "ping") this.deliver({ t: "pong", c: m.c, h: hostNow() });
+        if (m.t === "cmd") (H.cmds = H.cmds || []).push(m.cmd + ":" + m.w); // 16: what the buttons asked for
       }, up); }
     close() { this.readyState = 3; }
   }
@@ -115,6 +118,39 @@ for (const [vw, vh, name] of [[390, 844, "iPhone 390x844"], [375, 667, "iPhone S
     if (errs.length) P.push("page errors: " + errs.slice(0, 3).join(" | "));
     report(`webkit ${name} · ${scr.name} (${scr.device})`, P, log);
     await ctx.close();
+  }
+}
+// ---- 16 §4: the styles on a phone; Hold to stop; Play + Sync MIDI
+{ const styled = { id: "scrS", name: "Styles", device: "iphone", col: "#ff9f0a", grid: { cols: 6, rows: 14, gap: 6 },
+    port: [W("a", "song", 0, 0, 6, 3), W("b", "bpm", 0, 3, 3, 2), W("c", "songLeft", 3, 3, 3, 2), W("d", "cueFeed", 0, 5, 6, 2), W("e", "playStop", 0, 7, 6, 2), W("f", "playStop", 0, 9, 6, 2), W("g", "timeline", 0, 11, 6, 1), W("h", "setlist", 0, 12, 6, 2)], land: [] };
+  const vs = { a: "sec", b: "lights", c: "ring", d: "compact", e: "hold", f: "compact", g: "sec", h: "now" }; for (const w of styled.port) w.v = vs[w.id];
+  for (const [vw, vh] of [[390, 844], [375, 667]]) {
+    const { ctx, pg, errs } = await open(vw, vh, { screen: styled, delay: false }); const P = [], log = [];
+    const r = await pg.evaluate(() => { const ws = [...document.querySelectorAll("#gridIn .s5w")], bad = [];
+      for (const w of ws) { const box = w.firstElementChild, B0 = box.getBoundingClientRect();
+        box.querySelectorAll("*").forEach((el) => { if (el.matches(".s5tint,.s5stripe,.s5flash,.s5holdbar,svg,svg *")) return; const r = el.getBoundingClientRect(); if (r.width < 0.5) return;
+          if (r.left < B0.left - 1 || r.right > B0.right + 1 || r.top < B0.top - 1 || r.bottom > B0.bottom + 1 || (el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 1)) bad.push(w.dataset.w + ":" + (el.className || el.tagName) + ":" + el.textContent.slice(0, 16)); }); }
+      return { n: ws.length, bad, stripe: !!document.querySelector('#gridIn .s5w[data-w="a"] .s5stripe'), dots: document.querySelectorAll('#gridIn .s5w[data-w="b"] .s5dots i').length, ring: !!document.querySelector('#gridIn .s5w[data-w="c"] svg.s5ring'), hold: !!document.querySelector('#gridIn .s5w[data-w="e"] [data-hold]'), pair: document.querySelectorAll('#gridIn .s5w[data-w="f"] [data-act]').length }; });
+    if (r.bad.length) P.push("cut off or sticking out: " + r.bad.slice(0, 6).join(" | "));
+    if (!r.stripe || r.dots !== 4 || !r.ring || !r.hold || r.pair !== 2) P.push("the styles aren't drawn: " + JSON.stringify(r));
+    // Hold to stop: a tap does nothing; a hold of 0.8 s stops
+    const hb = await pg.locator('#gridIn .s5w[data-w="e"] .s5wbtn').boundingBox(), cx = hb.x + hb.width / 2, cy = hb.y + hb.height / 2;
+    await pg.mouse.click(cx, cy); await pg.waitForTimeout(300); const afterTap = await pg.evaluate(() => (window.__host.cmds || []).slice());
+    if (afterTap.length) P.push("a tap on Hold to stop did something: " + afterTap.join());
+    await pg.mouse.move(cx, cy); await pg.mouse.down(); await pg.waitForTimeout(450); const fill = await pg.evaluate(() => parseFloat(getComputedStyle(document.querySelector('#gridIn .s5w[data-w="e"] .s5hold')).getPropertyValue("--hold")) || 0);
+    await pg.waitForTimeout(650); await pg.mouse.up(); await pg.waitForTimeout(300);
+    const afterHold = await pg.evaluate(() => (window.__host.cmds || []).slice());
+    if (afterHold.join() !== "stop:e") P.push("holding didn't stop (once): " + afterHold.join());
+    if (!(fill > 0.3 && fill < 0.9)) P.push("the button doesn't fill up while held: " + fill);
+    // Play + Sync MIDI: each half does its own
+    const sm = await pg.locator('#gridIn .s5w[data-w="f"] [data-act="syncMidi"]').boundingBox(); await pg.mouse.click(sm.x + sm.width / 2, sm.y + sm.height / 2); await pg.waitForTimeout(300);
+    const pl = await pg.locator('#gridIn .s5w[data-w="f"] [data-act="play"]').boundingBox(); await pg.mouse.click(pl.x + pl.width / 2, pl.y + pl.height / 2); await pg.waitForTimeout(300);
+    const cmds = await pg.evaluate(() => (window.__host.cmds || []).slice(1));
+    if (cmds.join() !== "syncMidi:f,stop:f") P.push("Play + Sync MIDI: " + cmds.join());
+    log.push(`${r.n} styled widgets; tap on Hold to stop: nothing; hold: ${afterHold.join()} (filled ${Math.round(fill * 100)}% half way); Play + Sync MIDI: ${cmds.join(" then ")}`);
+    if (shots) await pg.screenshot({ path: join(shots, `remote16-styles-${vw}x${vh}.png`) });
+    if (errs.length) P.push("page errors: " + errs.slice(0, 3).join(" | "));
+    report(`webkit ${vw}x${vh} · 16 styles, hold to stop, Play + Sync MIDI`, P, log); await ctx.close();
   }
 }
 // ---- the home-screen app: icon, manifest, meta tags

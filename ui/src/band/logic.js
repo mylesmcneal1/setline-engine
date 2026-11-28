@@ -237,6 +237,8 @@ export function allowed(screen, cmd, widgetId) {
   const w = all.find((x) => x.id === widgetId);
   if (!w) return { ok: false, why: "this screen has no such button" };
   const def = WIDGETS[w.type];
+  // 16 §4: Play / Stop's Compact style is a pair, Play and Sync MIDI (only that style may sync)
+  if (cmd === "syncMidi" && w.type === "playStop" && w.v === "compact") return { ok: true, widget: w };
   if (!def || !def.cmd || !def.cmd.includes(cmd)) return { ok: false, why: `a ${def ? def.name : w.type} can't do that` };
   return { ok: true, widget: w };
 }

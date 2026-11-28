@@ -1,6 +1,6 @@
 // Unit tests for the band screens' shared logic (ui/src/band/logic.js): node tests/band/logic.test.mjs
 import { ClockSync, untilNextChange, fieldValueAt, curfew, allowed, mergeFields, preset, WIDGETS, barBeatAt, changesAhead, predictPos, hitAt , PosSmoother, clampWidget } from "../../ui/src/band/logic.js";
-import { stackLayout, gridOf, regrid, clamp, deviceOf, deviceKey, canvasSize, isPhoneScreen, boxStyle, styleOf, render, sampleShow, sampleState } from "../../ui/src/band/widgets.js";
+import { stackLayout, gridOf, regrid, clamp, deviceOf, deviceKey, canvasSize, isPhoneScreen, boxStyle, styleOf, render, sampleShow, sampleState, VARIANTS, variantOf, variantsOf, fitWrap } from "../../ui/src/band/widgets.js";
 
 let failed = 0, passed = 0;
 const check = (name, ok, detail) => { if (ok) passed++; else failed++; console.log((ok ? "ok   " : "FAIL ") + name + (ok || detail === undefined ? "" : "  " + JSON.stringify(detail))); };
@@ -157,5 +157,20 @@ const show = {
   check("§7 the clock: h:mm (no seconds unless asked)", clk.html.includes(">10:40<small>PM</small>"), clk.html.slice(0, 200));
 }
 
+// ---------------------------------------------------------------- 16 §4: the styles
+{
+  const all = Object.keys(WIDGETS), missing = all.filter((t) => !VARIANTS[t] || variantsOf(t).length < 2 || variantsOf(t).length > 3);
+  check("16 §4 every widget has 2-3 styles", !missing.length, missing);
+  check("16 §4 a widget from before 16 is Big; an unknown style falls back to Big", variantOf({ type: "song" }) === "big" && variantOf({ type: "song", v: "nope" }) === "big" && variantOf({ type: "song", v: "sec" }) === "sec");
+  // Play / Stop's Compact style is Play + Sync MIDI: only that style may sync; nothing grants levels, gain or mute
+  const scr = (v) => ({ land: [{ id: "p", type: "playStop", v }], port: [] });
+  check("16 §4 Play + Sync MIDI may sync", allowed(scr("compact"), "syncMidi", "p").ok && !allowed(scr("big"), "syncMidi", "p").ok && !allowed(scr("hold"), "syncMidi", "p").ok);
+  check("16 §4 still no level, gain or mute from any widget", all.every((t) => !["level", "gain", "mute", "volume"].some((c) => allowed({ land: [{ id: "x", type: t, v: "compact" }], port: [] }, c, "x").ok)));
+  // text that wraps: fits the box (the Node estimate: 0.6 em a letter)
+  const fw = fitWrap("Mercy Dies With You", 300, 120, 400, 800, "", 1.08);
+  check("16 §4 wrapped text fits its box", fw.lines >= 1 && fw.px * fw.lines * 1.08 <= 120 && "Mercy".length * 0.6 * fw.px <= 300, fw);
+  const old = render({ id: "o", type: "playStop", cfg: { col: "#bf5af2" } }, { st: { playing: false }, r: { width: 200, height: 120 }, now: 0 });
+  check("16 §4 an old button keeps its colour (Big style)", /background:#bf5af2/.test(old.html), old.html.slice(0, 160));
+}
 console.log(failed ? `${failed} FAILED, ${passed} passed` : `all ${passed} passed`);
 process.exit(failed ? 1 : 0);

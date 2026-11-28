@@ -148,17 +148,36 @@ function layout() {
   g.classList.toggle("scroll", a.g.rows > a.vis);
   inner.innerHTML = a.list.map((w: any) => `<div class="s5w" data-w="${esc(w.id)}" style="${W.place(w, a.g)}"><div class="s5wi" style="${W.boxStyle(w)}"></div></div>`).join("")
     || `<div style="display:flex;height:100%;align-items:center;justify-content:center;color:var(--muted);padding:20px;text-align:center">“${esc(screen.name)}” has no widgets yet: add some on the Remote page.</div>`;
-  inner.querySelectorAll<HTMLElement>(".s5w").forEach((el) => { el.addEventListener("click", (e) => tap(el.dataset.w!, e)); });
+  inner.querySelectorAll<HTMLElement>(".s5w").forEach((el) => { el.addEventListener("click", (e) => tap(el.dataset.w!, e)); el.addEventListener("pointerdown", (e) => holdStart(el.dataset.w!, e)); });
   cache.clear(); boxes.clear();
 }
+// 16 §4: a "hold to press" button (Hold to stop): only a hold of HOLD_MS does it; a tap does nothing (safety on stage).
+// The button fills up while held; letting go early, or sliding off, cancels.
+const HOLD_MS = 800;
+let held: { id: string; at: number; done: boolean; timer: number } | null = null;
+function holdStart(id: string, e: PointerEvent) {
+  const t = e.target as HTMLElement; if (!t.closest || !t.closest("[data-hold]")) return;
+  wake(); holdEnd();
+  held = { id, at: now(), done: false, timer: window.setTimeout(() => { if (!held || held.id !== id) return; held.done = true; tap(id, e, true); setTimeout(holdEnd, 250); }, HOLD_MS) };
+  const up = () => { removeEventListener("pointerup", up); removeEventListener("pointercancel", up); if (held && held.id === id && !held.done) holdEnd(); };
+  addEventListener("pointerup", up); addEventListener("pointercancel", up);
+}
+function holdEnd() { if (held) clearTimeout(held.timer); held = null; }
+const holdNow = (id: string) => (held && held.id === id ? Math.min(1, (now() - held.at) / HOLD_MS) : 0);
 addEventListener("resize", () => { layout(); });
 addEventListener("orientationchange", () => { setTimeout(layout, 200); });
 
 // ---------------------------------------------------------------- taps: commands, status, checklist
 function widgetById(id: string) { return LIST.find((w: any) => w.id === id) || [...(screen?.land || []), ...(screen?.port || [])].find((w: any) => w.id === id); }
-function tap(id: string, e: Event) {
+function tap(id: string, e: Event, byHold = false) {
   const w = widgetById(id); if (!w) return;
   const t = e.target as HTMLElement, cfg = w.cfg || {}, def = L.WIDGETS[w.type];
+  // a hold-to-press button: the tap itself does nothing (holdStart presses it)
+  if (!byHold && t.closest && t.closest("[data-hold]")) return;
+  // Play / Stop's Compact style: Play and Sync MIDI side by side
+  const act = t.closest ? t.closest<HTMLElement>("[data-act]") : null;
+  if (w.type === "playStop" && act && act.dataset.act === "syncMidi") { send({ t: "cmd", cmd: "syncMidi", w: id }); return; }
+  if (w.type === "playStop" && W.variantOf(w) === "compact" && !act) return; // the gap between the two buttons
   wake();
   if (w.type === "status") { const b = t.closest<HTMLElement>("[data-l]"); if (!b) return; const label = b.dataset.l!; const on = !myStatus[label]; Object.keys(myStatus).forEach((k) => delete myStatus[k]); if (on) myStatus[label] = true; send({ t: "status", label, on }); cache.delete(id); return; }
   if (w.type === "checklist") { const b = t.closest<HTMLElement>("[data-i]"); if (b) { checklist[b.dataset.i!] = !checklist[b.dataset.i!]; cache.delete(id); } return; }
@@ -191,7 +210,7 @@ document.addEventListener("touchend", (e) => { const t = Date.now(); if (t - las
 document.addEventListener("touchmove", (e) => { if (!(e.target as HTMLElement).closest || !(e.target as HTMLElement).closest("#grid.scroll")) e.preventDefault(); }, { passive: false });
 
 // ---------------------------------------------------------------- rendering (every frame, predicted)
-const cache = new Map<string, string>(); const boxes = new Map<string, { el: HTMLElement; box: HTMLElement; w: any; at: number }>();
+const cache = new Map<string, string>(); const boxes = new Map<string, { el: HTMLElement; box: HTMLElement; w: any; at: number; held?: boolean }>();
 function put(id: string, el: HTMLElement, html: string) { if (cache.get(id) === html) return false; cache.set(id, html); el.innerHTML = html; return true; }
 const live = () => state || { cur: null, idx: -1, playing: false };
 // what the jitter test reads: the position shown in each frame
@@ -235,6 +254,8 @@ function frame() {
   for (const w of LIST) {
     let b = boxes.get(w.id);
     if (!b) { const el = document.querySelector<HTMLElement>(`#grid .s5w[data-w="${CSS.escape(w.id)}"]`); if (!el) continue; b = { el, box: el.firstElementChild as HTMLElement, w, at: 0 }; boxes.set(w.id, b); }
+    const hold = holdNow(w.id);
+    if (hold || b.held) { const hb = b.box.querySelector<HTMLElement>(".s5hold"); if (hb) hb.style.setProperty("--hold", hold.toFixed(3)); b.held = hold > 0; } // (the fill only: the button stays under the finger)
     if (!slow && !W.LIVE.has(w.type) && cache.has(w.id) && !acks[w.id] && confirmLive !== w.id) continue;
     const r = { width: b.box.clientWidth, height: b.box.clientHeight };
     const out = W.render(w, { show, st, pos, song, bb, sec, nsec, r, now: nowMs, connected, rtt: clock.rtt(), statuses, myStatus, checklist, acks, ask: confirmLive === w.id });

@@ -219,14 +219,14 @@ async function check15() {
     const colBtn = document.getElementById("bCol"); ok(colBtn && /Colour/.test(colBtn.textContent), "§3 the ● button is labelled Colour");
     const id0 = sc.land[0].id, id1 = sc.land[1].id; SL15R.select([id0]); await frames(1);
     { const ar = document.getElementById("rmArea"); ok(ar.querySelectorAll(".s5w.sel").length === 1 && [...ar.querySelectorAll(".s5w:not(.sel) .s5wi")].every((x) => getComputedStyle(x).outlineStyle === "none"), "§3 one outline for one selected widget: " + ar.querySelectorAll(".s5w.sel").length); }
-    const lib = document.querySelector(".rm15lib"), lr = R(lib); ok(lib && lr.top < innerHeight && lr.bottom > 0 && document.querySelector(".rm15insp"), "§3 the widget list stays on the right with a widget selected");
+    const lib = document.querySelector(".rm15lib"), lr = R(lib); ok(lib && lr.top < innerHeight && lr.bottom > 0 && document.querySelector(".rm15insp"), "§3 the widget library stays on screen with a widget selected (16: on the left)");
     const fr = R(document.getElementById("rmFrame")); ok(fr.right <= R(document.querySelector(".rm15m")).right + 1 && fr.bottom <= innerHeight, "the device canvas fits the page at 1280 × 800");
     const bars = [...document.querySelectorAll(".rm15bar")]; ok(bars.every((b) => b.scrollWidth <= b.clientWidth + 1), "the toolbars fit (no overflow)");
     // §4 the grid
     const w0 = sc.land.find((w) => w.id === id0), wb = { ...w0 }, n0 = undoS.length; SL15R.regrid({ cols: 24, rows: 16 }); await frames(1);
     const w0b = curScreen().land.find((w) => w.id === id0);
     ok(curScreen().grid.cols === 24 && curScreen().grid.rows === 16 && w0b.x === wb.x * 2 && w0b.w === wb.w * 2 && undoS.length === n0 + 1, `§4 Grid 24 × 16: widgets keep their place (x ${wb.x}→${w0b.x}, w ${wb.w}→${w0b.w}); one undo step`);
-    const gapIn = document.querySelector('.rm15st[data-k="gap"] input'); gapIn.value = "10"; gapIn.dispatchEvent(new Event("change")); await frames(1); ok(curScreen().grid.gap === 10, "§4 the gap: " + curScreen().grid.gap);
+    SL15R.gridPop(); await frames(1); const gapIn = document.querySelector('.rm15st[data-k="gap"] input'); gapIn.value = "10"; gapIn.dispatchEvent(new Event("change")); await frames(1); ok(curScreen().grid.gap === 10, "§4 the gap: " + curScreen().grid.gap);
     // drag a widget: snapped to the grid; ⌘-drag: free; guides when edges line up
     const sc2 = curScreen(), k = SL15R.scale(), wEl = () => document.querySelector(`#rmArea .s5w[data-w="${id0}"]`), cs = SLBand.canvasSize(sc2, BORI), cw = cs.w / 24 * k;
     const xStart = w0b.x;

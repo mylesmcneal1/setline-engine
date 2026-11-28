@@ -102,6 +102,15 @@
       it("selectAll", "Select All", () => (window.SL15S ? SL15S.all() : song() && selectAllIn(song())), { key: "cmd+a", dis: !!window.SL15S && !SL15S.countAll() }),
       it("deselectAll", "Deselect All", () => window.SL15S && SL15S.none(), { key: "cmd+shift+a", dis: !!window.SL15S && !SL15S.countSel() }),
       it("selectMode", "Select songs", () => window.SL9 && SL9.select(!SL9.state.sel), { key: "cmd+shift+s", check: !!(window.SL9 && SL9.state.sel) }),
+      // 16 §2: the Remote page's placement commands (Figma's ⌥ letters, with ⇧⌘ so they never clash with the DAW's keys)
+      ...(() => { const R = window.SL16R, on = typeof bandOn !== "undefined" && bandOn && !!R, c = (k) => on && R.can(k), m = on ? R.alignMode() : "";
+        return [sub("Arrange (Remote)", [
+          it("arrToScreen", "Align to Screen", () => R.setAlignTo("screen"), { dis: !on, check: m === "screen" }), it("arrToSel", "Align to Selection", () => R.setAlignTo("sel"), { dis: !on, check: m === "sel" }), sep(),
+          it("arrLeft", "Align left", () => R.align("al"), { key: "cmd+alt+shift+a", dis: !c("al") }), it("arrCentre", "Centre", () => R.align("ac"), { key: "cmd+alt+shift+h", dis: !c("ac"), help: "Centre across (horizontally)" }), it("arrRight", "Align right", () => R.align("ar"), { key: "cmd+alt+shift+d", dis: !c("ar") }), sep(),
+          it("arrTop", "Align top", () => R.align("at"), { key: "cmd+alt+shift+w", dis: !c("at") }), it("arrMiddle", "Middle", () => R.align("am"), { key: "cmd+alt+shift+v", dis: !c("am"), help: "Centre down (vertically)" }), it("arrBottom", "Align bottom", () => R.align("ab"), { key: "cmd+alt+shift+s", dis: !c("ab") }), sep(),
+          it("arrDistH", "Distribute across", () => R.align("dh"), { key: "cmd+alt+shift+x", dis: !c("dh") }), it("arrDistV", "Distribute down", () => R.align("dv"), { key: "cmd+alt+shift+y", dis: !c("dv") }), it("arrSame", "Make same size", () => R.align("ss"), { key: "cmd+alt+shift+m", dis: !c("ss") }), sep(),
+          it("arrLock", "Lock position", () => R.lock(), { key: "cmd+shift+l", dis: !on || !R.selected().length }),
+        ], !on)]; })(),
       sep(), it("palette", "Search or do anything…", () => window.SLix && SLix.palette(), { key: "cmd+k" }),
       it("keyCommands", "Key Commands…", () => window.SLKeys && SLKeys.open(), { key: "cmd+alt+k" }),
     ];

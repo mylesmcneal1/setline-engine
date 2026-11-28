@@ -135,3 +135,21 @@ page's single keys (Space, N, P, V, C, K, L, [, ], = −, ⌥ scroll, ↩, ⌫, 
   hover and ⟲ ■ bar while it plays.
 - **Remote page:** ⌘A every widget, ⇧⌘A none, ⌫ removes, ⌘D duplicates, ⌘C / ⌘V, ← → ↑ ↓ nudge a cell (⇧ two, ⌥ a
   quarter); ⌘-drag ignores the grid; right-click or ⋯ on a widget: Style….
+
+## Phase 16
+- **Edit › Arrange (Remote):** the Remote page's placement commands (greyed out elsewhere). Align to Screen / Align to
+  Selection (Screen is the default with one widget, Selection with several) · Align left **⌥⇧⌘A** · Centre **⌥⇧⌘H** ·
+  Align right **⌥⇧⌘D** · Align top **⌥⇧⌘W** · Middle **⌥⇧⌘V** · Align bottom **⌥⇧⌘S** · Distribute across **⌥⇧⌘X** ·
+  Distribute down **⌥⇧⌘Y** · Make same size **⌥⇧⌘M** · Lock position **⇧⌘L**. (Windows: Ctrl+Alt+Shift+… and
+  Ctrl+Shift+L.) Figma's ⌥ letters with ⇧⌘ added, so none of them clashes with a key the app already uses; the
+  suite-16 test checks that no other command has any of these keys. Key Commands lists and remaps them.
+- **Remote page toolbar:** Screen | Selection, then ⇤ Centre ⇥, ⤒ Middle ⤓, distribute across / down, same size;
+  the grid (columns, rows, gap, Snap, Guides) moved into the **12×9 ▾** button. Tooltips show the keys.
+- **Remote page canvas:** ← → ↑ ↓ nudge a cell with Snap on (⇧ two, ⌥ a quarter), a point with Snap off (⇧ ten);
+  ⌘ / Ctrl-drag ignores all snapping (grid and guides); eight handles resize; right-click or ⋯ on a widget: Style…,
+  Centre on the screen, Middle of the screen, Lock / Unlock position, Duplicate, Copy, Remove.
+- **The widget library** (left, Widgets | Screens): ⌕ search, All · Song · Time · Controls · Setlist; on a tile:
+  ← → ↑ ↓ move between tiles, ↩ or double-click adds at the first free spot, 1 2 3 pick a style, Esc closes the preview.
+  Esc while dragging a widget in cancels the drag.
+- **↩ on the Remote page** no longer renames the song selected on the Show page (it adds a focused library widget).
+

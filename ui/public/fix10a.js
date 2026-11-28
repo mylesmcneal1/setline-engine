@@ -435,6 +435,7 @@
     if (e.key !== "Enter" || e.altKey || e.metaKey || e.ctrlKey || e.shiftKey || editing(e.target) || editor) return;
     if (document.querySelector(".cfbg, .xm.ctx, #mpop, #tpop, .ipop, .pal10")) return;
     if (document.body.classList.contains("pf") || (typeof perfOn !== "undefined" && perfOn)) return;
+    if (typeof bandOn !== "undefined" && bandOn) return; // 16: the Remote page has no songs on it (↩ there adds a library widget)
     const t = e.target, card = t.closest && t.closest(".card9[data-id]");
     const id = card ? card.dataset.id : selId; if (!id || !songOf(id)) return;
     if (!card && area === "track") return;

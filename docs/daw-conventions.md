@@ -134,5 +134,10 @@
   view from a clip). A set.Line track is one clip or one lane, so its header is the quickest way in; the same header
   again or Esc closes it, and ⇧ / ⌘-click still select several tracks without opening anything.
 - **⇧⌘A is Deselect All** (Phase 15, as in Logic); Add to setlist moved to ⌥⌘A.
+- **The Remote page's align keys are ⌥⇧⌘ + Figma's letters** (Phase 16: Centre ⌥⇧⌘H, Middle ⌥⇧⌘V, left / right / top /
+  bottom ⌥⇧⌘A / D / W / S). Figma uses ⌥ alone, but on the Mac ⌥ + a letter types a character, and in set.Line plain ⌥
+  keys already move tracks and setlist rows; with ⇧⌘ they reach the app's menu and clash with nothing.
+- **Hold to stop** (Phase 16, a Play / Stop style on remotes): a tap does nothing, a 0.8 s hold stops. On a stage a
+  stray tap on a phone must not stop the show; the button fills up while it's held so it's clear what's happening.
 
 (Add to this list, with a reason, whenever set.Line deliberately departs from a convention.)
